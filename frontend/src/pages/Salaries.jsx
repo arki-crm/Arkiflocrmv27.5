@@ -972,7 +972,7 @@ export default function Salaries() {
                 <SelectContent>
                   {accounts.filter(a => a.is_active).map(account => (
                     <SelectItem key={account.account_id} value={account.account_id}>
-                      {account.name}
+                      {account.account_name || account.name} ({formatCurrency(account.current_balance)})
                     </SelectItem>
                   ))}
                 </SelectContent>

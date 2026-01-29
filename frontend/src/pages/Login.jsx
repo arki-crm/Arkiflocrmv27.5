@@ -29,9 +29,8 @@ const Login = () => {
   }, [isAuthenticated, loading, navigate]);
 
   const handleGoogleLogin = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + '/dashboard';
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    // Direct Google OAuth via our backend - NO Emergent middleman
+    window.location.href = `${API_URL}/api/auth/google/login`;
   };
 
   const handleLocalLogin = async (e) => {

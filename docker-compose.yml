@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # ============ MONGODB ============
+  mongo:
+    image: mongo:7.0
+    container_name: arkiflo_mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?MongoDB root password required}
+    volumes:
+      - mongo_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/01-create-app-user.js:ro
+    networks:
+      - arkiflo_network
+    # NO ports - internal only
+
+  # ============ BACKEND ============
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: arkiflo_backend
+    restart: unless-stopped
+    environment:
+      - MONGO_URL=mongodb://${MONGO_APP_USER:-arkiflo_app}:${MONGO_APP_PASSWORD:?MongoDB app password required}@mongo:27017/arkiflo?authSource=admin
+      - DB_NAME=arkiflo
+      - ENVIRONMENT=production
+      - SEED_ADMIN_EMAIL=${SEED_ADMIN_EMAIL:-admin@arkiflo.com}
+      - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-Admin123!}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REDIRECT_URI=https://arkiflo.arkidots.com/api/auth/google/callback
+      - FRONTEND_URL=https://arkiflo.arkidots.com
+    volumes:
+      - uploads_data:/app/uploads
+      - backups_data:/app/backups
+    networks:
+      - arkiflo_network
+    depends_on:
+      - mongo
+    # LOCALHOST ONLY - nginx will proxy to this
+    ports:
+      - "127.0.0.1:8001:8001"
+
+  # ============ FRONTEND ============
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_BACKEND_URL=https://arkiflo.arkidots.com
+    container_name: arkiflo_frontend
+    restart: unless-stopped
+    networks:
+      - arkiflo_network
+    depends_on:
+      - backend
+    # LOCALHOST ONLY - nginx will proxy to this
+    ports:
+      - "127.0.0.1:3000:80"
+
+networks:
+  arkiflo_network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+    name: arkiflo_mongo_data
+  uploads_data:
+    name: arkiflo_uploads
+  backups_data:
+    name: arkiflo_backups

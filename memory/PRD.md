@@ -61,7 +61,7 @@ The core CRM pipeline has been stabilized and is ready for manual end-to-end tes
 ## Test Credentials
 
 **Local Admin Login:**
-- **URL**: https://money-monitor-220.preview.emergentagent.com/login
+- **URL**: https://revgatekeeper.preview.emergentagent.com/login
 - **Email**: thaha.pakayil@gmail.com
 - **Password**: password123
 - **Access**: Full Admin permissions
@@ -605,6 +605,45 @@ A comprehensive financial planning and control system for the founder.
 - Cash Runway Score (40%): >6mo=40, 3-6mo=30, 1-3mo=15, <1mo=0
 - Commitment Ratio Score (30%): <25%=30, 25-50%=20, 50-75%=10, >75%=0
 - Sales Pressure Score (30%): None=30, Low=20, Moderate=10, High=0
+
+---
+
+## ✅ Booking Payment Confirmation Workflow - COMPLETED Jan 2026
+
+A targeted notification system for Accounts team when leads require booking payment confirmation.
+
+### Features Implemented:
+- [x] **Automatic Notifications** - When a lead moves to "Waiting for Booking" stage, all users with Accountant roles are notified
+- [x] **Dedicated Confirmations Page** - `/finance/booking-confirmations` shows ONLY leads awaiting confirmation (not all leads)
+- [x] **Targeted Access** - Accountants see only what they need to confirm, without access to full lead details
+- [x] **One-Click Confirmation** - Simple "Confirm Payment" button for each pending lead
+- [x] **Real-time Updates** - Confirmed leads removed from the list immediately
+- [x] **Sidebar Integration** - "Booking Confirmations" link in Finance menu
+
+### User Flow:
+1. Sales/Designer moves lead to "Waiting for Booking" stage
+2. All Accountant-role users receive notification: "Lead 'Customer Name' requires booking payment confirmation"
+3. Accountant clicks notification → navigates to `/finance/booking-confirmations`
+4. Page shows minimal info: Customer name, phone, budget, designer, time since request
+5. Accountant clicks "Confirm Payment" after verifying payment received
+6. Lead can now be converted to project by Sales Manager
+
+### Accountant Roles Notified:
+- JuniorAccountant
+- SeniorAccountant
+- FinanceManager
+- Accountant
+
+### New API Endpoint:
+- `GET /api/finance/pending-booking-confirmations` - Returns only leads in "Waiting for Booking" stage with minimal data (customer_name, phone, budget, designer_name)
+
+### New Page:
+- `/finance/booking-confirmations` - Booking Payment Confirmations (accessible via Finance menu)
+
+### Key Design Decisions:
+- **No leads.view permission needed** - Accountants access this through finance permissions only
+- **Single-purpose page** - Shows only what's needed for confirmation decision
+- **Privacy-conscious** - Full lead details not exposed to finance team
 
 ---
 
@@ -1239,11 +1278,169 @@ finance.audit_log.view
 
 ---
 
+## ✅ Invoice Entry Module (Execution Ledger) - COMPLETED Jan 28, 2026
+
+Redesigned invoice-based module for tracking material purchases and service execution. Now supports vendor invoices with multiple line items per entry, with integrated payment recording.
+
+**Location:** Project Finance → Project Detail (not a separate sidebar item)
+
+### Invoice Entry Features:
+- **Invoice Header**: Vendor, Invoice No, Invoice Date, Execution Date
+- **Multiple Line Items**: Each invoice can have multiple line items with category, material, spec, brand, qty, unit, rate
+- **Purchase Type Toggle**: Cash or Credit purchase
+- **Payment Recording**: "Pay" button to record payments directly from invoices
+- **Payment Status Tracking**: unpaid → partial → paid
+- **Payment History**: Full payment history visible on each invoice
+- **Delete Protection**: Invoices with payments cannot be deleted
+
+**Line Item Categories:**
+- Modular Material
+- Hardware & Accessories
+- Factory / Job Work
+- Installation
+- Transportation / Logistics
+- Non-Modular Furniture
+- Site Expense
+
+**Fields per Invoice Entry:**
+- Execution ID (auto), Project ID
+- Vendor (unified vendor select with quick-create)
+- Invoice No, Invoice Date, Execution Date
+- Purchase Type (cash/credit)
+- Items[] - array of line items
+- Total Value (auto-calculated)
+- **Payment Tracking Fields:**
+  - total_paid, amount_remaining, payment_status (unpaid/partial/paid)
+  - payments[] - array of payment records with transaction links
+- Remarks, Edit History, Created By, Created At
+
+### Payment Recording Flow:
+1. Create Invoice Entry (no financial impact yet)
+2. Click "Pay" button on invoice → Opens Record Payment modal
+3. Enter payment details (amount, date, mode, account)
+4. System auto-creates:
+   - Cashbook outflow entry (with `system_generated=true`)
+   - For credit purchases with remaining balance: Liability record
+5. Invoice status updates automatically
+
+**IMPORTANT: "Source Document First, Cashbook Second" Architecture**
+- Payments originate from Invoice module, NOT from Cashbook
+- Cashbook entries are auto-generated outputs, not manual inputs
+- System-generated entries marked with `system_generated=true`
+
+**Permissions:**
+- View: Admin, Founder, Finance, ProjectManager, CA
+- Add/Edit: Admin, Founder, ProjectManager
+- Record Payment: Admin, Founder, SeniorAccountant, FinanceManager, ProjectManager
+- Delete: Admin only (blocked for invoices with payments)
+
+**API Endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/execution-ledger/categories` | GET | Get available categories |
+| `/api/finance/execution-ledger` | POST | Create invoice entry |
+| `/api/finance/execution-ledger/project/{id}` | GET | Get entries for project with summary |
+| `/api/finance/execution-ledger/{id}` | GET | Get single entry |
+| `/api/finance/execution-ledger/{id}` | PUT | Update entry (with edit history) |
+| `/api/finance/execution-ledger/{id}` | DELETE | Delete entry (Admin only, blocked if has payments) |
+| `/api/finance/execution-ledger/{id}/record-payment` | POST | **NEW** - Record payment, auto-create Cashbook entry |
+| `/api/finance/execution-ledger/{id}/payments` | GET | Get payment history for invoice |
+| `/api/finance/execution-ledger/export/{id}` | GET | Export CSV/Excel |
+
+**Key UI Components:**
+- `/app/frontend/src/components/ExecutionLedger.jsx` - Main component with payment UI
+- `/app/frontend/src/components/VendorSelect.jsx` - Unified vendor selector
+- `/app/frontend/src/pages/ProjectFinanceDetail.jsx` - Parent that passes liabilities prop
+
+**Testing:** 100% backend + frontend tests passed (Jan 28, 2026)
+
+**Future-Ready (NOT implemented yet):**
+- Material price benchmarking
+- Cutlist generator
+- Vendor analytics
+- BOQ comparison
+- Margin variance reports
+
+---
+
+## ✅ Unified Payment Architecture - COMPLETED Jan 28, 2026
+
+Implemented consistent payment recording pattern across all financial modules following the principle: **"Source Document First, Cashbook Second"**.
+
+### Architecture Diagram:
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        ENTRY POINTS                             │
+│                                                                 │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
+│  │   Salary     │    │   Invoice    │    │  Liability   │      │
+│  │   Module     │    │   Ledger     │    │   Module     │      │
+│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘      │
+│         │                   │                   │               │
+│         ▼                   ▼                   ▼               │
+│  "Record Payment"    "Record Payment"     "Settle"             │
+│         │                   │                   │               │
+│         └───────────────────┼───────────────────┘               │
+│                             │                                   │
+│                             ▼                                   │
+│                    ┌────────────────┐                           │
+│                    │    CASHBOOK    │  ← Auto-generated         │
+│                    │ (accounting_   │  ← system_generated=true  │
+│                    │  transactions) │                           │
+│                    └────────────────┘                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Module-Specific Flows:
+
+| Module | Entry Point | Payment Action | Auto-Creates |
+|--------|-------------|----------------|--------------|
+| **Salary** | Add Employee Salary | Record Payment | Cashbook outflow |
+| **Invoice Entry** | Add Invoice Entry | Record Payment ("Pay" button) | Cashbook outflow + Liability (if credit with remaining) |
+| **Liability** | Create Liability | Settle | Cashbook outflow |
+
+### System-Generated Cashbook Entries:
+All auto-created Cashbook entries include:
+- `system_generated: true` - Marks entry as auto-created
+- `source_module: "salary" | "invoice_ledger" | "liability"` - Origin module
+- `source_id` - ID of the source document
+- `reference_type` - Type of payment (salary_payment, invoice_payment, liability_settlement)
+
+### Categories Auto-Created:
+| Category ID | Name | Source |
+|-------------|------|--------|
+| `salary_payment` | Salary Payment | Salary module |
+| `invoice_payment` | Invoice Payment | Invoice Entry module |
+| `liability_settlement` | Liability Settlement | Liability module |
+
+### Key Rules:
+1. **Cashbook is OUTPUT, not INPUT** for these transaction types
+2. **Manual Cashbook entry should be avoided** for salary/invoice payments
+3. **System-generated entries should be read-only** in Cashbook UI
+4. **Delete protection** - Entries with payments cannot be deleted from source module
+
+### Testing Status:
+- ✅ Invoice Entry payment recording: 100% tests passed
+- ✅ Salary payment to Cashbook flow: Verified
+- ✅ Liability settlement to Cashbook flow: Verified
+
+---
+
 ## 🔜 Upcoming Tasks
 
-### P2: Backend Refactoring
+### P1: Quotation Builder Module
+- Create and manage quotes with material catalog and configurable pricing
+- Integration with vendor master and material database
+
+### P2: Cutlist Generator Module
+- Generate panel-cutting lists from cabinet dimensions
+- Optimize material usage for modular production
+
+### P3: Backend Refactoring
 - Break down the 22,000+ line `server.py` monolith into:
   - `/app/backend/routes/` - API route modules
+  - `/app/backend/models/` - Pydantic models
+  - `/app/backend/services/` - Business logic
   - `/app/backend/models/` - Pydantic models
   - `/app/backend/services/` - Business logic
 
@@ -1317,3 +1514,421 @@ Evidence layer for finance operations - supporting document uploads for audit co
 - Frontend UI verified
 - Test file: `/app/tests/test_document_attachments.py`
 
+### CashBook Transaction Attachments Fix - COMPLETED Jan 11, 2026
+Fixed partially implemented feature:
+
+**1. CashBook Add Entry Modal**
+- Added "Attach Documents" section at bottom of modal
+- Supports multiple files (PDF, JPG, PNG up to 15MB)
+- Files stored as `pendingFiles` state, uploaded after transaction creation
+- Shows file list with remove option before submission
+
+**2. Docs/Eye Icon Wiring**
+- Docs column added to transaction table
+- Eye icon opens Transaction Details dialog
+- Dialog shows full transaction info + AttachmentUploader
+- Supports upload/download/delete when day not locked
+
+**3. ProjectFinanceDetail Integration**
+- Added Docs column to Recent Transactions table
+- Rows are now clickable
+- Click opens read-only Transaction Details dialog
+- Shows linked cashbook documents
+
+**Testing**: 13 backend + 8 frontend tests passed (100%)
+
+
+## ✅ BUCKET 1 - Operational Hygiene - COMPLETED Jan 11, 2026
+
+Mandatory features for control and safety before production rollout.
+
+### 1. Audit Trail Enhancement
+Full read-only audit trail for all finance-related actions.
+
+**Features:**
+- Comprehensive logging of all finance operations (create/edit/delete/verify/settle)
+- Logged entity types: cashbook, receipt, liability, project_finance, recurring_template, payment_reminder, system
+- Logged actions: create, edit, delete, verify, settle, freeze, lock_override, allow_overrun, backup_created, backup_restored
+- Filters: entity_type, action, date_from, date_to, user_id
+- Pagination support
+- Entity-specific history view
+- Admin/Founder only access
+
+**API Endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/audit-log` | GET | Get all audit entries with filters |
+| `/api/finance/audit-log/entity/{type}/{id}` | GET | Get history for specific entity |
+
+**Audit Log Entry Structure:**
+- audit_id, entity_type, entity_id, action
+- old_value (for edits/deletes), new_value (for creates/edits)
+- user_id, user_name, timestamp, details
+
+### 2. Scheduled Backups
+Daily automated database backups via backend cron job.
+
+**Features:**
+- Manual backup creation (Admin only)
+- **Automated daily backups at midnight (00:00 server time)** using apscheduler
+- Backup listing with metadata
+- Backup restoration (Admin only, with confirmation)
+- Backups stored as JSON files in `/app/backend/backups/`
+- Includes: finance, accounting, projects, leads, users, and more (18+ collections)
+- Metadata-only for attachments (files not included)
+- Scheduler status shown in UI with next run time
+
+**API Endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/backup/create` | POST | Create manual backup |
+| `/api/admin/backup/list` | GET | List available backups |
+| `/api/admin/backup/restore/{id}` | POST | Restore from backup |
+| `/api/admin/backup/scheduler-status` | GET | Get scheduler status |
+
+### 3. Customer Payment Reminders (MOCKED)
+Email reminder system for overdue payments - logs to DB instead of sending actual emails.
+
+**Features:**
+- Get overdue payments with configurable threshold (default 7 days)
+- Send manual reminders from project finance
+- Custom reminder messages supported
+- Reminder history tracking
+- Days since last reminder shown
+
+**API Endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/reminders/overdue` | GET | Get projects with overdue payments |
+| `/api/finance/reminders/send` | POST | Send (log) reminder |
+| `/api/finance/reminders/history` | GET | Get reminder history |
+
+**Note:** Emails are MOCKED - logged to `payment_reminders` collection instead of actually sent. Frontend shows "Mocked - Emails logged only" indicator.
+
+### 4. Recurring Transactions
+Monthly recurring templates that create **pending payables** (not auto cashbook entries).
+
+**Workflow:**
+1. Templates run on due date → Creates pending payable
+2. Pending payables shown with overdue status
+3. Manual "Record Payment" → Creates cashbook entry
+4. Payment history tracked
+
+**Features:**
+- Create recurring templates (Admin/Founder/SeniorAccountant)
+- Fields: name, amount, category, account, day_of_month (1-28), description, paid_to
+- Active/Paused status toggle
+- Generate due payables (Admin only)
+- Pending payables list with overdue indicators
+- Record payment with flexible amount/date/mode
+- Cancel/skip occurrence option
+- Payment history tracking
+
+**API Endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/recurring/templates` | GET | List templates |
+| `/api/finance/recurring/templates` | POST | Create template |
+| `/api/finance/recurring/templates/{id}` | PUT | Update template |
+| `/api/finance/recurring/templates/{id}/toggle` | POST | Pause/Resume |
+| `/api/finance/recurring/run-scheduled` | POST | Generate due payables |
+| `/api/finance/recurring/payables` | GET | List pending payables |
+| `/api/finance/recurring/payables/{id}/pay` | POST | Record payment |
+| `/api/finance/recurring/payables/{id}/cancel` | POST | Skip/cancel payable |
+
+**Collections:**
+- `recurring_templates` - Template definitions
+- `recurring_payables` - Pending/paid payables
+
+### Frontend Pages
+| Route | Component | Access |
+|-------|-----------|--------|
+| `/admin/audit-trail` | AuditTrail.jsx | Admin/Founder |
+| `/admin/backup` | BackupManagement.jsx | Admin |
+| `/finance/payment-reminders` | PaymentReminders.jsx | Finance team |
+| `/finance/recurring-transactions` | RecurringTransactions.jsx | Admin/Founder/SeniorAccountant |
+
+### Files Added/Modified
+- **Backend**: `/app/backend/server.py` (audit logging integration + BUCKET 1 endpoints)
+- **Frontend Pages**: 
+  - `/app/frontend/src/pages/AuditTrail.jsx`
+  - `/app/frontend/src/pages/BackupManagement.jsx`
+  - `/app/frontend/src/pages/PaymentReminders.jsx`
+  - `/app/frontend/src/pages/RecurringTransactions.jsx`
+- **Sidebar**: Added navigation links for all 4 pages
+
+**Testing**: 24 backend + frontend tests passed (100%)
+
+---
+
+## ✅ Docker Deployment Package - COMPLETED Jan 16, 2026
+
+Complete Docker-based deployment package for Contabo VPS (or any Ubuntu server).
+
+**Deployment Method:** Docker + Docker Compose
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `docker-compose.yml` | Orchestrates all 3 services |
+| `mongo-init.js` | Creates MongoDB app user with restricted access |
+| `.env.example` | Root environment template |
+| `backend/Dockerfile` | Python FastAPI container |
+| `backend/.env.example` | Backend env template |
+| `frontend/Dockerfile` | Multi-stage React + Nginx build |
+| `frontend/nginx.conf` | Production Nginx config with API proxy |
+| `frontend/.env.example` | Frontend env template |
+| `README_DEPLOYMENT.md` | Complete deployment guide |
+| `validate-deployment.sh` | Post-deployment verification script |
+
+### Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| MongoDB | 27017 | Database with authentication |
+| Backend | 8001 | FastAPI server |
+| Frontend | 80, 443 | Nginx serving React |
+
+### MongoDB Security
+- Authentication ENABLED (mandatory)
+- Two users: `admin` (full), `arkiflo_app` (readWrite only)
+- No hardcoded credentials
+- App fails clearly if credentials wrong
+
+### Volumes (Persistent)
+- `arkiflo_mongo_data` - Database
+- `arkiflo_uploads` - File uploads
+- `arkiflo_backups` - Backup files
+
+### Deployment Commands (4 only)
+```bash
+git clone <repo> && cd arkiflo
+cp .env.example .env && nano .env  # Set passwords & URL
+docker compose up -d
+```
+
+---
+
+## 🔜 Upcoming Tasks
+
+### P0 - High Priority
+- [ ] Backend Cron Jobs for scheduled backups and recurring transactions (apscheduler integration)
+- [ ] Real email integration for payment reminders (when needed)
+
+### P1 - Medium Priority
+- [ ] Backend refactoring of server.py monolith (~23,000+ lines)
+- [ ] API endpoint deduplication
+
+### P2 - Lower Priority
+- [ ] Python linting cleanup
+- [ ] 27 potential enhancements (AI insights, bank reconciliation, multi-currency, etc.)
+
+
+---
+
+## ✅ Docker Deployment Authentication Fix - COMPLETED Jan 19, 2026
+
+**Critical bug fix** for the admin user seeding function that prevented login after fresh Docker deployment.
+
+### Issues Fixed
+
+1. **Field Name Mismatch**: `seed_initial_admin()` was creating users with `password_hash` field, but `local_login()` endpoint looks for `local_password` field
+2. **Hashing Method Mismatch**: Seeder used direct `hashlib.sha256()`, but login verification uses `hash_password()` with a salt
+3. **Missing Status Field**: Seeder didn't set `status: "Active"` which is required by the login endpoint
+
+### Changes Made
+
+**File:** `/app/backend/server.py` - `seed_initial_admin()` function
+
+| Before | After |
+|--------|-------|
+| `"password_hash": hashlib.sha256(...)` | `"local_password": hash_password(...)` |
+| `"is_active": True` | `"status": "Active"` |
+| Missing `updated_at` | Added `"updated_at": datetime...` |
+
+### Validation Steps for Contabo Deployment
+
+```bash
+# 1. Clean slate (WARNING: deletes all data)
+docker compose down -v
+
+# 2. Build and start
+docker compose up -d --build
+
+# 3. Wait for services
+sleep 60
+
+# 4. Check all services healthy
+docker compose ps
+
+# 5. Test health endpoint
+curl http://localhost:8001/api/health
+
+# 6. Test login with seed credentials from .env
+curl -X POST http://localhost:8001/api/auth/local-login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"YOUR_SEED_ADMIN_EMAIL","password":"YOUR_SEED_ADMIN_PASSWORD"}'
+```
+
+### Expected Login Response
+
+```json
+{"success":true,"message":"Login successful","user":{...}}
+```
+
+### Deployment File Checklist
+
+- [x] `/app/docker-compose.yml` - Service orchestration
+- [x] `/app/mongo-init.js` - MongoDB user initialization (authSource=admin)
+- [x] `/app/.env.example` - Root environment template
+- [x] `/app/backend/Dockerfile` - Backend container
+- [x] `/app/frontend/Dockerfile` - Frontend container  
+- [x] `/app/frontend/nginx.conf` - Nginx with API proxy
+- [x] `/app/README_DEPLOYMENT.md` - Complete deployment guide
+- [x] `/app/validate-deployment.sh` - Post-deployment verification
+- [x] `/app/backend/server.py` - Fixed seed_initial_admin() function
+
+---
+
+## ✅ Financial Gates (Milestone Payment Control) - COMPLETED Jan 28, 2026
+
+A strict financial control system that blocks specific project milestones until payment is confirmed by Accounts or explicitly overridden by Admin/Founder.
+
+### Features Implemented:
+- [x] **Payment-Gated Milestones** - Two milestones require payment confirmation before completion:
+  - `payment_collection_50` (50% Payment Collection - Design Finalization stage)
+  - `full_order_confirmation_45` (45% Payment Collection - Production stage)
+- [x] **Role-Based Blocking** - Operational roles (Designer, ProductionOpsManager, etc.) are HARD BLOCKED from completing gated milestones
+- [x] **Accountant Confirmation** - All accountant roles can confirm payment, unlocking the milestone
+- [x] **Admin Override** - Admin/Founder can complete milestones without payment confirmation
+- [x] **Audit Trail** - Admin overrides are logged as system comments with metadata
+- [x] **Automatic Notifications** - Accounts team notified when a blocked user attempts to complete
+
+### Blocking Logic:
+```
+If milestone is payment_collection_50 OR full_order_confirmation_45:
+  If user role is Admin OR Founder:
+    ALLOW + LOG OVERRIDE (if not confirmed)
+  Else if payment NOT confirmed by Accounts:
+    BLOCK with 403 error + notify Accounts team
+  Else:
+    ALLOW (payment confirmed)
+```
+
+### Override Logging:
+When Admin/Founder overrides a payment gate, a system comment is created:
+```json
+{
+  "type": "payment_gate_override",
+  "milestone_id": "payment_collection_50",
+  "milestone_name": "50% Payment Collection",
+  "override_by": "user_id",
+  "override_by_name": "Admin Name",
+  "override_by_role": "Admin",
+  "timestamp": "2026-01-28T17:30:00Z"
+}
+```
+
+### Accountant Roles (Can Confirm Payment):
+- JuniorAccountant
+- SeniorAccountant
+- FinanceManager
+- CharteredAccountant
+- Accountant
+
+### API Endpoints:
+- `POST /api/projects/{project_id}/substage/complete` - Modified to check payment gates
+- `POST /api/projects/{project_id}/confirm-milestone-payment/{milestone_id}` - Accountant confirms payment
+- `GET /api/projects/{project_id}/milestone-payment-status` - Get confirmation status for gated milestones
+
+### Test Credentials:
+- **Admin**: test.admin.gates@example.com
+- **Designer**: test.designer.gates@example.com
+- **Accountant**: test.accountant.gates@example.com
+- **Test Project**: proj_gatetest_622f737e
+
+### Test File:
+- `/app/backend/tests/test_financial_gates.py`
+
+---
+
+## ✅ Direct Google OAuth Migration - COMPLETED Jan 19, 2026
+
+**Removed Emergent as OAuth middleman.** Google authentication is now handled entirely by our backend.
+
+### What Changed
+
+| Component | Before | After |
+|-----------|--------|-------|
+| OAuth Flow | Via `auth.emergentagent.com` | Direct to Google |
+| Token Verification | Emergent API | Google's public keys |
+| Client ID | Emergent's | Your own (Google Cloud Console) |
+| Control | Third-party dependency | Full ownership |
+
+### New Backend Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth/google/login` | GET | Redirects to Google consent screen |
+| `/api/auth/google/callback` | GET | Handles Google response, creates session |
+
+### New Environment Variables
+
+```env
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-your-secret
+```
+
+### Files Modified
+
+- `/app/backend/server.py` - Added Google OAuth endpoints and imports
+- `/app/backend/requirements.txt` - Added google-auth libraries
+- `/app/backend/.env` - Added Google OAuth variables
+- `/app/frontend/src/pages/Login.jsx` - Changed Google button to use our backend
+- `/app/docker-compose.yml` - Added Google OAuth env vars to backend service
+- `/app/.env.example` - Added Google OAuth configuration section
+
+### Files Created
+
+- `/app/GOOGLE_OAUTH_SETUP.md` - Step-by-step Google Cloud Console setup guide
+
+### Session Handling
+
+Uses **exactly the same mechanism** as local login:
+- `session_token` in httpOnly cookie
+- `user_sessions` collection in MongoDB
+- 7-day expiration
+- Same cookie flags (secure, samesite=none)
+
+### Backward Compatibility
+
+- ✅ Local login (`/api/auth/local-login`) unchanged and working
+- ✅ User schema unchanged (added optional `google_sub` field)
+- ✅ Session handling unchanged
+- ✅ All other auth endpoints unchanged
+
+---
+
+## ✅ Frontend Docker Build Fix - Jan 19, 2026
+
+Fixed AJV/node-gyp module errors in Docker build.
+
+### Change
+
+| Before | After |
+|--------|-------|
+| `node:18-alpine` | `node:18-bullseye-slim` |
+
+**Reason:** Alpine uses musl libc which causes issues with some native npm modules (like AJV's optional native dependencies). Debian-based image (bullseye-slim) uses glibc which is more compatible.
+
+### Dockerfile Changes
+
+```dockerfile
+# Before
+FROM node:18-alpine AS builder
+
+# After  
+FROM node:18-bullseye-slim AS builder
+RUN apt-get update && apt-get install -y python3 make g++ git
+```

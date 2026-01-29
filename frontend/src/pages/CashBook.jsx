@@ -48,6 +48,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import AttachmentUploader from '../components/AttachmentUploader';
+import VendorSelect from '../components/VendorSelect';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -122,6 +123,7 @@ const CashBook = () => {
     category_id: '',
     account_id: '',
     project_id: '',
+    vendor_id: '',
     paid_to: '',
     remarks: '',
     // New accountability fields
@@ -281,6 +283,7 @@ const CashBook = () => {
         category_id: '',
         account_id: accounts[0]?.account_id || '',
         project_id: '',
+        vendor_id: '',
         paid_to: '',
         remarks: '',
         requested_by: '',
@@ -492,14 +495,21 @@ const CashBook = () => {
                       <Label>Account *</Label>
                       <Select value={newTxn.account_id} onValueChange={(v) => setNewTxn(prev => ({ ...prev, account_id: v }))}>
                         <SelectTrigger className="mt-1" data-testid="account-select">
-                          <SelectValue placeholder="Select account" />
+                          <SelectValue placeholder={accounts.length === 0 ? "No accounts configured" : "Select account"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {accounts.map(acc => (
-                            <SelectItem key={acc.account_id} value={acc.account_id}>
-                              {acc.account_name}
-                            </SelectItem>
-                          ))}
+                          {accounts.length === 0 ? (
+                            <div className="p-2 text-sm text-slate-500 text-center">
+                              No accounts found.<br/>
+                              <span className="text-xs">Ask Admin to create accounts in Settings.</span>
+                            </div>
+                          ) : (
+                            accounts.map(acc => (
+                              <SelectItem key={acc.account_id} value={acc.account_id}>
+                                {acc.account_name}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -559,18 +569,33 @@ const CashBook = () => {
                     </Select>
                   </div>
 
-                  {/* Paid To */}
-                  <div>
-                    <Label htmlFor="paid_to">Paid To / Received From</Label>
-                    <Input
-                      id="paid_to"
-                      value={newTxn.paid_to}
-                      onChange={(e) => setNewTxn(prev => ({ ...prev, paid_to: e.target.value }))}
-                      placeholder="Vendor / Person name"
-                      className="mt-1"
-                      data-testid="paid-to-input"
-                    />
-                  </div>
+                  {/* Paid To / Vendor - Show vendor dropdown for outflows */}
+                  {newTxn.transaction_type === 'outflow' ? (
+                    <div>
+                      <VendorSelect
+                        value={newTxn.vendor_id}
+                        onChange={(vendorId, vendorName) => setNewTxn(prev => ({ 
+                          ...prev, 
+                          vendor_id: vendorId, 
+                          paid_to: vendorName 
+                        }))}
+                        label="Paid To (Vendor)"
+                        placeholder="Select or create vendor..."
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <Label htmlFor="paid_to">Received From</Label>
+                      <Input
+                        id="paid_to"
+                        value={newTxn.paid_to}
+                        onChange={(e) => setNewTxn(prev => ({ ...prev, paid_to: e.target.value }))}
+                        placeholder="Customer / Person name"
+                        className="mt-1"
+                        data-testid="paid-to-input"
+                      />
+                    </div>
+                  )}
 
                   {/* Remarks */}
                   <div>

@@ -1,0 +1,19 @@
+[
+  {
+    "audit_id": "aud_137ff34efd9e",
+    "entity_type": "cashbook",
+    "entity_id": "txn_c969d9ff",
+    "action": "create",
+    "old_value": null,
+    "new_value": {
+      "amount": 500.0,
+      "type": "outflow",
+      "remarks": "Test transaction for audit trail"
+    },
+    "details": "Created outflow of \u20b9500",
+    "user_id": "test-user-1768140463239",
+    "user_name": "Thaha Pakayil",
+    "timestamp": "2026-01-11T15:06:27.412089+00:00",
+    "ip_address": null
+  }
+]

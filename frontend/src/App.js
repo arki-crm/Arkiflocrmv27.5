@@ -70,6 +70,14 @@ import ImportExport from './pages/ImportExport';
 import FinanceReports from './pages/FinanceReports';
 import CashFlowReport from './pages/CashFlowReport';
 import ProjectProfitabilityReport from './pages/ProjectProfitabilityReport';
+import BookingConfirmations from './pages/BookingConfirmations';
+import MilestonePaymentConfirmations from './pages/MilestonePaymentConfirmations';
+
+// BUCKET 1 - Operational Hygiene
+import AuditTrail from './pages/AuditTrail';
+import BackupManagement from './pages/BackupManagement';
+import PaymentReminders from './pages/PaymentReminders';
+import RecurringTransactions from './pages/RecurringTransactions';
 
 import './App.css';
 
@@ -139,6 +147,8 @@ const AppRouter = () => {
         {/* Finance/Accounting Routes */}
         <Route path="/finance/founder-dashboard" element={<FounderDashboard />} />
         <Route path="/finance/cashbook" element={<CashBook />} />
+        <Route path="/finance/booking-confirmations" element={<BookingConfirmations />} />
+        <Route path="/finance/milestone-confirmations" element={<MilestonePaymentConfirmations />} />
         <Route path="/finance/receipts" element={<Receipts />} />
         <Route path="/finance/invoices" element={<Invoices />} />
         <Route path="/finance/refunds" element={<Refunds />} />
@@ -156,12 +166,16 @@ const AppRouter = () => {
         <Route path="/finance/reports" element={<FinanceReports />} />
         <Route path="/finance/reports/cash-flow" element={<CashFlowReport />} />
         <Route path="/finance/reports/project-profitability" element={<ProjectProfitabilityReport />} />
+        <Route path="/finance/payment-reminders" element={<PaymentReminders />} />
+        <Route path="/finance/recurring-transactions" element={<RecurringTransactions />} />
         
         {/* Settings Routes */}
         <Route path="/settings/company-profile" element={<CompanyProfile />} />
         
         {/* Admin Routes */}
         <Route path="/admin/import-export" element={<ImportExport />} />
+        <Route path="/admin/audit-trail" element={<AuditTrail />} />
+        <Route path="/admin/backup" element={<BackupManagement />} />
       </Route>
 
       {/* Redirect root to dashboard */}

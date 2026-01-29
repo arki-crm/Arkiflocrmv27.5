@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import AttachmentUploader from '../components/AttachmentUploader';
+import VendorSelect from '../components/VendorSelect';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
@@ -78,6 +79,7 @@ export default function Liabilities() {
   // Create form
   const [createForm, setCreateForm] = useState({
     project_id: '',
+    vendor_id: '',
     vendor_name: '',
     category: '',
     amount: '',
@@ -89,8 +91,14 @@ export default function Liabilities() {
   // Settle form
   const [settleForm, setSettleForm] = useState({
     amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_mode: '',
+    account_id: '',
     remarks: ''
   });
+  
+  // Accounts for settlement
+  const [accounts, setAccounts] = useState([]);
   
   // View liability detail
   const [viewLiability, setViewLiability] = useState(null);
@@ -115,15 +123,17 @@ export default function Liabilities() {
       if (filterCategory) params.append('category', filterCategory);
       if (filterProject) params.append('project_id', filterProject);
       
-      const [liabilitiesRes, summaryRes, projectsRes] = await Promise.all([
+      const [liabilitiesRes, summaryRes, projectsRes, accountsRes] = await Promise.all([
         axios.get(`${API}/finance/liabilities?${params.toString()}`, { withCredentials: true }),
         axios.get(`${API}/finance/liabilities/summary`, { withCredentials: true }),
-        axios.get(`${API}/projects`, { withCredentials: true }).catch(() => ({ data: [] }))
+        axios.get(`${API}/projects`, { withCredentials: true }).catch(() => ({ data: [] })),
+        axios.get(`${API}/accounting/accounts`, { withCredentials: true }).catch(() => ({ data: [] }))
       ]);
       
       setLiabilities(liabilitiesRes.data);
       setSummary(summaryRes.data);
       setProjects(projectsRes.data || []);
+      setAccounts(accountsRes.data || []);
     } catch (error) {
       console.error('Failed to fetch liabilities:', error);
       toast.error('Failed to load liabilities');
@@ -148,6 +158,7 @@ export default function Liabilities() {
       await axios.post(`${API}/finance/liabilities`, {
         ...createForm,
         project_id: createForm.project_id || null,
+        vendor_id: createForm.vendor_id || null,
         amount: parseFloat(createForm.amount)
       }, { withCredentials: true });
       
@@ -155,6 +166,7 @@ export default function Liabilities() {
       setIsCreateOpen(false);
       setCreateForm({
         project_id: '',
+        vendor_id: '',
         vendor_name: '',
         category: '',
         amount: '',
@@ -175,17 +187,38 @@ export default function Liabilities() {
       toast.error('Please enter a valid settlement amount');
       return;
     }
+    if (!settleForm.payment_date) {
+      toast.error('Please select a payment date');
+      return;
+    }
+    if (!settleForm.payment_mode) {
+      toast.error('Please select a payment mode');
+      return;
+    }
+    if (!settleForm.account_id) {
+      toast.error('Please select an account');
+      return;
+    }
     
     try {
       setSubmitting(true);
-      await axios.post(`${API}/finance/liabilities/${selectedLiability.liability_id}/settle`, {
+      const response = await axios.post(`${API}/finance/liabilities/${selectedLiability.liability_id}/settle`, {
         amount: parseFloat(settleForm.amount),
+        payment_date: settleForm.payment_date,
+        payment_mode: settleForm.payment_mode,
+        account_id: settleForm.account_id,
         remarks: settleForm.remarks
       }, { withCredentials: true });
       
-      toast.success('Settlement recorded');
+      toast.success(response.data.message || 'Settlement recorded and Cashbook entry created');
       setIsSettleOpen(false);
-      setSettleForm({ amount: '', remarks: '' });
+      setSettleForm({ 
+        amount: '', 
+        payment_date: new Date().toISOString().split('T')[0],
+        payment_mode: '',
+        account_id: '',
+        remarks: '' 
+      });
       setSelectedLiability(null);
       fetchData();
     } catch (error) {
@@ -197,7 +230,13 @@ export default function Liabilities() {
 
   const openSettleDialog = (liability) => {
     setSelectedLiability(liability);
-    setSettleForm({ amount: String(liability.amount_remaining), remarks: '' });
+    setSettleForm({ 
+      amount: String(liability.amount_remaining), 
+      payment_date: new Date().toISOString().split('T')[0],
+      payment_mode: '',
+      account_id: '',
+      remarks: '' 
+    });
     setIsSettleOpen(true);
   };
 
@@ -283,12 +322,16 @@ export default function Liabilities() {
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div>
-                    <Label>Vendor Name *</Label>
-                    <Input
-                      value={createForm.vendor_name}
-                      onChange={(e) => setCreateForm(prev => ({ ...prev, vendor_name: e.target.value }))}
-                      placeholder="e.g., ABC Suppliers"
-                      className="mt-1"
+                    <VendorSelect
+                      value={createForm.vendor_id}
+                      onChange={(vendorId, vendorName) => setCreateForm(prev => ({ 
+                        ...prev, 
+                        vendor_id: vendorId, 
+                        vendor_name: vendorName 
+                      }))}
+                      label="Vendor"
+                      required
+                      placeholder="Select or create vendor..."
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -593,7 +636,7 @@ export default function Liabilities() {
 
       {/* Settle Dialog */}
       <Dialog open={isSettleOpen} onOpenChange={setIsSettleOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Settle Liability</DialogTitle>
             <DialogDescription>
@@ -603,30 +646,92 @@ export default function Liabilities() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div>
-              <Label>Settlement Amount (₹)</Label>
-              <Input
-                type="number"
-                value={settleForm.amount}
-                onChange={(e) => setSettleForm(prev => ({ ...prev, amount: e.target.value }))}
-                max={selectedLiability?.amount_remaining}
-                className="mt-1"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Settlement Amount (₹) <span className="text-red-500">*</span></Label>
+                <Input
+                  type="number"
+                  value={settleForm.amount}
+                  onChange={(e) => setSettleForm(prev => ({ ...prev, amount: e.target.value }))}
+                  max={selectedLiability?.amount_remaining}
+                  className="mt-1"
+                  data-testid="settle-amount"
+                />
+              </div>
+              <div>
+                <Label>Payment Date <span className="text-red-500">*</span></Label>
+                <Input
+                  type="date"
+                  value={settleForm.payment_date}
+                  onChange={(e) => setSettleForm(prev => ({ ...prev, payment_date: e.target.value }))}
+                  className="mt-1"
+                  data-testid="settle-date"
+                />
+              </div>
             </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Payment Mode <span className="text-red-500">*</span></Label>
+                <Select
+                  value={settleForm.payment_mode}
+                  onValueChange={(value) => setSettleForm(prev => ({ ...prev, payment_mode: value }))}
+                >
+                  <SelectTrigger className="mt-1" data-testid="settle-mode">
+                    <SelectValue placeholder="Select mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="upi">UPI</SelectItem>
+                    <SelectItem value="cheque">Cheque</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Pay From Account <span className="text-red-500">*</span></Label>
+                <Select
+                  value={settleForm.account_id}
+                  onValueChange={(value) => setSettleForm(prev => ({ ...prev, account_id: value }))}
+                >
+                  <SelectTrigger className="mt-1" data-testid="settle-account">
+                    <SelectValue placeholder="Select account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((account) => (
+                      <SelectItem key={account.account_id} value={account.account_id}>
+                        {account.name} ({formatCurrency(account.current_balance)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
             <div>
-              <Label>Remarks</Label>
+              <Label>Remarks / Reference</Label>
               <Textarea
                 value={settleForm.remarks}
                 onChange={(e) => setSettleForm(prev => ({ ...prev, remarks: e.target.value }))}
-                placeholder="Payment reference, notes..."
+                placeholder="Payment reference, cheque number, notes..."
                 className="mt-1"
                 rows={2}
+                data-testid="settle-remarks"
               />
+            </div>
+            
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+              <strong>Note:</strong> This will create a Cashbook outflow entry and reduce the selected account balance.
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsSettleOpen(false)}>Cancel</Button>
-            <Button onClick={handleSettleLiability} disabled={submitting}>
+            <Button 
+              onClick={handleSettleLiability} 
+              disabled={submitting || !settleForm.amount || !settleForm.payment_mode || !settleForm.account_id}
+              data-testid="confirm-settle-btn"
+            >
               {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Record Settlement
             </Button>

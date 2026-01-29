@@ -39,7 +39,10 @@ import {
   PiggyBank,
   TrendingUp,
   Banknote,
-  FileUp
+  FileUp,
+  History,
+  Database,
+  Mail
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
@@ -51,6 +54,8 @@ const financeSubItems = [
   { path: '/finance/founder-dashboard', label: 'Overview', icon: Gauge },
   { path: '/finance/project-finance', label: 'Project Finance', icon: FolderKanban },
   { path: '/finance/cashbook', label: 'Cash Book', icon: Wallet },
+  { path: '/finance/booking-confirmations', label: 'Booking Confirmations', icon: ClipboardCheck },
+  { path: '/finance/milestone-confirmations', label: 'Milestone Confirmations', icon: ClipboardCheck },
   { path: '/finance/liabilities', label: 'Liabilities', icon: FileText },
   { path: '/finance/expense-requests', label: 'Expense Requests', icon: FileCheck },
   { path: '/finance/receipts', label: 'Receipts', icon: Receipt },
@@ -61,6 +66,8 @@ const financeSubItems = [
   { path: '/finance/budgets', label: 'Budgets', icon: PiggyBank },
   { path: '/finance/invoices', label: 'Invoices', icon: FileText },
   { path: '/finance/refunds', label: 'Refunds', icon: RefreshCw },
+  { path: '/finance/payment-reminders', label: 'Payment Reminders', icon: Mail },
+  { path: '/finance/recurring-transactions', label: 'Recurring', icon: RefreshCw },
   { path: '/finance/daily-closing', label: 'Daily Closing', icon: CalendarCheck },
   { path: '/finance/monthly-snapshot', label: 'Monthly Snapshot', icon: CalendarRange },
   { path: '/finance/settings', label: 'Settings', icon: Settings },
@@ -71,6 +78,8 @@ const caFinanceSubItems = [
   { path: '/finance/founder-dashboard', label: 'Overview', icon: Gauge },
   { path: '/finance/project-finance', label: 'Project Finance', icon: FolderKanban },
   { path: '/finance/cashbook', label: 'Cash Book', icon: Wallet },
+  { path: '/finance/booking-confirmations', label: 'Booking Confirmations', icon: ClipboardCheck },
+  { path: '/finance/milestone-confirmations', label: 'Milestone Confirmations', icon: ClipboardCheck },
   { path: '/finance/liabilities', label: 'Liabilities', icon: FileText },
   { path: '/finance/receipts', label: 'Receipts', icon: Receipt },
   { path: '/finance/pnl-snapshot', label: 'P&L Snapshot', icon: TrendingUp },
@@ -127,6 +136,8 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
         { path: '/ceo-dashboard', label: 'CEO View', icon: Crown },
         { path: '/reports', label: 'Reports', icon: BarChart3 },
         { path: '/admin/import-export', label: 'Import / Export', icon: FileUp },
+        { path: '/admin/audit-trail', label: 'Audit Trail', icon: History },
+        { path: '/admin/backup', label: 'Backup', icon: Database },
         { path: '/users', label: 'Users', icon: UserCog },
         { path: '/settings', label: 'Settings', icon: Settings },
         { path: '/settings/company-profile', label: 'Company Profile', icon: Building2 }
@@ -206,9 +217,11 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
         ...commonItems
       ];
 
-    // 8. ACCOUNTANT - Finance access
+    // 8. ACCOUNTANT - Finance access (all accountant roles)
     case 'Accountant':
+    case 'JuniorAccountant':
     case 'SeniorAccountant':
+    case 'FinanceManager':
       return [
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         ...commonItems,
@@ -239,7 +252,8 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
         ...commonItems,
         financeParentItem,
         { path: '/ceo-dashboard', label: 'CEO View', icon: Crown },
-        { path: '/reports', label: 'Reports', icon: BarChart3 }
+        { path: '/reports', label: 'Reports', icon: BarChart3 },
+        { path: '/admin/audit-trail', label: 'Audit Trail', icon: History }
       ];
 
     default:

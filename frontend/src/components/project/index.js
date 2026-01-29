@@ -6,6 +6,7 @@ export { FilesTab } from './FilesTab';
 export { NotesTab } from './NotesTab';
 export { CollaboratorsTab } from './CollaboratorsTab';
 export { CustomPaymentScheduleEditor } from './CustomPaymentScheduleEditor';
+export { default as FinancialGatesCard } from './FinancialGatesCard';
 export { 
   STAGES, 
   STAGE_COLORS, 

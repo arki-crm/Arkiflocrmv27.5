@@ -360,7 +360,12 @@ const LeadStagesPanel = ({
   canAssignDesigner,
   onConvertToProject,
   canConvert,
-  userRole
+  userRole,
+  bookingPaymentConfirmed,
+  bookingPaymentConfirmedBy,
+  bookingPaymentConfirmedAt,
+  onConfirmBookingPayment,
+  canConfirmBookingPayment
 }) => {
   const currentIndex = LEAD_STAGES.indexOf(currentStage);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, targetStage: null });
@@ -516,6 +521,54 @@ const LeadStagesPanel = ({
           </div>
         )}
       </div>
+
+      {/* Booking Payment Confirmation Section */}
+      {(currentStage === 'Waiting for Booking' || currentStage === 'Booking Completed') && (
+        <div className="border-t border-slate-200 pt-4 mt-4">
+          <h4 className="font-medium text-slate-800 text-sm mb-3">Booking Payment Status</h4>
+          
+          {bookingPaymentConfirmed ? (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 text-green-700 mb-1">
+                <Check className="w-4 h-4" />
+                <span className="font-medium text-sm">Payment Confirmed</span>
+              </div>
+              <p className="text-xs text-green-600">
+                Confirmed by {bookingPaymentConfirmedBy}
+                {bookingPaymentConfirmedAt && (
+                  <> on {new Date(bookingPaymentConfirmedAt).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric'
+                  })}</>
+                )}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 text-amber-700 mb-2">
+                <Clock className="w-4 h-4" />
+                <span className="font-medium text-sm">Awaiting Payment Confirmation</span>
+              </div>
+              <p className="text-xs text-amber-600 mb-3">
+                Accounts team must confirm booking payment before lead can be marked as &quot;Booking Completed&quot;
+              </p>
+              {canConfirmBookingPayment && (
+                <Button
+                  onClick={onConfirmBookingPayment}
+                  variant="outline"
+                  size="sm"
+                  className="w-full border-amber-400 text-amber-700 hover:bg-amber-100"
+                  data-testid="confirm-booking-payment-btn"
+                >
+                  <Check className="w-4 h-4 mr-2" />
+                  Confirm Payment
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Convert to Project */}
       {canConvert && currentStage === 'Booking Completed' && (
@@ -888,6 +941,32 @@ const LeadDetails = () => {
     return hasPermission('leads.convert');
   };
   
+  // Can confirm booking payment - Accounts team only
+  const canConfirmBookingPayment = () => {
+    if (!user) return false;
+    // Check for finance permissions (Accounts team)
+    return hasPermission('finance.receipts.create') || 
+           hasPermission('finance.cashbook.create') ||
+           user.role === 'Admin';
+  };
+  
+  // Handle booking payment confirmation
+  const handleConfirmBookingPayment = async () => {
+    try {
+      setIsUpdatingStage(true);
+      await axios.put(`${API}/leads/${id}/confirm-booking-payment`, {}, {
+        withCredentials: true
+      });
+      toast.success('Booking payment confirmed successfully');
+      fetchLead(); // Refresh lead data
+    } catch (error) {
+      console.error('Error confirming booking payment:', error);
+      toast.error(error.response?.data?.detail || 'Failed to confirm booking payment');
+    } finally {
+      setIsUpdatingStage(false);
+    }
+  };
+  
   // Can edit customer details
   const canEditCustomerDetails = () => {
     if (!user || !lead) return false;
@@ -1198,6 +1277,11 @@ const LeadDetails = () => {
                 onConvertToProject={handleConvertToProject}
                 canConvert={canConvert()}
                 userRole={user?.role}
+                bookingPaymentConfirmed={lead?.booking_payment_confirmed}
+                bookingPaymentConfirmedBy={lead?.booking_payment_confirmed_by_name}
+                bookingPaymentConfirmedAt={lead?.booking_payment_confirmed_at}
+                onConfirmBookingPayment={handleConfirmBookingPayment}
+                canConfirmBookingPayment={canConfirmBookingPayment()}
               />
 
               {/* 2. Collaborators Section - Compact */}

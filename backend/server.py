@@ -1,11 +1,12 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, UploadFile, File
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import re
 import logging
+import json
 from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
@@ -15,6 +16,9 @@ import httpx
 import aiofiles
 import hashlib
 import secrets
+from urllib.parse import urlencode
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -33,6 +37,18 @@ MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB max for videos
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
+# ============ GOOGLE OAUTH CONFIGURATION ============
+# These must be set in .env for Google OAuth to work
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
+GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', '')
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+
+# Google OAuth URLs
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 # Create the main app
 app = FastAPI()
@@ -171,6 +187,26 @@ class CommentCreate(BaseModel):
 
 class StageUpdate(BaseModel):
     stage: str
+
+# ============ FINANCIAL GATES MODELS ============
+
+class GateOverrideRequest(BaseModel):
+    """Request to override a financial gate without payment confirmation"""
+    reason: str  # Why override is needed
+    expected_payment_date: str  # When payment is expected (YYYY-MM-DD)
+    notes: Optional[str] = None
+
+class GateOverrideApproval(BaseModel):
+    """Admin/Founder approval of a gate override request"""
+    approved: bool
+    approval_notes: Optional[str] = None
+
+class PaymentMilestoneConfirmation(BaseModel):
+    """Accounts team confirmation of a payment milestone"""
+    milestone_name: str  # e.g., "Production Start", "Before Installation"
+    amount_received: float
+    receipt_id: Optional[str] = None  # Link to receipt if exists
+    notes: Optional[str] = None
 
 # ============ FILES, NOTES, COLLABORATORS MODELS ============
 
@@ -586,6 +622,54 @@ STAGE_ORDER = [
     "Installation",
     "Handover"
 ]
+
+# ============ FINANCIAL GATES (SIMPLE) ============
+# Payment confirmation required before moving to these stages
+# Works exactly like booking payment confirmation
+PAYMENT_REQUIRED_STAGES = {
+    "Production": "Production Start payment",
+    "Delivery": "Pre-delivery payment",
+    "Installation": "Pre-installation payment"
+}
+
+# Roles that can confirm payment (Accounts team)
+PAYMENT_CONFIRMATION_ROLES = [
+    "Accountant",
+    "JuniorAccountant", 
+    "SeniorAccountant",
+    "FinanceManager",
+    "CharteredAccountant"
+]
+
+
+def check_payment_gate(project: dict, target_stage: str, user_role: str) -> dict:
+    """
+    Simple payment gate check - works like booking confirmation.
+    Returns: {"blocked": bool, "message": str, "can_override": bool}
+    """
+    # Only check stages that require payment
+    if target_stage not in PAYMENT_REQUIRED_STAGES:
+        return {"blocked": False}
+    
+    # Admin/Founder can always override
+    if user_role in ["Admin", "Founder"]:
+        return {"blocked": False, "can_override": True}
+    
+    # Check if payment for this stage is confirmed
+    payment_confirmations = project.get("stage_payment_confirmations", {})
+    is_confirmed = payment_confirmations.get(target_stage, False)
+    
+    if is_confirmed:
+        return {"blocked": False}
+    
+    # Blocked
+    return {
+        "blocked": True,
+        "message": f"Required payment not confirmed by Accounts. Please contact Accounts team to confirm '{PAYMENT_REQUIRED_STAGES[target_stage]}' before proceeding.",
+        "can_override": False,
+        "stage": target_stage
+    }
+
 
 # Default TAT days for substages (used in timeline regeneration)
 DEFAULT_TAT_DAYS = {
@@ -1050,13 +1134,17 @@ async def create_session(request: SessionRequest, response: Response):
 
 @api_router.get("/auth/me")
 async def get_me(request: Request):
-    """Get current authenticated user with permissions"""
+    """Get current authenticated user with permissions - includes auto-repair of missing permissions"""
     user = await get_current_user(request)
     
     # Get full user doc for permissions
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
     if not user_doc:
-        user_doc = {"role": user.role}
+        user_doc = {"role": user.role, "user_id": user.user_id}
+    
+    # PERMISSION SAFETY NET: Repair permissions on every /auth/me call (session resume)
+    # This ensures users with existing sessions also get fixed
+    user_doc = await ensure_user_permissions(user.user_id, user_doc)
     
     effective_permissions = get_user_permissions(user_doc)
     
@@ -1083,6 +1171,204 @@ async def logout(request: Request, response: Response):
     return {"message": "Logged out successfully"}
 
 
+# ============ DIRECT GOOGLE OAUTH ============
+
+@api_router.get("/auth/google/login")
+async def google_login(request: Request):
+    """
+    Initiates Google OAuth flow.
+    Redirects user to Google's consent screen.
+    """
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(
+            status_code=500, 
+            detail="Google OAuth not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+        )
+    
+    # Build the Google OAuth URL
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account"
+    }
+    
+    auth_url = f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
+    logger.info(f"Redirecting to Google OAuth: {auth_url}")
+    
+    return RedirectResponse(url=auth_url)
+
+
+@api_router.get("/auth/google/callback")
+async def google_callback(request: Request, response: Response, code: str = None, error: str = None):
+    """
+    Handles Google OAuth callback.
+    Exchanges authorization code for tokens, creates/updates user, sets session cookie.
+    """
+    if error:
+        logger.error(f"Google OAuth error: {error}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?error={error}")
+    
+    if not code:
+        logger.error("No authorization code received from Google")
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?error=no_code")
+    
+    try:
+        # Exchange authorization code for tokens
+        async with httpx.AsyncClient() as client_http:
+            token_response = await client_http.post(
+                GOOGLE_TOKEN_URL,
+                data={
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": GOOGLE_REDIRECT_URI
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
+            )
+            
+            if token_response.status_code != 200:
+                logger.error(f"Token exchange failed: {token_response.text}")
+                return RedirectResponse(url=f"{FRONTEND_URL}/login?error=token_exchange_failed")
+            
+            tokens = token_response.json()
+            id_token_jwt = tokens.get("id_token")
+            access_token = tokens.get("access_token")
+            
+            if not id_token_jwt:
+                logger.error("No ID token in response")
+                return RedirectResponse(url=f"{FRONTEND_URL}/login?error=no_id_token")
+        
+        # Verify the ID token using Google's public keys
+        try:
+            idinfo = id_token.verify_oauth2_token(
+                id_token_jwt,
+                google_requests.Request(),
+                GOOGLE_CLIENT_ID
+            )
+            
+            # Extract user info from verified token
+            email = idinfo.get("email")
+            name = idinfo.get("name", email.split("@")[0])
+            picture = idinfo.get("picture")
+            google_sub = idinfo.get("sub")  # Google's unique user ID
+            
+            if not email:
+                logger.error("No email in ID token")
+                return RedirectResponse(url=f"{FRONTEND_URL}/login?error=no_email")
+                
+        except ValueError as e:
+            logger.error(f"ID token verification failed: {e}")
+            return RedirectResponse(url=f"{FRONTEND_URL}/login?error=invalid_token")
+        
+        now = datetime.now(timezone.utc)
+        
+        # Check if user exists by email
+        existing_user = await db.users.find_one({"email": email}, {"_id": 0})
+        
+        if existing_user:
+            user_id = existing_user["user_id"]
+            
+            # Check if user is inactive
+            if existing_user.get("status") == "Inactive":
+                logger.warning(f"Inactive user attempted login: {email}")
+                return RedirectResponse(url=f"{FRONTEND_URL}/login?error=account_inactive")
+            
+            # Update user info and last_login (also add google_sub if missing)
+            initials = "".join([n[0].upper() for n in name.split()[:2]]) if name else "U"
+            await db.users.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "name": name,
+                    "picture": picture,
+                    "initials": initials,
+                    "google_sub": google_sub,
+                    "last_login": now.isoformat(),
+                    "updated_at": now.isoformat()
+                }}
+            )
+            
+            # PERMISSION SAFETY NET: Ensure user has valid permissions
+            existing_user = await ensure_user_permissions(user_id, existing_user)
+            
+            role = existing_user["role"]
+            logger.info(f"Existing user logged in via Google: {email}")
+        else:
+            # Check if this is the first user (becomes Admin)
+            # This check is deterministic: only triggers when user_count is exactly 0
+            user_count = await db.users.count_documents({})
+            role = "Admin" if user_count == 0 else "Designer"
+            
+            # Get default permissions for the role (MANDATORY - never empty)
+            default_perms = DEFAULT_ROLE_PERMISSIONS.get(role, DEFAULT_ROLE_PERMISSIONS.get("Designer", []))
+            
+            # Create new user with GUARANTEED permissions
+            user_id = f"user_{uuid.uuid4().hex[:12]}"
+            initials = "".join([n[0].upper() for n in name.split()[:2]]) if name else "U"
+            new_user = {
+                "user_id": user_id,
+                "email": email,
+                "name": name,
+                "picture": picture,
+                "role": role,
+                "phone": None,
+                "status": "Active",
+                "initials": initials,
+                "google_sub": google_sub,
+                "auth_provider": "google",
+                "permissions": default_perms,  # MANDATORY: Never empty
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+                "last_login": now.isoformat()
+            }
+            await db.users.insert_one(new_user)
+            
+            if role == "Admin":
+                logger.info(f"FIRST USER: {email} created as Admin with {len(default_perms)} permissions")
+            else:
+                logger.info(f"New user created via Google OAuth: {email} (role: {role}, permissions: {len(default_perms)})")
+        
+        # Create session token
+        session_token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+        
+        # Remove old sessions for this user
+        await db.user_sessions.delete_many({"user_id": user_id})
+        
+        # Create new session
+        await db.user_sessions.insert_one({
+            "user_id": user_id,
+            "session_token": session_token,
+            "expires_at": expires_at.isoformat(),
+            "created_at": now.isoformat(),
+            "login_type": "google"
+        })
+        
+        # Create redirect response with cookie
+        redirect_response = RedirectResponse(url=f"{FRONTEND_URL}/dashboard", status_code=302)
+        
+        # Set session cookie (same flags as local login)
+        redirect_response.set_cookie(
+            key="session_token",
+            value=session_token,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            max_age=7 * 24 * 60 * 60,
+            path="/"
+        )
+        
+        logger.info(f"Google OAuth successful for: {email}")
+        return redirect_response
+        
+    except Exception as e:
+        logger.error(f"Google OAuth callback error: {str(e)}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?error=callback_failed")
+
+
 # ============ LOCAL LOGIN SYSTEM ============
 
 @api_router.post("/auth/local-login")
@@ -1107,6 +1393,9 @@ async def local_login(credentials: LocalLoginRequest, response: Response):
     # Check if user is active
     if user_doc.get("status") != "Active":
         raise HTTPException(status_code=403, detail="Account is not active")
+    
+    # PERMISSION SAFETY NET: Ensure user has valid permissions before proceeding
+    user_doc = await ensure_user_permissions(user_doc["user_id"], user_doc)
     
     # Create session
     session_token = secrets.token_urlsafe(32)
@@ -1147,7 +1436,8 @@ async def local_login(credentials: LocalLoginRequest, response: Response):
             "email": user_doc["email"],
             "name": user_doc["name"],
             "role": user_doc["role"],
-            "picture": user_doc.get("picture")
+            "picture": user_doc.get("picture"),
+            "permissions_count": len(user_doc.get("permissions", []))
         }
     }
 
@@ -1248,7 +1538,9 @@ VALID_ROLES = [
     "OperationLead",          # Ground-level execution: delivery, installation, handover milestones
     "Technician",             # Service requests, visit completion, SLA tracking
     "Accountant",             # Finance: add/view transactions, basic reports
+    "JuniorAccountant",       # Finance: basic data entry, view cashbook
     "SeniorAccountant",       # Finance: verify transactions, all reports, manage categories
+    "FinanceManager",         # Finance: full control, approvals, overrides
     "CharteredAccountant",    # Finance: read-only audit access, exports, no operational edits
     "Founder"                 # Full visibility, final override, not required for daily tasks
 ]
@@ -1653,6 +1945,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.expenses.view", "finance.expenses.create",
         # Reports - Basic only, NO profit/margin
         "finance.reports.view",
+        # Salaries - View all (for processing payments)
+        "finance.salaries.view", "finance.salaries.view_all",
         # Masters - View only
         "finance.categories.view", "finance.vendors.view",
         "finance.payment_schedule.view",
@@ -1684,6 +1978,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         # Reports - Standard reports, NO profit/margin
         "finance.reports.view", "finance.reports.export",
         "finance.monthly_snapshot",
+        # Salaries - View all and process payments
+        "finance.salaries.view", "finance.salaries.view_all", "finance.salaries.pay",
         # Masters - Full management
         "finance.categories.view", "finance.categories.manage",
         "finance.vendors.view", "finance.vendors.manage",
@@ -1721,6 +2017,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         # Reports - Full visibility including profit/margin
         "finance.reports.view", "finance.reports.export", "finance.reports.profit", "finance.reports.margin",
         "finance.monthly_snapshot", "finance.founder_dashboard",
+        # Salaries - Full control
+        "finance.salaries.view", "finance.salaries.view_all", "finance.salaries.edit_structure",
+        "finance.salaries.pay", "finance.salaries.close_month", "finance.salaries.manage_exit",
         # Masters - Full management
         "finance.categories.view", "finance.categories.manage",
         "finance.vendors.view", "finance.vendors.manage",
@@ -1765,6 +2064,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         # Reports - Full read access including profit/margin
         "finance.reports.view", "finance.reports.export", "finance.reports.profit", "finance.reports.margin",
         "finance.monthly_snapshot",
+        # Salaries - View only (for audit)
+        "finance.salaries.view", "finance.salaries.view_all",
         # Budgeting & Forecast - View only
         "finance.budget.view", "finance.forecast.view",
         # Masters - View only
@@ -1834,13 +2135,51 @@ DEFAULT_ROLE_PERMISSIONS = {
 
 def get_user_permissions(user_doc: dict) -> list:
     """Get user's effective permissions (always use stored permissions if present, otherwise role defaults)"""
-    # If user has permissions array stored, use that (admin-assigned or role-based)
+    # If user has permissions array stored AND it's non-empty, use that
     stored_perms = user_doc.get("permissions", [])
-    if stored_perms:
+    if stored_perms and len(stored_perms) > 0:
         return stored_perms
-    # Fallback to role-based defaults if no permissions stored
+    # Fallback to role-based defaults if no permissions stored or empty
     role = user_doc.get("role", "")
     return DEFAULT_ROLE_PERMISSIONS.get(role, [])
+
+
+async def ensure_user_permissions(user_id: str, user_doc: dict) -> dict:
+    """
+    PERMISSION INTEGRITY ENFORCER
+    
+    Ensures a user NEVER exists in a usable state without permissions.
+    Called on every login. Repairs permissions if missing or empty.
+    
+    Rules:
+    - Missing permissions field → Assign from role defaults
+    - Empty permissions list [] → Assign from role defaults  
+    - Both cases treated identically
+    - Idempotent: Safe to call multiple times
+    - Returns updated user document
+    """
+    stored_perms = user_doc.get("permissions")
+    
+    # Check if permissions are missing OR empty (treat both the same)
+    needs_repair = stored_perms is None or (isinstance(stored_perms, list) and len(stored_perms) == 0)
+    
+    if needs_repair:
+        role = user_doc.get("role", "Designer")
+        default_perms = DEFAULT_ROLE_PERMISSIONS.get(role, DEFAULT_ROLE_PERMISSIONS.get("Designer", []))
+        
+        # Repair the permissions in database
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"permissions": default_perms}}
+        )
+        
+        logger.warning(f"PERMISSION REPAIR: User {user_doc.get('email')} had missing/empty permissions. "
+                      f"Assigned {len(default_perms)} permissions from role '{role}'.")
+        
+        # Update the in-memory document
+        user_doc["permissions"] = default_perms
+    
+    return user_doc
 
 
 def has_permission(user_doc: dict, permission: str) -> bool:
@@ -3011,6 +3350,37 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
     else:
         rollback_note = ""
     
+    # ============ PAYMENT GATE CHECK (Simple) ============
+    # Works like booking payment confirmation
+    gate_check = check_payment_gate(project, new_stage, user.role)
+    
+    if gate_check.get("blocked"):
+        # Non-Admin/Founder users are blocked
+        raise HTTPException(
+            status_code=403,
+            detail=gate_check.get("message", "Required payment not confirmed by Accounts")
+        )
+    
+    # Admin/Founder override - log it
+    if gate_check.get("can_override") and new_stage in PAYMENT_REQUIRED_STAGES:
+        override_note = f" ⚠️ [Payment gate bypassed by {user.role}]"
+        rollback_note += override_note
+        
+        # Log the override
+        override_log = {
+            "override_id": f"override_{uuid.uuid4().hex[:8]}",
+            "stage": new_stage,
+            "overridden_by": user.user_id,
+            "overridden_by_name": user.name,
+            "overridden_by_role": user.role,
+            "overridden_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {"$push": {"payment_gate_overrides": override_log}}
+        )
+    
     now = datetime.now(timezone.utc)
     
     # Create system comment for stage change
@@ -3479,6 +3849,74 @@ async def complete_substage(project_id: str, request: Request):
     if not has_perm:
         raise HTTPException(status_code=403, detail=perm_error)
     
+    # ============ PAYMENT GATE CHECK (Milestones with Payment Confirmation) ============
+    # These milestones require Accounts confirmation, exactly like Booking Payment Confirmation
+    PAYMENT_GATED_MILESTONES = {
+        "payment_collection_50": "50% Payment Collection",
+        "full_order_confirmation_45": "45% Payment Collection (Full Order Confirmation)"
+    }
+    
+    if substage_id in PAYMENT_GATED_MILESTONES:
+        payment_name = PAYMENT_GATED_MILESTONES[substage_id]
+        milestone_confirmations = project.get("milestone_payment_confirmations", {})
+        is_confirmed = milestone_confirmations.get(substage_id, False)
+        
+        # Admin/Founder/CEO can override - but NOT other roles
+        if user_doc.get("role") in ["Admin", "Founder"]:
+            # Admin override allowed - will be logged below
+            pass
+        elif not is_confirmed:
+            # Block all other roles until Accounts confirms
+            # Record the confirmation request for the pending confirmations page
+            now = datetime.now(timezone.utc)
+            await db.projects.update_one(
+                {"project_id": project_id},
+                {
+                    "$set": {
+                        f"milestone_confirmation_requests.{substage_id}": {
+                            "requested_at": now.isoformat(),
+                            "requested_by": user.user_id,
+                            "requested_by_name": user.name,
+                            "requested_by_role": user_doc.get("role")
+                        }
+                    }
+                }
+            )
+            
+            # Send notification to Accounts
+            accounts_users = await db.users.find(
+                {"role": {"$in": ["Accountant", "JuniorAccountant", "SeniorAccountant", "FinanceManager", "CharteredAccountant"]}, "is_active": {"$ne": False}},
+                {"_id": 0, "user_id": 1}
+            ).to_list(100)
+            
+            if accounts_users:
+                await db.notifications.insert_many([
+                    {
+                        "notification_id": f"notif_{uuid.uuid4().hex[:10]}",
+                        "user_id": acc.get("user_id"),
+                        "title": "Payment Confirmation Required",
+                        "message": f"Project {project.get('project_name', project_id)} requires {payment_name} confirmation before milestone can be completed.",
+                        "type": "action_required",
+                        "link_url": f"/finance/milestone-confirmations",
+                        "is_read": False,
+                        "created_at": now.isoformat()
+                    }
+                    for acc in accounts_users
+                ])
+            
+            raise HTTPException(
+                status_code=403,
+                detail=f"Payment confirmation required from Accounts. '{payment_name}' must be confirmed before this milestone can be completed."
+            )
+    
+    # Track if Admin is overriding payment gate (for logging)
+    admin_override_payment = False
+    if substage_id in PAYMENT_GATED_MILESTONES:
+        milestone_confirmations = project.get("milestone_payment_confirmations", {})
+        is_confirmed = milestone_confirmations.get(substage_id, False)
+        if not is_confirmed and user_doc.get("role") in ["Admin", "Founder"]:
+            admin_override_payment = True
+    
     completed_substages = project.get("completed_substages", [])
     
     # Validate forward-only progression
@@ -3557,6 +3995,47 @@ async def complete_substage(project_id: str, request: Request):
     }
     
     await db.projects.update_one({"project_id": project_id}, update_ops)
+    
+    # ============ ADMIN OVERRIDE LOGGING ============
+    # If Admin/Founder completed a payment-gated milestone without Accounts confirmation,
+    # log it as a system comment for audit trail (exactly like Booking Confirmation override)
+    if admin_override_payment:
+        payment_name = PAYMENT_GATED_MILESTONES.get(substage_id, substage_id)
+        override_comment = {
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": user.user_id,
+            "user_name": user.name,
+            "role": user_doc.get("role"),
+            "message": f"⚠️ ADMIN OVERRIDE: {user.name} ({user_doc.get('role')}) completed milestone '{payment_name}' without Accounts payment confirmation.",
+            "is_system": True,
+            "created_at": now.isoformat(),
+            "metadata": {
+                "type": "payment_gate_override",
+                "pid": pid,
+                "milestone_id": substage_id,
+                "milestone_name": payment_name,
+                "override_by": user.user_id,
+                "override_by_name": user.name,
+                "override_by_role": user_doc.get("role")
+            }
+        }
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {
+                "$push": {
+                    "comments": override_comment,
+                    "timeline": {
+                        "type": "payment_gate_override",
+                        "milestone_id": substage_id,
+                        "milestone_name": payment_name,
+                        "override_by": user.user_id,
+                        "override_by_name": user.name,
+                        "override_by_role": user_doc.get("role"),
+                        "timestamp": now.isoformat()
+                    }
+                }
+            }
+        )
     
     # Add group completion comment separately if needed
     if group_comment:
@@ -3669,6 +4148,74 @@ async def update_percentage_substage(project_id: str, request: Request):
     has_perm, perm_error = check_milestone_permission(user_doc, substage_id)
     if not has_perm:
         raise HTTPException(status_code=403, detail=perm_error)
+    
+    # ============ PAYMENT GATE CHECK (Milestones with Payment Confirmation) ============
+    # These milestones require Accounts confirmation, exactly like Booking Payment Confirmation
+    PAYMENT_GATED_MILESTONES = {
+        "payment_collection_50": "50% Payment Collection",
+        "full_order_confirmation_45": "45% Payment Collection (Full Order Confirmation)"
+    }
+    
+    if substage_id in PAYMENT_GATED_MILESTONES:
+        payment_name = PAYMENT_GATED_MILESTONES[substage_id]
+        milestone_confirmations = project.get("milestone_payment_confirmations", {})
+        is_confirmed = milestone_confirmations.get(substage_id, False)
+        
+        # Admin/Founder/CEO can override - but NOT other roles
+        if user_doc.get("role") in ["Admin", "Founder"]:
+            # Admin override allowed - will be logged below
+            pass
+        elif not is_confirmed:
+            # Block all other roles until Accounts confirms
+            # Record the confirmation request for the pending confirmations page
+            now = datetime.now(timezone.utc)
+            await db.projects.update_one(
+                {"project_id": project_id},
+                {
+                    "$set": {
+                        f"milestone_confirmation_requests.{substage_id}": {
+                            "requested_at": now.isoformat(),
+                            "requested_by": user.user_id,
+                            "requested_by_name": user.name,
+                            "requested_by_role": user_doc.get("role")
+                        }
+                    }
+                }
+            )
+            
+            # Send notification to Accounts
+            accounts_users = await db.users.find(
+                {"role": {"$in": ["Accountant", "JuniorAccountant", "SeniorAccountant", "FinanceManager", "CharteredAccountant"]}, "is_active": {"$ne": False}},
+                {"_id": 0, "user_id": 1}
+            ).to_list(100)
+            
+            if accounts_users:
+                await db.notifications.insert_many([
+                    {
+                        "notification_id": f"notif_{uuid.uuid4().hex[:10]}",
+                        "user_id": acc.get("user_id"),
+                        "title": "Payment Confirmation Required",
+                        "message": f"Project {project.get('project_name', project_id)} requires {payment_name} confirmation before milestone can be completed.",
+                        "type": "action_required",
+                        "link_url": f"/finance/milestone-confirmations",
+                        "is_read": False,
+                        "created_at": now.isoformat()
+                    }
+                    for acc in accounts_users
+                ])
+            
+            raise HTTPException(
+                status_code=403,
+                detail=f"Payment confirmation required from Accounts. '{payment_name}' must be confirmed before this milestone can be completed."
+            )
+    
+    # Track if Admin is overriding payment gate (for logging)
+    admin_override_payment = False
+    if substage_id in PAYMENT_GATED_MILESTONES:
+        milestone_confirmations = project.get("milestone_payment_confirmations", {})
+        is_confirmed = milestone_confirmations.get(substage_id, False)
+        if not is_confirmed and user_doc.get("role") in ["Admin", "Founder"]:
+            admin_override_payment = True
     
     completed_substages = project.get("completed_substages", [])
     percentage_substages = project.get("percentage_substages", {})
@@ -4196,6 +4743,313 @@ async def remove_collaborator(project_id: str, user_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Collaborator not found")
     
     return {"message": "Collaborator removed successfully"}
+
+
+# ============ STAGE PAYMENT CONFIRMATION ============
+# Simple payment gate - works like booking confirmation
+
+@api_router.post("/projects/{project_id}/confirm-stage-payment/{stage}")
+async def confirm_stage_payment(project_id: str, stage: str, request: Request):
+    """
+    Accounts confirms payment for a stage (simple, like booking confirmation).
+    Only Accounts team and Admin/Founder can confirm.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Accounts or Admin/Founder can confirm
+    allowed_roles = PAYMENT_CONFIRMATION_ROLES + ["Admin", "Founder"]
+    if user_doc.get("role") not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Only Accounts team can confirm payment")
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if stage not in PAYMENT_REQUIRED_STAGES:
+        raise HTTPException(status_code=400, detail=f"Invalid stage. Must be one of: {list(PAYMENT_REQUIRED_STAGES.keys())}")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Update stage payment confirmation
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$set": {
+                f"stage_payment_confirmations.{stage}": True,
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "comments": {
+                    "id": f"comment_{uuid.uuid4().hex[:8]}",
+                    "user_id": user.user_id,
+                    "user_name": user.name,
+                    "role": user_doc.get("role"),
+                    "message": f"✅ Payment confirmed for {stage} stage by {user.name} (Accounts)",
+                    "is_system": True,
+                    "created_at": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    return {
+        "success": True,
+        "message": f"Payment confirmed for {stage} stage",
+        "confirmed_by": user.name,
+        "stage": stage
+    }
+
+
+@api_router.get("/projects/{project_id}/stage-payment-status")
+async def get_stage_payment_status(project_id: str, request: Request):
+    """Get payment confirmation status for all gated stages"""
+    user = await get_current_user(request)
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    confirmations = project.get("stage_payment_confirmations", {})
+    overrides = project.get("payment_gate_overrides", [])
+    
+    status = {}
+    for stage in PAYMENT_REQUIRED_STAGES:
+        status[stage] = {
+            "confirmed": confirmations.get(stage, False),
+            "payment_name": PAYMENT_REQUIRED_STAGES[stage]
+        }
+    
+    return {
+        "project_id": project_id,
+        "current_stage": project.get("stage"),
+        "stage_payments": status,
+        "overrides": overrides
+    }
+
+
+# ============ MILESTONE PAYMENT CONFIRMATION ============
+# Works exactly like Booking Payment Confirmation
+
+PAYMENT_GATED_MILESTONES = {
+    "payment_collection_50": "50% Payment Collection",
+    "full_order_confirmation_45": "45% Payment Collection (Full Order Confirmation)"
+}
+
+@api_router.post("/projects/{project_id}/confirm-milestone-payment/{milestone_id}")
+async def confirm_milestone_payment(project_id: str, milestone_id: str, request: Request):
+    """
+    Accounts confirms payment for a milestone (works like Booking Payment Confirmation).
+    Only Accounts team and Admin/Founder can confirm.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Accounts or Admin/Founder can confirm
+    allowed_roles = PAYMENT_CONFIRMATION_ROLES + ["Admin", "Founder"]
+    if user_doc.get("role") not in allowed_roles:
+        raise HTTPException(
+            status_code=403, 
+            detail="Only Accounts team can confirm milestone payments"
+        )
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if milestone_id not in PAYMENT_GATED_MILESTONES:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid milestone. Must be one of: {list(PAYMENT_GATED_MILESTONES.keys())}"
+        )
+    
+    payment_name = PAYMENT_GATED_MILESTONES[milestone_id]
+    now = datetime.now(timezone.utc)
+    
+    # Update milestone payment confirmation
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$set": {
+                f"milestone_payment_confirmations.{milestone_id}": True,
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "comments": {
+                    "id": f"comment_{uuid.uuid4().hex[:8]}",
+                    "user_id": user.user_id,
+                    "user_name": user.name,
+                    "role": user_doc.get("role"),
+                    "message": f"✅ Payment confirmed: '{payment_name}' by {user.name} (Accounts). Milestone can now be completed.",
+                    "is_system": True,
+                    "created_at": now.isoformat()
+                },
+                "timeline": {
+                    "type": "payment_confirmed",
+                    "milestone_id": milestone_id,
+                    "milestone_name": payment_name,
+                    "confirmed_by": user.user_id,
+                    "confirmed_by_name": user.name,
+                    "confirmed_by_role": user_doc.get("role"),
+                    "timestamp": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    return {
+        "success": True,
+        "message": f"Payment confirmed for '{payment_name}'",
+        "milestone_id": milestone_id,
+        "confirmed_by": user.name
+    }
+
+
+@api_router.get("/projects/{project_id}/milestone-payment-status")
+async def get_milestone_payment_status(project_id: str, request: Request):
+    """Get payment confirmation status for gated milestones"""
+    user = await get_current_user(request)
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    confirmations = project.get("milestone_payment_confirmations", {})
+    
+    status = {}
+    for milestone_id, payment_name in PAYMENT_GATED_MILESTONES.items():
+        status[milestone_id] = {
+            "confirmed": confirmations.get(milestone_id, False),
+            "payment_name": payment_name
+        }
+    
+    return {
+        "project_id": project_id,
+        "milestone_payments": status
+    }
+
+
+@api_router.get("/finance/pending-milestone-confirmations")
+async def get_pending_milestone_confirmations(request: Request):
+    """Get projects awaiting milestone payment confirmation - For Accounts team only.
+    This returns projects where a payment-gated milestone needs confirmation before it can be completed.
+    Works exactly like pending-booking-confirmations but for project milestones."""
+    user = await get_current_user(request)
+    
+    # Get user document for permission check
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not user_doc:
+        raise HTTPException(status_code=403, detail="User not found")
+    
+    # Check if user has finance permissions (Accounts team)
+    has_finance_access = (
+        user.role in PAYMENT_CONFIRMATION_ROLES + ["Admin", "Founder"] or
+        has_permission(user_doc, "finance.receipts.create") or
+        has_permission(user_doc, "finance.cashbook.create")
+    )
+    
+    if not has_finance_access:
+        raise HTTPException(
+            status_code=403, 
+            detail="Access denied - Only Accounts team can view milestone confirmations"
+        )
+    
+    # Get projects where:
+    # 1. The payment gate is NOT confirmed
+    # 2. The milestone is the next one to be completed (i.e., previous milestone is done)
+    pending_confirmations = []
+    
+    # Get all substages in order
+    all_substages = get_all_substages()
+    substage_ids = [s["id"] for s in all_substages]
+    
+    # Find the index of each gated milestone
+    gated_milestone_indices = {}
+    for milestone_id in PAYMENT_GATED_MILESTONES.keys():
+        if milestone_id in substage_ids:
+            gated_milestone_indices[milestone_id] = substage_ids.index(milestone_id)
+    
+    # Query projects that might need confirmation
+    # Projects where milestone_payment_confirmations doesn't have true for gated milestones
+    pipeline = [
+        {
+            "$match": {
+                "hold_status": {"$nin": ["Hold", "Deactivated"]},
+                "$or": [
+                    {"milestone_payment_confirmations.payment_collection_50": {"$ne": True}},
+                    {"milestone_payment_confirmations.full_order_confirmation_45": {"$ne": True}}
+                ]
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "project_id": 1,
+                "project_name": 1,
+                "pid": 1,
+                "client_name": 1,
+                "contract_value": 1,
+                "stage": 1,
+                "completed_substages": 1,
+                "milestone_payment_confirmations": 1,
+                "milestone_confirmation_requests": 1,
+                "updated_at": 1
+            }
+        }
+    ]
+    
+    projects = await db.projects.aggregate(pipeline).to_list(500)
+    
+    for project in projects:
+        completed_substages = project.get("completed_substages", [])
+        confirmations = project.get("milestone_payment_confirmations", {})
+        requests = project.get("milestone_confirmation_requests", {})
+        
+        for milestone_id, milestone_name in PAYMENT_GATED_MILESTONES.items():
+            # Skip if already confirmed
+            if confirmations.get(milestone_id, False):
+                continue
+            
+            # Check if this milestone is the NEXT one to be completed
+            milestone_index = gated_milestone_indices.get(milestone_id)
+            if milestone_index is None:
+                continue
+            
+            # Check if all previous milestones are completed
+            if milestone_index > 0:
+                prev_milestone = substage_ids[milestone_index - 1]
+                if prev_milestone not in completed_substages:
+                    # Previous milestone not done, so this gate isn't relevant yet
+                    continue
+            
+            # Skip if milestone is already completed
+            if milestone_id in completed_substages:
+                continue
+            
+            # This milestone needs confirmation - add to list
+            request_info = requests.get(milestone_id, {})
+            pending_confirmations.append({
+                "project_id": project.get("project_id"),
+                "project_name": project.get("project_name"),
+                "pid": project.get("pid", "N/A"),
+                "client_name": project.get("client_name"),
+                "contract_value": project.get("contract_value"),
+                "stage": project.get("stage"),
+                "milestone_id": milestone_id,
+                "milestone_name": milestone_name,
+                "requested_at": request_info.get("requested_at", project.get("updated_at")),
+                "requested_by": request_info.get("requested_by"),
+                "requested_by_name": request_info.get("requested_by_name")
+            })
+    
+    # Sort by requested_at (most recent first)
+    pending_confirmations.sort(key=lambda x: x.get("requested_at", ""), reverse=True)
+    
+    return {
+        "pending_confirmations": pending_confirmations,
+        "total": len(pending_confirmations)
+    }
+
 
 # ============ LEADS ENDPOINTS ============
 
@@ -4805,6 +5659,16 @@ async def update_lead_stage(lead_id: str, stage_update: LeadStageUpdate, request
     else:
         rollback_note = ""
     
+    # ============ BOOKING PAYMENT CONFIRMATION GATE ============
+    # To move to "Booking Completed", Accounts must have confirmed payment
+    if new_stage == "Booking Completed" and old_stage != "Booking Completed":
+        if not lead.get("booking_payment_confirmed"):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot mark as 'Booking Completed' until Accounts confirms booking payment. "
+                       "Please ask Accounts team to confirm payment receipt first."
+            )
+    
     now = datetime.now(timezone.utc)
     
     # Create system comment
@@ -4889,6 +5753,24 @@ async def update_lead_stage(lead_id: str, stage_update: LeadStageUpdate, request
             "stage-change",
             f"/leads/{lead_id}"
         )
+        
+        # ============ ACCOUNTANT NOTIFICATION FOR BOOKING PAYMENT ============
+        # When lead moves to "Waiting for Booking", notify all Accountants
+        if new_stage == "Waiting for Booking":
+            accountant_users = await get_accountant_users()
+            # Remove the user who made the change and users already notified
+            accountant_users = [uid for uid in accountant_users if uid != user.user_id and uid not in relevant_users]
+            
+            if accountant_users:
+                customer_name = lead.get('customer_name', 'Unknown')
+                await notify_users(
+                    accountant_users,
+                    "Booking Payment Confirmation Required",
+                    f"Lead '{customer_name}' requires booking payment confirmation",
+                    "task",
+                    "/finance/booking-confirmations"  # Link to dedicated confirmations page
+                )
+                logger.info(f"Sent booking payment notification to {len(accountant_users)} accountant(s) for lead {lead_id}")
     except Exception as e:
         print(f"Error sending notifications: {e}")
     
@@ -4896,6 +5778,164 @@ async def update_lead_stage(lead_id: str, stage_update: LeadStageUpdate, request
         "message": "Stage updated successfully",
         "stage": new_stage,
         "status": new_status,
+        "system_comment": system_comment
+    }
+
+# ============ BOOKING CONFIRMATIONS FOR ACCOUNTS TEAM ============
+@api_router.get("/finance/pending-booking-confirmations")
+async def get_pending_booking_confirmations(request: Request):
+    """Get leads awaiting booking payment confirmation - For Accounts team only.
+    This returns only the essential info needed for confirmation, not full lead details."""
+    user = await get_current_user(request)
+    
+    # Get user document for permission check
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not user_doc:
+        raise HTTPException(status_code=403, detail="User not found")
+    
+    # Check if user has finance permissions (Accounts team)
+    has_finance_access = (
+        user.role in ["Accountant", "SeniorAccountant", "JuniorAccountant", "FinanceManager", "CharteredAccountant", "Admin"] or
+        has_permission(user_doc, "finance.receipts.create") or
+        has_permission(user_doc, "finance.cashbook.create")
+    )
+    
+    if not has_finance_access:
+        raise HTTPException(
+            status_code=403, 
+            detail="Access denied - Only Accounts team can view booking confirmations"
+        )
+    
+    # Get leads in "Waiting for Booking" stage (not yet confirmed)
+    pipeline = [
+        {
+            "$match": {
+                "stage": "Waiting for Booking",
+                "booking_payment_confirmed": {"$ne": True}
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "lead_id": 1,
+                "customer_name": 1,
+                "customer_phone": 1,
+                "budget": 1,
+                "stage": 1,
+                "assigned_designer": 1,
+                "updated_at": 1,
+                "created_at": 1
+            }
+        },
+        {"$sort": {"updated_at": -1}}
+    ]
+    
+    pending_leads = await db.leads.aggregate(pipeline).to_list(100)
+    
+    # Get designer names for display
+    designer_ids = [l.get("assigned_designer") for l in pending_leads if l.get("assigned_designer")]
+    designers = {}
+    if designer_ids:
+        designer_docs = await db.users.find(
+            {"user_id": {"$in": designer_ids}},
+            {"_id": 0, "user_id": 1, "name": 1}
+        ).to_list(100)
+        designers = {d["user_id"]: d["name"] for d in designer_docs}
+    
+    # Enrich with designer names
+    for lead in pending_leads:
+        designer_id = lead.get("assigned_designer")
+        lead["designer_name"] = designers.get(designer_id, "Unassigned")
+    
+    return {
+        "pending_confirmations": pending_leads,
+        "total": len(pending_leads)
+    }
+
+@api_router.put("/leads/{lead_id}/confirm-booking-payment")
+async def confirm_booking_payment(lead_id: str, request: Request):
+    """Confirm booking payment received - Accounts team only"""
+    user = await get_current_user(request)
+    
+    # Get user document for permission check
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not user_doc:
+        raise HTTPException(status_code=403, detail="User not found")
+    
+    # Check if user has finance permissions (Accounts team)
+    has_finance_access = (
+        user.role in ["Accountant", "SeniorAccountant", "CharteredAccountant", "Admin"] or
+        has_permission(user_doc, "finance.receipts.create") or
+        has_permission(user_doc, "finance.cashbook.create")
+    )
+    
+    if not has_finance_access:
+        raise HTTPException(
+            status_code=403, 
+            detail="Access denied - Only Accounts team can confirm booking payments"
+        )
+    
+    # Find the lead
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check if already confirmed
+    if lead.get("booking_payment_confirmed"):
+        return {
+            "message": "Booking payment already confirmed",
+            "confirmed_by": lead.get("booking_payment_confirmed_by"),
+            "confirmed_at": lead.get("booking_payment_confirmed_at")
+        }
+    
+    now = datetime.now(timezone.utc)
+    
+    # Create system comment
+    system_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": f"Booking payment confirmed by Accounts team ({user.name})",
+        "is_system": True,
+        "created_at": now.isoformat()
+    }
+    
+    # Update lead with payment confirmation
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {
+            "$set": {
+                "booking_payment_confirmed": True,
+                "booking_payment_confirmed_by": user.user_id,
+                "booking_payment_confirmed_by_name": user.name,
+                "booking_payment_confirmed_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            },
+            "$push": {"comments": system_comment}
+        }
+    )
+    
+    # Send notification to relevant users
+    try:
+        relevant_users = await get_relevant_users_for_lead(lead)
+        # Remove the user who made the change
+        relevant_users = [uid for uid in relevant_users if uid != user.user_id]
+        
+        await notify_users(
+            relevant_users,
+            "Booking Payment Confirmed",
+            f"Accounts team confirmed booking payment for '{lead.get('customer_name', 'Unknown')}'. Lead can now be marked as 'Booking Completed'.",
+            "payment-confirmed",
+            f"/leads/{lead_id}"
+        )
+    except Exception as e:
+        print(f"Error sending notifications: {e}")
+    
+    return {
+        "message": "Booking payment confirmed successfully",
+        "confirmed_by": user.name,
+        "confirmed_at": now.isoformat(),
         "system_comment": system_comment
     }
 
@@ -5146,8 +6186,8 @@ async def convert_to_project(lead_id: str, request: Request):
     """Convert a lead to a project - carries forward PID and all history"""
     user = await get_current_user(request)
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    if user.role not in ["Admin", "SalesManager"]:
+        raise HTTPException(status_code=403, detail="Admin or SalesManager access required")
     
     lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
     
@@ -5159,6 +6199,15 @@ async def convert_to_project(lead_id: str, request: Request):
     
     if lead.get("stage") != "Booking Completed":
         raise HTTPException(status_code=400, detail="Lead must be at 'Booking Completed' stage to convert")
+    
+    # ============ BOOKING PAYMENT CONFIRMATION CHECK ============
+    # Ensure Accounts has confirmed payment before conversion
+    if not lead.get("booking_payment_confirmed"):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot convert lead to project until Accounts confirms booking payment. "
+                   "Please ask Accounts team to confirm payment receipt first."
+        )
     
     now = datetime.now(timezone.utc)
     project_id = f"proj_{uuid.uuid4().hex[:8]}"
@@ -5999,7 +7048,7 @@ def validate_payment_schedule(schedule):
 
 @api_router.get("/projects/{project_id}/financials")
 async def get_project_financials(project_id: str, request: Request):
-    """Get project financial details"""
+    """Get project financial details - payments derived from CashBook/Receipts"""
     user = await get_current_user(request)
     
     # PreSales cannot access financials
@@ -6019,17 +7068,16 @@ async def get_project_financials(project_id: str, request: Request):
     custom_enabled = project.get("custom_payment_schedule_enabled", False)
     custom_schedule = project.get("custom_payment_schedule", [])
     default_schedule = project.get("payment_schedule", DEFAULT_PAYMENT_SCHEDULE)
-    payments = project.get("payments", [])
     
-    # Use custom schedule if enabled and has items, otherwise use default
-    active_schedule = custom_schedule if (custom_enabled and custom_schedule) else default_schedule
-    
-    # Calculate totals
-    total_collected = sum(p.get("amount", 0) for p in payments)
-    balance_pending = project_value - total_collected
+    # ============ SINGLE SOURCE OF TRUTH: Fetch payments from CashBook ============
+    # Payments are now derived from accounting_transactions (inflow) linked to this project
+    cashbook_payments = await db.accounting_transactions.find(
+        {"project_id": project_id, "transaction_type": "inflow"},
+        {"_id": 0}
+    ).sort("date", -1).to_list(500)
     
     # Get user details for payments
-    user_ids = list(set([p.get("added_by") for p in payments if p.get("added_by")]))
+    user_ids = list(set([p.get("created_by") for p in cashbook_payments if p.get("created_by")]))
     users_map = {}
     if user_ids:
         users_list = await db.users.find(
@@ -6038,18 +7086,28 @@ async def get_project_financials(project_id: str, request: Request):
         ).to_list(100)
         users_map = {u["user_id"]: u.get("name", "Unknown") for u in users_list}
     
-    # Enrich payments with user names
+    # Transform CashBook transactions to payment format for frontend compatibility
     enriched_payments = []
-    for payment in payments:
-        enriched = {**payment}
-        if payment.get("added_by"):
-            enriched["added_by_name"] = users_map.get(payment["added_by"], "Unknown")
+    for txn in cashbook_payments:
+        enriched = {
+            "id": txn.get("transaction_id"),
+            "date": txn.get("date"),
+            "amount": txn.get("amount", 0),
+            "mode": txn.get("mode", "Bank"),
+            "reference": txn.get("remarks", ""),
+            "added_by": txn.get("created_by"),
+            "added_by_name": users_map.get(txn.get("created_by"), "Unknown"),
+            "created_at": txn.get("created_at"),
+            "source": "cashbook"  # Indicates this came from CashBook
+        }
         enriched_payments.append(enriched)
     
-    # Sort payments by date (newest first)
-    enriched_payments.sort(key=lambda x: x.get("date", ""), reverse=True)
+    # Calculate totals from CashBook data
+    total_collected = sum(p.get("amount", 0) for p in enriched_payments)
+    balance_pending = project_value - total_collected
     
     # Calculate milestone amounts using the active schedule
+    active_schedule = custom_schedule if (custom_enabled and custom_schedule) else default_schedule
     milestone_amounts = calculate_schedule_amounts(active_schedule, project_value)
     
     return {
@@ -6059,12 +7117,12 @@ async def get_project_financials(project_id: str, request: Request):
         "custom_payment_schedule_enabled": custom_enabled,
         "custom_payment_schedule": custom_schedule,
         "default_payment_schedule": default_schedule,
-        "payment_schedule": milestone_amounts,  # Calculated amounts for display
+        "payment_schedule": milestone_amounts,
         "payments": enriched_payments,
         "total_collected": total_collected,
         "balance_pending": balance_pending,
-        "can_edit": user.role in ["Admin", "Manager"],
-        "can_delete_payments": user.role == "Admin"
+        "can_edit": False,  # DISABLED: No manual payment entry - use CashBook
+        "can_delete_payments": False  # DISABLED: Delete via CashBook
     }
 
 @api_router.put("/projects/{project_id}/financials")
@@ -6114,86 +7172,25 @@ async def update_project_financials(project_id: str, data: ProjectFinancialsUpda
 
 @api_router.post("/projects/{project_id}/payments")
 async def add_project_payment(project_id: str, payment: PaymentCreate, request: Request):
-    """Add a payment entry to a project (Admin/Manager only)"""
-    user = await get_current_user(request)
-    
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Admin or Manager access required")
-    
-    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    if payment.amount <= 0:
-        raise HTTPException(status_code=400, detail="Payment amount must be positive")
-    
-    if payment.mode not in PAYMENT_MODES:
-        raise HTTPException(status_code=400, detail=f"Invalid payment mode. Must be one of: {PAYMENT_MODES}")
-    
-    now = datetime.now(timezone.utc)
-    payment_id = f"payment_{uuid.uuid4().hex[:8]}"
-    
-    new_payment = {
-        "id": payment_id,
-        "date": payment.date or now.strftime("%Y-%m-%d"),
-        "amount": payment.amount,
-        "mode": payment.mode,
-        "reference": payment.reference or "",
-        "added_by": user.user_id,
-        "created_at": now.isoformat()
-    }
-    
-    # Initialize payments array if not exists and add new payment
-    await db.projects.update_one(
-        {"project_id": project_id},
-        {
-            "$push": {"payments": new_payment},
-            "$set": {"updated_at": now.isoformat()}
-        }
+    """
+    DEPRECATED: Direct payment entry disabled.
+    Payments must be recorded via CashBook to maintain single source of truth.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail="Direct payment entry is disabled. Please use CashBook to record payments and link them to this project."
     )
-    
-    # Create notification for project collaborators
-    collaborators = project.get("collaborators", [])
-    for collab_id in collaborators:
-        if collab_id != user.user_id:
-            await create_notification(
-                collab_id,
-                "Payment Added",
-                f"₹{payment.amount:,.0f} payment recorded for project '{project.get('project_name')}'",
-                "payment",
-                f"/projects/{project_id}"
-            )
-    
-    return {"message": "Payment added successfully", "payment_id": payment_id}
 
 @api_router.delete("/projects/{project_id}/payments/{payment_id}")
 async def delete_project_payment(project_id: str, payment_id: str, request: Request):
-    """Delete a payment entry (Admin only)"""
-    user = await get_current_user(request)
-    
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    # Check if payment exists
-    payments = project.get("payments", [])
-    payment_exists = any(p.get("id") == payment_id for p in payments)
-    if not payment_exists:
-        raise HTTPException(status_code=404, detail="Payment not found")
-    
-    # Remove payment
-    await db.projects.update_one(
-        {"project_id": project_id},
-        {
-            "$pull": {"payments": {"id": payment_id}},
-            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
-        }
+    """
+    DEPRECATED: Direct payment deletion disabled.
+    Payments are managed via CashBook - delete from there if needed.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail="Direct payment deletion is disabled. Payments are managed via CashBook."
     )
-    
-    return {"message": "Payment deleted successfully"}
 
 # ============ DASHBOARD ENDPOINTS ============
 
@@ -7036,6 +8033,18 @@ async def get_relevant_users_for_lead(lead: dict):
         user_ids.add(user["user_id"])
     
     return list(user_ids)
+
+async def get_accountant_users():
+    """Get all users with accountant-related roles (for booking payment notifications)"""
+    # Accountant roles that should receive booking payment confirmation notifications
+    ACCOUNTANT_ROLES = ["JuniorAccountant", "SeniorAccountant", "FinanceManager", "Accountant"]
+    
+    accountants = await db.users.find(
+        {"role": {"$in": ACCOUNTANT_ROLES}, "status": "Active"},
+        {"_id": 0, "user_id": 1}
+    ).to_list(100)
+    
+    return [user["user_id"] for user in accountants]
 
 # Get notifications for current user
 @api_router.get("/notifications")
@@ -9386,6 +10395,9 @@ async def convert_presales_to_lead(presales_id: str, request: Request):
         existing_collaborators = []
     
     # Mark as converted, assign PID, change lead_type, and update stage to BC Call Done (first sales stage)
+    # Generate timeline for the lead
+    lead_timeline = generate_lead_timeline("BC Call Done", now.isoformat())
+    
     await db.leads.update_one(
         {"lead_id": presales_id},
         {
@@ -9395,6 +10407,7 @@ async def convert_presales_to_lead(presales_id: str, request: Request):
                 "pid": pid,  # Assign PID at conversion
                 "stage": "BC Call Done",  # Move to sales stages
                 "status": "In Progress",  # Lead status
+                "timeline": lead_timeline,  # Generate timeline for the lead
                 "updated_at": now.isoformat(),
                 "converted_from_presales": True,  # Mark that it came from presales
                 "presales_converted_at": now.isoformat(),
@@ -13466,6 +14479,11 @@ class VendorCreate(BaseModel):
     notes: Optional[str] = None
     is_active: bool = True
 
+class VendorQuickCreate(BaseModel):
+    """Minimal vendor creation - only name required"""
+    vendor_name: str
+    vendor_type: Optional[str] = "material"  # Default type
+
 class VendorUpdate(BaseModel):
     vendor_name: Optional[str] = None
     vendor_type: Optional[str] = None
@@ -13489,7 +14507,8 @@ class TransactionCreate(BaseModel):
     category_id: str
     account_id: str
     project_id: Optional[str] = None  # Link to CRM project (read-only)
-    paid_to: Optional[str] = None  # Vendor/Person name
+    vendor_id: Optional[str] = None  # Link to unified vendor master
+    paid_to: Optional[str] = None  # Vendor/Person name (auto-populated if vendor_id provided)
     remarks: str
     attachment_url: Optional[str] = None
     # New accountability fields
@@ -13507,6 +14526,7 @@ class TransactionUpdate(BaseModel):
     category_id: Optional[str] = None
     account_id: Optional[str] = None
     project_id: Optional[str] = None
+    vendor_id: Optional[str] = None
     paid_to: Optional[str] = None
     remarks: Optional[str] = None
     attachment_url: Optional[str] = None
@@ -13925,6 +14945,91 @@ async def deactivate_vendor(vendor_id: str, request: Request):
     return {"success": True, "message": "Vendor deactivated"}
 
 
+@api_router.post("/accounting/vendors/quick-create")
+async def quick_create_vendor(vendor: VendorQuickCreate, request: Request):
+    """Quick-create a vendor with just a name - for use in dropdowns"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Normalize vendor name
+    normalized_name = vendor.vendor_name.strip()
+    if not normalized_name:
+        raise HTTPException(status_code=400, detail="Vendor name is required")
+    
+    # Check if vendor already exists (case-insensitive)
+    existing = await db.accounting_vendors.find_one(
+        {"vendor_name": {"$regex": f"^{re.escape(normalized_name)}$", "$options": "i"}},
+        {"_id": 0}
+    )
+    
+    if existing:
+        # Return existing vendor instead of creating duplicate
+        return existing
+    
+    # Create new vendor with minimal info
+    now = datetime.now(timezone.utc)
+    vendor_id = f"vendor_{uuid.uuid4().hex[:8]}"
+    
+    new_vendor = {
+        "vendor_id": vendor_id,
+        "vendor_name": normalized_name,
+        "vendor_type": vendor.vendor_type or "material",
+        "contact_person": None,
+        "phone": None,
+        "email": None,
+        "address": None,
+        "gstin": None,
+        "pan": None,
+        "bank_account_name": None,
+        "bank_account_number": None,
+        "bank_ifsc": None,
+        "notes": None,
+        "is_active": True,
+        "auto_created": True,  # Flag to identify quick-created vendors
+        "created_at": now,
+        "created_by": user.user_id,
+        "created_by_name": user.name
+    }
+    
+    await db.accounting_vendors.insert_one(new_vendor)
+    new_vendor.pop("_id", None)
+    
+    return new_vendor
+
+
+async def get_or_create_unified_vendor(vendor_name: str, user_id: str = None, user_name: str = None) -> dict:
+    """Get existing vendor or create new one in the unified vendor master (accounting_vendors)"""
+    normalized_name = vendor_name.strip()
+    
+    # Check if vendor exists (case-insensitive)
+    existing = await db.accounting_vendors.find_one(
+        {"vendor_name": {"$regex": f"^{re.escape(normalized_name)}$", "$options": "i"}},
+        {"_id": 0}
+    )
+    
+    if existing:
+        return existing
+    
+    # Create new vendor
+    now = datetime.now(timezone.utc)
+    vendor_id = f"vendor_{uuid.uuid4().hex[:8]}"
+    
+    new_vendor = {
+        "vendor_id": vendor_id,
+        "vendor_name": normalized_name,
+        "vendor_type": "material",
+        "is_active": True,
+        "auto_created": True,
+        "created_at": now,
+        "created_by": user_id,
+        "created_by_name": user_name
+    }
+    
+    await db.accounting_vendors.insert_one(new_vendor)
+    return {k: v for k, v in new_vendor.items() if k != "_id"}
+
+
 # ============ AUDIT LOG ENDPOINT ============
 
 @api_router.get("/accounting/audit-log")
@@ -14118,6 +15223,15 @@ async def create_transaction(txn: TransactionCreate, request: Request):
     now = datetime.now(timezone.utc)
     txn_id = f"txn_{uuid.uuid4().hex[:8]}"
     
+    # Handle vendor_id - if provided, get vendor name
+    vendor_id = txn.vendor_id
+    paid_to = txn.paid_to
+    
+    if vendor_id:
+        vendor = await db.accounting_vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+        if vendor:
+            paid_to = paid_to or vendor.get("vendor_name")
+    
     new_txn = {
         "transaction_id": txn_id,
         "transaction_date": txn.transaction_date,
@@ -14127,7 +15241,8 @@ async def create_transaction(txn: TransactionCreate, request: Request):
         "category_id": txn.category_id,
         "account_id": txn.account_id,
         "project_id": txn.project_id,
-        "paid_to": txn.paid_to,
+        "vendor_id": vendor_id,
+        "paid_to": paid_to,
         "remarks": txn.remarks,
         "attachment_url": txn.attachment_url,
         "is_verified": False,
@@ -14160,6 +15275,17 @@ async def create_transaction(txn: TransactionCreate, request: Request):
     await db.accounting_accounts.update_one(
         {"account_id": txn.account_id},
         {"$inc": {"current_balance": balance_change}}
+    )
+    
+    # Audit log for cashbook create
+    await create_audit_log(
+        entity_type="cashbook",
+        entity_id=txn_id,
+        action="create",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"amount": txn.amount, "type": txn.transaction_type, "remarks": txn.remarks[:100] if txn.remarks else ""},
+        details=f"Created {txn.transaction_type} of ₹{txn.amount:,.0f}"
     )
     
     return {**new_txn, "_id": None}
@@ -14216,6 +15342,18 @@ async def update_transaction(transaction_id: str, txn: TransactionUpdate, reques
         {"$inc": {"current_balance": new_balance_change}}
     )
     
+    # Audit log for cashbook edit
+    await create_audit_log(
+        entity_type="cashbook",
+        entity_id=transaction_id,
+        action="edit",
+        user_id=user.user_id,
+        user_name=user.name,
+        old_value={"amount": old_amount, "type": old_type, "account_id": old_account_id},
+        new_value=update_dict,
+        details=f"Edited transaction"
+    )
+    
     updated = await db.accounting_transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
     return updated
 
@@ -14250,6 +15388,17 @@ async def delete_transaction(transaction_id: str, request: Request):
     
     await db.accounting_transactions.delete_one({"transaction_id": transaction_id})
     
+    # Audit log for cashbook delete
+    await create_audit_log(
+        entity_type="cashbook",
+        entity_id=transaction_id,
+        action="delete",
+        user_id=user.user_id,
+        user_name=user.name,
+        old_value={"amount": old_amount, "type": old_type, "remarks": existing.get("remarks", "")[:100]},
+        details=f"Deleted {old_type} of ₹{old_amount:,.0f}"
+    )
+    
     return {"success": True, "message": "Transaction deleted"}
 
 
@@ -14276,6 +15425,17 @@ async def verify_transaction(transaction_id: str, request: Request):
             "verified_by_name": user.name,
             "verified_at": now.isoformat()
         }}
+    )
+    
+    # Audit log for verification
+    await create_audit_log(
+        entity_type="cashbook",
+        entity_id=transaction_id,
+        action="verify",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"is_verified": True},
+        details=f"Verified transaction of ₹{existing.get('amount', 0):,.0f}"
     )
     
     updated = await db.accounting_transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
@@ -14697,12 +15857,14 @@ VENDOR_CATEGORIES = [
 
 class VendorMappingCreate(BaseModel):
     project_id: str  # Links to CRM project
-    vendor_name: str
+    vendor_id: Optional[str] = None  # Reference to accounting_vendors
+    vendor_name: str  # Display name (also used for quick-create if vendor_id not provided)
     category: str  # Modular, Non-Modular, Installation, Transport, Other
     planned_amount: float
     notes: Optional[str] = None
 
 class VendorMappingUpdate(BaseModel):
+    vendor_id: Optional[str] = None
     vendor_name: Optional[str] = None
     category: Optional[str] = None
     planned_amount: Optional[float] = None
@@ -14951,11 +16113,27 @@ async def create_vendor_mapping(mapping: VendorMappingCreate, request: Request):
     if mapping.category not in VENDOR_CATEGORIES:
         raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {', '.join(VENDOR_CATEGORIES)}")
     
+    # Handle vendor - if vendor_id provided, use it; otherwise quick-create from vendor_name
+    vendor_id = mapping.vendor_id
+    vendor_name = mapping.vendor_name
+    
+    if vendor_id:
+        # Verify vendor exists
+        vendor = await db.accounting_vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+        if not vendor:
+            raise HTTPException(status_code=400, detail="Invalid vendor_id")
+        vendor_name = vendor.get("vendor_name", vendor_name)
+    else:
+        # Quick-create vendor from name
+        vendor = await get_or_create_unified_vendor(vendor_name, user.user_id, user.name)
+        vendor_id = vendor.get("vendor_id")
+    
     now = datetime.now(timezone.utc)
     new_mapping = {
         "mapping_id": f"vm_{secrets.token_hex(4)}",
         "project_id": mapping.project_id,
-        "vendor_name": mapping.vendor_name,
+        "vendor_id": vendor_id,
+        "vendor_name": vendor_name,
         "category": mapping.category,
         "planned_amount": mapping.planned_amount,
         "notes": mapping.notes,
@@ -17961,6 +19139,17 @@ async def freeze_project_spending(project_id: str, request: Request):
         upsert=True
     )
     
+    # Audit log for freeze
+    await create_audit_log(
+        entity_type="project_finance",
+        entity_id=project_id,
+        action="freeze",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"spending_frozen": True},
+        details=f"Spending frozen for project {project.get('pid')}"
+    )
+    
     return {"success": True, "message": f"Spending frozen for project {project.get('pid')}"}
 
 
@@ -17984,6 +19173,17 @@ async def unfreeze_project_spending(project_id: str, request: Request):
             "unfrozen_at": now,
             "updated_at": now
         }}
+    )
+    
+    # Audit log for unfreeze
+    await create_audit_log(
+        entity_type="project_finance",
+        entity_id=project_id,
+        action="freeze",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"spending_frozen": False},
+        details=f"Spending unfrozen for project"
     )
     
     return {"success": True, "message": "Spending unfrozen"}
@@ -18016,6 +19216,17 @@ async def allow_project_overrun(project_id: str, additional_amount: float, reaso
             }
         },
         upsert=True
+    )
+    
+    # Audit log for allow overrun
+    await create_audit_log(
+        entity_type="project_finance",
+        entity_id=project_id,
+        action="allow_overrun",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"allowed_amount": additional_amount, "reason": reason},
+        details=f"Overrun of ₹{additional_amount:,.0f} allowed - {reason}"
     )
     
     return {"success": True, "message": f"Overrun of ₹{additional_amount:,.0f} allowed"}
@@ -18727,6 +19938,18 @@ async def override_project_lock(project_id: str, override: ProjectLockOverride, 
         upsert=True
     )
     
+    # Audit log for lock override
+    await create_audit_log(
+        entity_type="project_finance",
+        entity_id=project_id,
+        action="lock_override",
+        user_id=user_doc.get("user_id"),
+        user_name=user_doc.get("name"),
+        old_value={"lock_percentage": previous_pct},
+        new_value={"lock_percentage": override.lock_percentage, "reason": override.reason},
+        details=f"Lock % changed: {previous_pct}% → {override.lock_percentage}%"
+    )
+    
     return {
         "success": True,
         "message": f"Lock percentage updated from {previous_pct}% to {override.lock_percentage}%",
@@ -18868,7 +20091,8 @@ LIABILITY_STATUSES = ["open", "partially_settled", "closed"]
 
 class LiabilityCreate(BaseModel):
     project_id: Optional[str] = None  # Nullable for office expenses
-    vendor_name: str
+    vendor_id: Optional[str] = None  # Reference to accounting_vendors
+    vendor_name: str  # Display name (also used for quick-create if vendor_id not provided)
     category: str  # raw_material, production, installation, office, other
     amount: float
     due_date: Optional[str] = None  # ISO date string
@@ -18879,39 +20103,25 @@ class LiabilityCreate(BaseModel):
 
 class LiabilitySettlement(BaseModel):
     amount: float
-    transaction_id: Optional[str] = None  # Link to cashbook transaction
+    payment_date: str  # Required: YYYY-MM-DD format
+    payment_mode: str  # Required: cash, bank_transfer, upi, cheque, card
+    account_id: str    # Required: Which account to pay from
     remarks: Optional[str] = None
 
 
+# DEPRECATED: Old function using finance_vendors - now redirects to unified vendor master
 async def get_or_create_vendor(vendor_name: str) -> dict:
-    """Get existing vendor or create new one (hybrid vendor management)"""
-    # Normalize vendor name
-    normalized_name = vendor_name.strip()
-    
-    # Check if vendor exists
-    existing = await db.finance_vendors.find_one(
-        {"name": {"$regex": f"^{re.escape(normalized_name)}$", "$options": "i"}},
-        {"_id": 0}
-    )
-    
-    if existing:
-        return existing
-    
-    # Create new vendor silently
-    vendor = {
-        "vendor_id": f"vnd_{uuid.uuid4().hex[:8]}",
-        "name": normalized_name,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "auto_created": True
-    }
-    await db.finance_vendors.insert_one(vendor)
-    
-    return {k: v for k, v in vendor.items() if k != "_id"}
+    """DEPRECATED: Use get_or_create_unified_vendor instead"""
+    return await get_or_create_unified_vendor(vendor_name)
 
 
 async def create_liability_from_expense_request(expense_request: dict, user_doc: dict):
     """Auto-create liability when expense request is approved"""
-    vendor = await get_or_create_vendor(expense_request.get("vendor_name", expense_request.get("title", "Unknown")))
+    vendor = await get_or_create_unified_vendor(
+        expense_request.get("vendor_name", expense_request.get("title", "Unknown")),
+        user_doc.get("user_id"),
+        user_doc.get("name")
+    )
     
     now = datetime.now(timezone.utc)
     
@@ -18919,7 +20129,7 @@ async def create_liability_from_expense_request(expense_request: dict, user_doc:
         "liability_id": f"lia_{uuid.uuid4().hex[:8]}",
         "project_id": expense_request.get("project_id"),
         "vendor_id": vendor.get("vendor_id"),
-        "vendor_name": vendor.get("name"),
+        "vendor_name": vendor.get("vendor_name"),  # Use vendor_name from accounting_vendors
         "category": expense_request.get("category", "other"),
         "amount": expense_request.get("amount", 0),
         "amount_settled": 0,
@@ -19068,8 +20278,21 @@ async def create_liability(liability: LiabilityCreate, request: Request):
     if liability.source not in LIABILITY_SOURCES:
         raise HTTPException(status_code=400, detail=f"Invalid source. Must be one of: {LIABILITY_SOURCES}")
     
-    # Get or create vendor
-    vendor = await get_or_create_vendor(liability.vendor_name)
+    # Handle vendor - if vendor_id provided, use it; otherwise quick-create from vendor_name
+    vendor_id = liability.vendor_id
+    vendor_name = liability.vendor_name
+    
+    if vendor_id:
+        # Verify vendor exists
+        vendor = await db.accounting_vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+        if not vendor:
+            raise HTTPException(status_code=400, detail="Invalid vendor_id")
+        vendor_name = vendor.get("vendor_name", vendor_name)
+    else:
+        # Quick-create vendor from name
+        vendor = await get_or_create_unified_vendor(vendor_name, user_doc.get("user_id"), user_doc.get("name"))
+        vendor_id = vendor.get("vendor_id")
+        vendor_name = vendor.get("vendor_name", vendor_name)
     
     # Validate project if provided (soft check - warn but don't block)
     project_name = None
@@ -19084,8 +20307,8 @@ async def create_liability(liability: LiabilityCreate, request: Request):
     liability_doc = {
         "liability_id": f"lia_{uuid.uuid4().hex[:8]}",
         "project_id": liability.project_id,
-        "vendor_id": vendor.get("vendor_id"),
-        "vendor_name": vendor.get("name"),
+        "vendor_id": vendor_id,
+        "vendor_name": vendor_name,
         "category": liability.category,
         "amount": liability.amount,
         "amount_settled": 0,
@@ -19103,6 +20326,17 @@ async def create_liability(liability: LiabilityCreate, request: Request):
     }
     
     await db.finance_liabilities.insert_one(liability_doc)
+    
+    # Audit log for liability creation
+    await create_audit_log(
+        entity_type="liability",
+        entity_id=liability_doc["liability_id"],
+        action="create",
+        user_id=user_doc.get("user_id"),
+        user_name=user_doc.get("name"),
+        new_value={"amount": liability.amount, "vendor": vendor_name, "category": liability.category},
+        details=f"Created liability of ₹{liability.amount:,.0f} for {vendor_name}"
+    )
     
     return {k: v for k, v in liability_doc.items() if k != "_id"}
 
@@ -19131,13 +20365,14 @@ async def get_liability(liability_id: str, request: Request):
 
 @api_router.post("/finance/liabilities/{liability_id}/settle")
 async def settle_liability(liability_id: str, settlement: LiabilitySettlement, request: Request):
-    """Settle (partially or fully) a liability"""
+    """Settle (partially or fully) a liability - Creates corresponding Cashbook outflow entry"""
     user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
     
+    # Validate liability exists and is not closed
     liability = await db.finance_liabilities.find_one({"liability_id": liability_id}, {"_id": 0})
     if not liability:
         raise HTTPException(status_code=404, detail="Liability not found")
@@ -19151,8 +20386,90 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
     if settlement.amount > liability.get("amount_remaining", 0):
         raise HTTPException(status_code=400, detail=f"Settlement amount exceeds remaining amount ({liability.get('amount_remaining')})")
     
+    # Validate account exists
+    account = await db.accounting_accounts.find_one({"account_id": settlement.account_id}, {"_id": 0})
+    if not account:
+        raise HTTPException(status_code=400, detail="Invalid account selected")
+    
+    # Validate payment mode
+    valid_modes = ["cash", "bank_transfer", "upi", "cheque", "card"]
+    if settlement.payment_mode not in valid_modes:
+        raise HTTPException(status_code=400, detail=f"Invalid payment mode. Must be one of: {', '.join(valid_modes)}")
+    
+    # Check if day is locked
+    payment_date = settlement.payment_date[:10]
+    daily_closing = await db.accounting_daily_closings.find_one({"date": payment_date, "is_locked": True})
+    if daily_closing:
+        raise HTTPException(status_code=400, detail=f"Day {payment_date} is locked. Cannot add transactions.")
+    
     now = datetime.now(timezone.utc)
     
+    # ============ STEP 1: Create Cashbook Outflow Transaction ============
+    txn_id = f"txn_{uuid.uuid4().hex[:8]}"
+    
+    # Find or create a "Liability Settlement" category
+    settlement_category = await db.accounting_categories.find_one({"category_id": "liability_settlement"}, {"_id": 0})
+    if not settlement_category:
+        # Create the category if it doesn't exist
+        settlement_category = {
+            "category_id": "liability_settlement",
+            "name": "Liability Settlement",
+            "type": "expense",
+            "description": "Payments made to settle vendor liabilities",
+            "created_at": now.isoformat()
+        }
+        await db.accounting_categories.insert_one(settlement_category)
+    
+    cashbook_txn = {
+        "transaction_id": txn_id,
+        "transaction_date": settlement.payment_date,
+        "transaction_type": "outflow",
+        "amount": settlement.amount,
+        "mode": settlement.payment_mode,
+        "category_id": "liability_settlement",
+        "account_id": settlement.account_id,
+        "project_id": liability.get("project_id"),  # Link to project if liability was project-linked
+        "paid_to": liability.get("vendor_name", "Vendor"),
+        "vendor_id": liability.get("vendor_id"),
+        "remarks": settlement.remarks or f"Settlement for liability: {liability.get('vendor_name')} - {liability.get('description', '')}",
+        "attachment_url": None,
+        "is_verified": False,
+        "verified_by": None,
+        "verified_at": None,
+        "requested_by": user.user_id,
+        "requested_by_name": user.name,
+        "paid_by": user.user_id,
+        "paid_by_name": user.name,
+        "paid_from_account": account.get("name", "Unknown"),
+        "approved_by": None,
+        "approved_by_name": None,
+        "expense_request_id": None,
+        "liability_id": liability_id,  # Link back to liability
+        "needs_review": False,
+        "approval_status": "not_required",
+        "reviewed_by": None,
+        "reviewed_at": None,
+        # System-generated marker - prevents manual editing
+        "system_generated": True,
+        "source_module": "liability",
+        "source_id": liability_id,
+        "reference_type": "liability_settlement",
+        "reference_id": liability_id,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "updated_at": now.isoformat()
+    }
+    
+    await db.accounting_transactions.insert_one(cashbook_txn)
+    
+    # Update account balance (reduce by outflow amount)
+    await db.accounting_accounts.update_one(
+        {"account_id": settlement.account_id},
+        {"$inc": {"current_balance": -settlement.amount}}
+    )
+    
+    # ============ STEP 2: Update Liability Record ============
     new_settled = liability.get("amount_settled", 0) + settlement.amount
     new_remaining = liability.get("amount", 0) - new_settled
     new_status = "closed" if new_remaining <= 0 else "partially_settled"
@@ -19160,7 +20477,11 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
     settlement_entry = {
         "settlement_id": f"stl_{uuid.uuid4().hex[:8]}",
         "amount": settlement.amount,
-        "transaction_id": settlement.transaction_id,
+        "transaction_id": txn_id,  # Link to the cashbook transaction
+        "payment_date": settlement.payment_date,
+        "payment_mode": settlement.payment_mode,
+        "account_id": settlement.account_id,
+        "account_name": account.get("name", "Unknown"),
         "remarks": settlement.remarks,
         "settled_by": user_doc.get("user_id"),
         "settled_by_name": user_doc.get("name"),
@@ -19180,8 +20501,37 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
         }
     )
     
+    # ============ STEP 3: Audit Logs ============
+    # Audit log for liability settlement
+    await create_audit_log(
+        entity_type="liability",
+        entity_id=liability_id,
+        action="settle",
+        user_id=user_doc.get("user_id"),
+        user_name=user_doc.get("name"),
+        old_value={"amount_remaining": liability.get("amount_remaining", 0), "status": liability.get("status")},
+        new_value={"amount_settled": settlement.amount, "new_remaining": new_remaining, "status": new_status, "transaction_id": txn_id},
+        details=f"Settled ₹{settlement.amount:,.0f} via {settlement.payment_mode} from {account.get('name')} - Status: {new_status}"
+    )
+    
+    # Audit log for cashbook entry
+    await create_audit_log(
+        entity_type="transaction",
+        entity_id=txn_id,
+        action="create",
+        user_id=user_doc.get("user_id"),
+        user_name=user_doc.get("name"),
+        old_value=None,
+        new_value={"amount": settlement.amount, "type": "outflow", "liability_id": liability_id},
+        details=f"Cashbook outflow created for liability settlement: ₹{settlement.amount:,.0f}"
+    )
+    
     updated = await db.finance_liabilities.find_one({"liability_id": liability_id}, {"_id": 0})
-    return updated
+    return {
+        **updated,
+        "cashbook_transaction_id": txn_id,
+        "message": f"Settlement recorded. Cashbook outflow of ₹{settlement.amount:,.0f} created."
+    }
 
 
 @api_router.get("/finance/vendors")
@@ -19820,6 +21170,17 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
     
     await db.finance_receipts.insert_one(receipt_doc)
     await db.accounting_transactions.insert_one(txn_doc)
+    
+    # Audit log for receipt creation
+    await create_audit_log(
+        entity_type="receipt",
+        entity_id=receipt_doc["receipt_id"],
+        action="create",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"amount": receipt.amount, "project_id": receipt.project_id, "receipt_number": receipt_number},
+        details=f"Created receipt {receipt_number} for ₹{receipt.amount:,.0f}"
+    )
     
     receipt_doc.pop("_id", None)
     return receipt_doc
@@ -21427,7 +22788,7 @@ async def create_salary_payment(data: SalaryPaymentCreate, request: Request):
         "amount": data.amount,
         "payment_type": data.payment_type,
         "account_id": data.account_id,
-        "account_name": account.get("name", "Unknown"),
+        "account_name": account.get("account_name") or account.get("name", "Unknown"),
         "payment_date": data.payment_date,
         "notes": data.notes,
         "transaction_id": None,  # Will be set after cashbook entry
@@ -21456,40 +22817,73 @@ async def create_salary_payment(data: SalaryPaymentCreate, request: Request):
         cycle_update["carry_forward_recovery"] = abs(new_balance)
         cycle_update["balance_payable"] = 0
     
-    # Create cashbook entry (outflow)
+    # Ensure "Salary Payment" category exists
+    salary_category = await db.accounting_categories.find_one({"category_id": "salary_payment"})
+    if not salary_category:
+        salary_category = {
+            "category_id": "salary_payment",
+            "name": "Salary Payment",
+            "type": "expense",
+            "description": "Employee salary payments",
+            "created_at": now.isoformat()
+        }
+        await db.accounting_categories.insert_one(salary_category)
+    
+    # Create cashbook entry (outflow) - using accounting_transactions collection
     transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
     cashbook_entry = {
         "transaction_id": transaction_id,
-        "date": data.payment_date,
-        "type": "outflow",
-        "category_id": "salary",  # Link to salary expense category
-        "category_name": "Salary Payment",
-        "description": f"Salary {data.payment_type}: {salary_master.get('employee_name', 'Employee')} ({data.month_year})",
+        "transaction_date": data.payment_date,
+        "transaction_type": "outflow",
+        "category_id": "salary_payment",
         "amount": data.amount,
+        "mode": data.payment_mode if hasattr(data, 'payment_mode') else "bank_transfer",
         "account_id": data.account_id,
-        "account_name": account.get("name", "Unknown"),
         "project_id": None,
-        "project_name": None,
+        "paid_to": salary_master.get("employee_name", "Employee"),
         "vendor_id": None,
-        "vendor_name": salary_master.get("employee_name", "Employee"),
-        "notes": data.notes or f"Salary {data.payment_type} for {data.month_year}",
-        "verified": False,
+        "remarks": data.notes or f"Salary {data.payment_type} for {data.month_year}: {salary_master.get('employee_name', 'Employee')}",
+        "attachment_url": None,
+        "is_verified": False,
+        "verified_by": None,
+        "verified_at": None,
+        "requested_by": user.user_id,
+        "requested_by_name": user_doc.get("name", "Unknown"),
+        "paid_by": user.user_id,
+        "paid_by_name": user_doc.get("name", "Unknown"),
+        "paid_from_account": account.get("account_name") or account.get("name", "Unknown"),
+        "approved_by": None,
+        "approved_by_name": None,
+        "expense_request_id": None,
+        "needs_review": False,
+        "approval_status": "not_required",
+        "reviewed_by": None,
+        "reviewed_at": None,
+        # System-generated marker - prevents manual editing
+        "system_generated": True,
+        "source_module": "salary",
+        "source_id": payment_id,
+        "reference_type": "salary_payment",
+        "reference_id": payment_id,
+        "created_at": now.isoformat(),
         "created_by": user.user_id,
         "created_by_name": user_doc.get("name", "Unknown"),
-        "created_at": now,
-        "updated_at": now,
-        "locked": False,
-        "reference_type": "salary_payment",
-        "reference_id": payment_id
+        "updated_at": now.isoformat()
     }
     
     # Check if day is locked
-    day_closing = await db.finance_daily_closings.find_one({"date": data.payment_date, "status": "closed"})
+    day_closing = await db.accounting_daily_closings.find_one({"date": data.payment_date, "is_locked": True})
     if day_closing:
         raise HTTPException(status_code=400, detail=f"Day {data.payment_date} is already closed. Cannot add transactions.")
     
-    # Insert cashbook entry
-    await db.cashbook.insert_one(cashbook_entry)
+    # Insert cashbook entry to accounting_transactions (main cashbook collection)
+    await db.accounting_transactions.insert_one(cashbook_entry)
+    
+    # Update account balance (reduce by outflow)
+    await db.accounting_accounts.update_one(
+        {"account_id": data.account_id},
+        {"$inc": {"current_balance": -data.amount}}
+    )
     
     # Update payment with transaction ID
     new_payment["transaction_id"] = transaction_id
@@ -22393,6 +23787,1859 @@ async def get_employee_promotion_eligibility(employee_id: str, request: Request)
     return eligibility
 
 
+# ============ BUCKET 1: OPERATIONAL HYGIENE ============
+
+# ============ 1. AUDIT TRAIL ENHANCEMENT ============
+
+AUDIT_ENTITY_TYPES = ["cashbook", "receipt", "liability", "project_finance"]
+AUDIT_ACTION_TYPES = ["create", "edit", "delete", "verify", "review", "settle", "download", "lock_override", "freeze", "allow_overrun"]
+
+class AuditLogEntry(BaseModel):
+    entity_type: str
+    entity_id: str
+    action: str
+    old_value: Optional[dict] = None
+    new_value: Optional[dict] = None
+    details: Optional[str] = None
+
+
+async def create_audit_log(
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    user_id: str,
+    user_name: str,
+    old_value: dict = None,
+    new_value: dict = None,
+    details: str = None
+):
+    """Create an audit log entry for finance actions"""
+    audit_entry = {
+        "audit_id": f"aud_{uuid.uuid4().hex[:12]}",
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "action": action,
+        "old_value": old_value,
+        "new_value": new_value,
+        "details": details,
+        "user_id": user_id,
+        "user_name": user_name,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ip_address": None  # Can be added from request if needed
+    }
+    await db.finance_audit_log.insert_one(audit_entry)
+    return audit_entry
+
+
+@api_router.get("/finance/audit-log")
+async def get_audit_log(
+    request: Request,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    action: Optional[str] = None,
+    user_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 100,
+    skip: int = 0
+):
+    """Get audit log entries (Admin/Founder only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Admin and Founder can view audit log
+    if user_doc.get("role") not in ["Admin", "Founder"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Founder can view audit log")
+    
+    # Build query
+    query = {}
+    if entity_type:
+        query["entity_type"] = entity_type
+    if entity_id:
+        query["entity_id"] = entity_id
+    if action:
+        query["action"] = action
+    if user_id:
+        query["user_id"] = user_id
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query["$gte"] = date_from
+        if date_to:
+            date_query["$lte"] = date_to + "T23:59:59"
+        query["timestamp"] = date_query
+    
+    # Get total count
+    total = await db.finance_audit_log.count_documents(query)
+    
+    # Get entries
+    entries = await db.finance_audit_log.find(
+        query,
+        {"_id": 0}
+    ).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
+    
+    return {
+        "entries": entries,
+        "total": total,
+        "limit": limit,
+        "skip": skip
+    }
+
+
+@api_router.get("/finance/audit-log/entity/{entity_type}/{entity_id}")
+async def get_entity_audit_history(entity_type: str, entity_id: str, request: Request):
+    """Get audit history for a specific entity"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder", "SeniorAccountant"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    entries = await db.finance_audit_log.find(
+        {"entity_type": entity_type, "entity_id": entity_id},
+        {"_id": 0}
+    ).sort("timestamp", -1).to_list(100)
+    
+    return {"entries": entries, "count": len(entries)}
+
+
+# ============ 2. SCHEDULED BACKUPS ============
+
+import subprocess
+import gzip
+import shutil
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+BACKUP_DIR = ROOT_DIR / "backups"
+BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+# Initialize scheduler (will be started on app startup)
+backup_scheduler = AsyncIOScheduler()
+
+# Collections to backup
+BACKUP_COLLECTIONS = [
+    "finance_audit_log",
+    "finance_attachments",
+    "finance_liabilities",
+    "finance_receipts",
+    "finance_salary_master",
+    "finance_salary_payments",
+    "finance_lock_config",
+    "finance_vendors",
+    "accounting_transactions",
+    "accounting_accounts",
+    "accounting_categories",
+    "projects",
+    "leads",
+    "users",
+    "presales",
+    "import_audit_log",
+    "recurring_templates",
+    "payment_reminders"
+]
+
+
+async def run_scheduled_backup():
+    """Run automated daily backup - called by scheduler at midnight"""
+    try:
+        backup_id = f"backup_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_auto"
+        backup_path = BACKUP_DIR / backup_id
+        backup_path.mkdir(parents=True, exist_ok=True)
+        
+        backup_data = {
+            "backup_id": backup_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_by": "system",
+            "created_by_name": "Scheduled Backup",
+            "collections": {},
+            "status": "in_progress",
+            "backup_type": "scheduled"
+        }
+        
+        # Export each collection to JSON
+        for collection_name in BACKUP_COLLECTIONS:
+            try:
+                collection = db[collection_name]
+                docs = await collection.find({}, {"_id": 0}).to_list(100000)
+                
+                # Save to file
+                file_path = backup_path / f"{collection_name}.json"
+                async with aiofiles.open(file_path, 'w') as f:
+                    await f.write(json.dumps(docs, default=str, indent=2))
+                
+                backup_data["collections"][collection_name] = {
+                    "count": len(docs),
+                    "file": f"{collection_name}.json"
+                }
+            except Exception as e:
+                backup_data["collections"][collection_name] = {
+                    "error": str(e)
+                }
+        
+        backup_data["status"] = "completed"
+        backup_data["completed_at"] = datetime.now(timezone.utc).isoformat()
+        
+        # Save backup metadata
+        meta_path = backup_path / "backup_meta.json"
+        async with aiofiles.open(meta_path, 'w') as f:
+            await f.write(json.dumps(backup_data, indent=2))
+        
+        # Create audit log for scheduled backup
+        await create_audit_log(
+            entity_type="system",
+            entity_id=backup_id,
+            action="backup_created",
+            user_id="system",
+            user_name="Scheduled Backup",
+            details=f"Automated daily backup with {len(backup_data['collections'])} collections"
+        )
+        
+        logger.info(f"Scheduled backup completed: {backup_id} ({len(backup_data['collections'])} collections)")
+        
+    except Exception as e:
+        logger.error(f"Scheduled backup failed: {str(e)}")
+
+
+# DISABLED: Auto-seeding removed to prevent duplicate admin conflicts
+# The first user to log in via Google OAuth with Admin-designated email becomes Admin
+# @app.on_event("startup")
+# async def seed_initial_admin():
+#     """DISABLED - Use Google OAuth for admin creation"""
+#     pass
+
+
+@app.on_event("startup")
+async def start_backup_scheduler():
+    """Start the backup scheduler on application startup"""
+    # Schedule daily backup at midnight (00:00 server time)
+    backup_scheduler.add_job(
+        run_scheduled_backup,
+        CronTrigger(hour=0, minute=0),
+        id="daily_backup",
+        name="Daily Database Backup",
+        replace_existing=True
+    )
+    backup_scheduler.start()
+    logger.info("Backup scheduler started - daily backups at midnight")
+
+
+@app.on_event("shutdown")
+async def stop_backup_scheduler():
+    """Stop the backup scheduler on application shutdown"""
+    if backup_scheduler.running:
+        backup_scheduler.shutdown(wait=False)
+        logger.info("Backup scheduler stopped")
+
+
+@api_router.post("/admin/backup/create")
+async def create_backup(request: Request):
+    """Create a manual database backup (Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can create backups")
+    
+    try:
+        backup_id = f"backup_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        backup_path = BACKUP_DIR / backup_id
+        backup_path.mkdir(parents=True, exist_ok=True)
+        
+        backup_data = {
+            "backup_id": backup_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "collections": {},
+            "status": "in_progress"
+        }
+        
+        # Export each collection to JSON
+        for collection_name in BACKUP_COLLECTIONS:
+            try:
+                collection = db[collection_name]
+                docs = await collection.find({}, {"_id": 0}).to_list(100000)
+                
+                # Save to file
+                file_path = backup_path / f"{collection_name}.json"
+                async with aiofiles.open(file_path, 'w') as f:
+                    await f.write(json.dumps(docs, default=str, indent=2))
+                
+                backup_data["collections"][collection_name] = {
+                    "count": len(docs),
+                    "file": f"{collection_name}.json"
+                }
+            except Exception as e:
+                backup_data["collections"][collection_name] = {
+                    "error": str(e)
+                }
+        
+        backup_data["status"] = "completed"
+        backup_data["completed_at"] = datetime.now(timezone.utc).isoformat()
+        
+        # Save backup metadata
+        meta_path = backup_path / "backup_meta.json"
+        async with aiofiles.open(meta_path, 'w') as f:
+            await f.write(json.dumps(backup_data, indent=2))
+        
+        # Create audit log
+        await create_audit_log(
+            entity_type="system",
+            entity_id=backup_id,
+            action="backup_created",
+            user_id=user.user_id,
+            user_name=user.name,
+            details=f"Manual backup created with {len(backup_data['collections'])} collections"
+        )
+        
+        return {
+            "success": True,
+            "backup_id": backup_id,
+            "collections_backed_up": len(backup_data["collections"]),
+            "path": str(backup_path)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
+
+
+@api_router.get("/admin/backup/list")
+async def list_backups(request: Request):
+    """List available backups (Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can view backups")
+    
+    backups = []
+    if BACKUP_DIR.exists():
+        for backup_folder in sorted(BACKUP_DIR.iterdir(), reverse=True):
+            if backup_folder.is_dir() and backup_folder.name.startswith("backup_"):
+                meta_path = backup_folder / "backup_meta.json"
+                if meta_path.exists():
+                    try:
+                        async with aiofiles.open(meta_path, 'r') as f:
+                            content = await f.read()
+                            if content.strip():  # Skip empty files
+                                meta = json.loads(content)
+                                backups.append({
+                                    "backup_id": meta.get("backup_id"),
+                                    "created_at": meta.get("created_at"),
+                                    "created_by_name": meta.get("created_by_name"),
+                                    "status": meta.get("status"),
+                                    "collections_count": len(meta.get("collections", {}))
+                                })
+                    except (json.JSONDecodeError, Exception):
+                        # Skip corrupt backup meta files
+                        pass
+    
+    return {"backups": backups[:50]}  # Last 50 backups
+
+
+@api_router.get("/admin/backup/scheduler-status")
+async def get_backup_scheduler_status(request: Request):
+    """Get backup scheduler status (Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Founder can view scheduler status")
+    
+    job = backup_scheduler.get_job("daily_backup")
+    
+    status = {
+        "scheduler_running": backup_scheduler.running,
+        "job_id": "daily_backup",
+        "job_name": "Daily Database Backup",
+        "schedule": "Daily at midnight (00:00 server time)",
+        "next_run_time": None,
+        "job_exists": job is not None
+    }
+    
+    if job and job.next_run_time:
+        status["next_run_time"] = job.next_run_time.isoformat()
+    
+    return status
+
+
+@api_router.post("/admin/backup/restore/{backup_id}")
+async def restore_backup(backup_id: str, request: Request):
+    """Restore from a backup (Admin only) - USE WITH CAUTION"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can restore backups")
+    
+    backup_path = BACKUP_DIR / backup_id
+    if not backup_path.exists():
+        raise HTTPException(status_code=404, detail="Backup not found")
+    
+    meta_path = backup_path / "backup_meta.json"
+    if not meta_path.exists():
+        raise HTTPException(status_code=400, detail="Invalid backup - metadata missing")
+    
+    try:
+        async with aiofiles.open(meta_path, 'r') as f:
+            meta = json.loads(await f.read())
+        
+        restored_collections = []
+        errors = []
+        
+        for collection_name, info in meta.get("collections", {}).items():
+            if "error" in info:
+                continue
+            
+            file_path = backup_path / info["file"]
+            if not file_path.exists():
+                errors.append(f"{collection_name}: file not found")
+                continue
+            
+            try:
+                async with aiofiles.open(file_path, 'r') as f:
+                    docs = json.loads(await f.read())
+                
+                if docs:
+                    # Clear existing and insert backup data
+                    collection = db[collection_name]
+                    await collection.delete_many({})
+                    await collection.insert_many(docs)
+                    restored_collections.append(collection_name)
+            except Exception as e:
+                errors.append(f"{collection_name}: {str(e)}")
+        
+        # Create audit log
+        await create_audit_log(
+            entity_type="system",
+            entity_id=backup_id,
+            action="backup_restored",
+            user_id=user.user_id,
+            user_name=user.name,
+            details=f"Restored {len(restored_collections)} collections from backup"
+        )
+        
+        return {
+            "success": True,
+            "backup_id": backup_id,
+            "restored_collections": restored_collections,
+            "errors": errors
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
+
+
+# ============ 3. CUSTOMER PAYMENT REMINDERS (MOCKED) ============
+
+class PaymentReminderCreate(BaseModel):
+    project_id: str
+    reminder_type: str = "manual"  # manual, scheduled
+    message: Optional[str] = None
+
+
+@api_router.post("/finance/reminders/send")
+async def send_payment_reminder(reminder: PaymentReminderCreate, request: Request):
+    """Send payment reminder (MOCKED - logs to DB)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check permission
+    if not has_permission(user_doc, "finance.receipts.create"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get project details
+    project = await db.projects.find_one(
+        {"project_id": reminder.project_id},
+        {"_id": 0}
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Calculate pending amount
+    contract_value = float(project.get("contract_value", 0))
+    receipts = await db.finance_receipts.find(
+        {"project_id": reminder.project_id, "imported": {"$ne": True}},
+        {"_id": 0, "amount": 1}
+    ).to_list(100)
+    total_received = sum(float(r.get("amount", 0)) for r in receipts)
+    pending_amount = contract_value - total_received
+    
+    if pending_amount <= 0:
+        raise HTTPException(status_code=400, detail="No pending payment for this project")
+    
+    # Create reminder log (MOCKED EMAIL)
+    reminder_id = f"rem_{uuid.uuid4().hex[:12]}"
+    reminder_log = {
+        "reminder_id": reminder_id,
+        "project_id": reminder.project_id,
+        "project_name": project.get("project_name", ""),
+        "client_name": project.get("client_name", ""),
+        "client_phone": project.get("client_phone", ""),
+        "client_email": project.get("client_email", ""),
+        "pending_amount": pending_amount,
+        "contract_value": contract_value,
+        "total_received": total_received,
+        "reminder_type": reminder.reminder_type,
+        "status": "logged",  # Would be "sent" with real email
+        "email_subject": f"Payment Reminder - {project.get('project_name', 'Project')}",
+        "email_body": reminder.message or f"Dear {project.get('client_name', 'Customer')},\n\nThis is a reminder that you have a pending payment of ₹{pending_amount:,.0f} for project '{project.get('project_name', '')}'.\n\nTotal Contract Value: ₹{contract_value:,.0f}\nAmount Received: ₹{total_received:,.0f}\nBalance Due: ₹{pending_amount:,.0f}\n\nPlease make the payment at your earliest convenience.\n\nThank you.",
+        "sent_by": user.user_id,
+        "sent_by_name": user.name,
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "is_mocked": True  # Flag indicating email not actually sent
+    }
+    
+    await db.payment_reminders.insert_one(reminder_log)
+    
+    # Create audit log
+    await create_audit_log(
+        entity_type="payment_reminder",
+        entity_id=reminder_id,
+        action="create",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"project_id": reminder.project_id, "amount": pending_amount},
+        details=f"Payment reminder sent for ₹{pending_amount:,.0f}"
+    )
+    
+    return {
+        "success": True,
+        "reminder_id": reminder_id,
+        "status": "logged",
+        "message": "Reminder logged (email mocked - not actually sent)",
+        "pending_amount": pending_amount
+    }
+
+
+@api_router.get("/finance/reminders/overdue")
+async def get_overdue_payments(request: Request, days_threshold: int = 7):
+    """Get projects with overdue payments"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.receipts.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get all active projects with payment schedules
+    projects = await db.projects.find(
+        {"hold_status": {"$ne": "On Hold"}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    overdue_projects = []
+    threshold_date = (datetime.now(timezone.utc) - timedelta(days=days_threshold)).isoformat()
+    
+    for project in projects:
+        project_id = project.get("project_id")
+        contract_value = float(project.get("contract_value", 0))
+        
+        if contract_value <= 0:
+            continue
+        
+        # Get total received
+        receipts = await db.finance_receipts.find(
+            {"project_id": project_id, "imported": {"$ne": True}},
+            {"_id": 0, "amount": 1}
+        ).to_list(100)
+        total_received = sum(float(r.get("amount", 0)) for r in receipts)
+        pending_amount = contract_value - total_received
+        
+        if pending_amount <= 0:
+            continue
+        
+        # Check if project is old enough (created more than threshold days ago)
+        created_at = project.get("created_at", "")
+        if created_at and created_at < threshold_date:
+            # Check last reminder sent
+            last_reminder = await db.payment_reminders.find_one(
+                {"project_id": project_id},
+                {"_id": 0},
+                sort=[("sent_at", -1)]
+            )
+            
+            days_since_reminder = None
+            if last_reminder:
+                last_sent = datetime.fromisoformat(last_reminder["sent_at"].replace("Z", "+00:00"))
+                days_since_reminder = (datetime.now(timezone.utc) - last_sent).days
+            
+            overdue_projects.append({
+                "project_id": project_id,
+                "project_name": project.get("project_name", ""),
+                "client_name": project.get("client_name", ""),
+                "client_phone": project.get("client_phone", ""),
+                "contract_value": contract_value,
+                "total_received": total_received,
+                "pending_amount": pending_amount,
+                "created_at": created_at,
+                "days_since_last_reminder": days_since_reminder,
+                "last_reminder_sent": last_reminder.get("sent_at") if last_reminder else None
+            })
+    
+    # Sort by pending amount (highest first)
+    overdue_projects.sort(key=lambda x: x["pending_amount"], reverse=True)
+    
+    return {
+        "overdue_projects": overdue_projects,
+        "count": len(overdue_projects),
+        "threshold_days": days_threshold
+    }
+
+
+@api_router.get("/finance/reminders/history")
+async def get_reminder_history(request: Request, project_id: Optional[str] = None, limit: int = 50):
+    """Get payment reminder history"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.receipts.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if project_id:
+        query["project_id"] = project_id
+    
+    reminders = await db.payment_reminders.find(
+        query,
+        {"_id": 0}
+    ).sort("sent_at", -1).limit(limit).to_list(limit)
+    
+    return {"reminders": reminders, "count": len(reminders)}
+
+
+# ============ 4. RECURRING TRANSACTIONS ============
+
+class RecurringTemplateCreate(BaseModel):
+    name: str
+    amount: float
+    category_id: str
+    account_id: str
+    frequency: str = "monthly"  # Only monthly for now
+    day_of_month: int = 1  # Day to create entry
+    description: Optional[str] = None
+    paid_to: Optional[str] = None
+
+
+class RecurringTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    amount: Optional[float] = None
+    category_id: Optional[str] = None
+    account_id: Optional[str] = None
+    day_of_month: Optional[int] = None
+    description: Optional[str] = None
+    paid_to: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@api_router.post("/finance/recurring/templates")
+async def create_recurring_template(template: RecurringTemplateCreate, request: Request):
+    """Create a recurring transaction template"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder", "SeniorAccountant"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Validate category and account
+    category = await db.accounting_categories.find_one({"category_id": template.category_id})
+    if not category:
+        raise HTTPException(status_code=400, detail="Invalid category")
+    
+    account = await db.accounting_accounts.find_one({"account_id": template.account_id})
+    if not account:
+        raise HTTPException(status_code=400, detail="Invalid account")
+    
+    template_id = f"rec_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    new_template = {
+        "template_id": template_id,
+        "name": template.name,
+        "amount": template.amount,
+        "category_id": template.category_id,
+        "category_name": category.get("name", ""),
+        "account_id": template.account_id,
+        "account_name": account.get("name", ""),
+        "frequency": "monthly",
+        "day_of_month": template.day_of_month,
+        "description": template.description or template.name,
+        "paid_to": template.paid_to,
+        "is_active": True,
+        "last_run": None,
+        "next_run": None,
+        "total_entries_created": 0,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    # Calculate next run date
+    today = now.date()
+    if today.day <= template.day_of_month:
+        next_run = today.replace(day=template.day_of_month)
+    else:
+        # Next month
+        if today.month == 12:
+            next_run = today.replace(year=today.year + 1, month=1, day=template.day_of_month)
+        else:
+            next_run = today.replace(month=today.month + 1, day=template.day_of_month)
+    new_template["next_run"] = next_run.isoformat()
+    
+    await db.recurring_templates.insert_one(new_template)
+    
+    # Audit log
+    await create_audit_log(
+        entity_type="recurring_template",
+        entity_id=template_id,
+        action="create",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"name": template.name, "amount": template.amount},
+        details=f"Created recurring template: {template.name}"
+    )
+    
+    new_template.pop("_id", None)
+    return {"success": True, "template": new_template}
+
+
+@api_router.get("/finance/recurring/templates")
+async def list_recurring_templates(request: Request, active_only: bool = False):
+    """List all recurring templates"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.cashbook.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if active_only:
+        query["is_active"] = True
+    
+    templates = await db.recurring_templates.find(
+        query,
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return {"templates": templates, "count": len(templates)}
+
+
+@api_router.put("/finance/recurring/templates/{template_id}")
+async def update_recurring_template(template_id: str, update: RecurringTemplateUpdate, request: Request):
+    """Update a recurring template"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder", "SeniorAccountant"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    template = await db.recurring_templates.find_one({"template_id": template_id})
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    old_value = {k: template.get(k) for k in ["name", "amount", "is_active"]}
+    
+    update_dict = {k: v for k, v in update.dict().items() if v is not None}
+    update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    # Update category/account names if changed
+    if "category_id" in update_dict:
+        category = await db.accounting_categories.find_one({"category_id": update_dict["category_id"]})
+        if category:
+            update_dict["category_name"] = category.get("name", "")
+    
+    if "account_id" in update_dict:
+        account = await db.accounting_accounts.find_one({"account_id": update_dict["account_id"]})
+        if account:
+            update_dict["account_name"] = account.get("name", "")
+    
+    await db.recurring_templates.update_one(
+        {"template_id": template_id},
+        {"$set": update_dict}
+    )
+    
+    # Audit log
+    await create_audit_log(
+        entity_type="recurring_template",
+        entity_id=template_id,
+        action="edit",
+        user_id=user.user_id,
+        user_name=user.name,
+        old_value=old_value,
+        new_value=update_dict,
+        details=f"Updated recurring template"
+    )
+    
+    updated = await db.recurring_templates.find_one({"template_id": template_id}, {"_id": 0})
+    return {"success": True, "template": updated}
+
+
+@api_router.post("/finance/recurring/templates/{template_id}/toggle")
+async def toggle_recurring_template(template_id: str, request: Request):
+    """Pause/Resume a recurring template"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder", "SeniorAccountant"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    template = await db.recurring_templates.find_one({"template_id": template_id})
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    new_status = not template.get("is_active", True)
+    
+    await db.recurring_templates.update_one(
+        {"template_id": template_id},
+        {"$set": {"is_active": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Audit log
+    await create_audit_log(
+        entity_type="recurring_template",
+        entity_id=template_id,
+        action="edit",
+        user_id=user.user_id,
+        user_name=user.name,
+        old_value={"is_active": not new_status},
+        new_value={"is_active": new_status},
+        details=f"Template {'resumed' if new_status else 'paused'}"
+    )
+    
+    return {
+        "success": True,
+        "is_active": new_status,
+        "message": f"Template {'resumed' if new_status else 'paused'}"
+    }
+
+
+@api_router.post("/finance/recurring/run-scheduled")
+async def run_scheduled_recurring(request: Request):
+    """Run scheduled recurring transactions - creates PENDING PAYABLES (not cashbook entries)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can run scheduled tasks")
+    
+    today = datetime.now(timezone.utc).date()
+    today_str = today.isoformat()
+    
+    # Get active templates due today or before
+    templates = await db.recurring_templates.find({
+        "is_active": True,
+        "next_run": {"$lte": today_str}
+    }, {"_id": 0}).to_list(100)
+    
+    created_payables = []
+    errors = []
+    
+    for template in templates:
+        try:
+            # Create PENDING PAYABLE (not cashbook entry)
+            payable_id = f"rpay_{uuid.uuid4().hex[:10]}"
+            new_payable = {
+                "payable_id": payable_id,
+                "template_id": template["template_id"],
+                "template_name": template["name"],
+                "due_date": today_str,
+                "amount": template["amount"],
+                "category_id": template["category_id"],
+                "category_name": template["category_name"],
+                "account_id": template["account_id"],
+                "account_name": template["account_name"],
+                "paid_to": template.get("paid_to", ""),
+                "description": template.get("description", template["name"]),
+                "status": "pending",  # pending, paid, cancelled
+                "is_overdue": False,
+                "paid_at": None,
+                "paid_amount": None,
+                "paid_via_transaction_id": None,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            await db.recurring_payables.insert_one(new_payable)
+            
+            # Update template - set next run date
+            next_month = today.month + 1 if today.month < 12 else 1
+            next_year = today.year if today.month < 12 else today.year + 1
+            try:
+                next_run = today.replace(year=next_year, month=next_month, day=template["day_of_month"])
+            except ValueError:
+                # Handle months with fewer days
+                next_run = today.replace(year=next_year, month=next_month, day=28)
+            
+            await db.recurring_templates.update_one(
+                {"template_id": template["template_id"]},
+                {
+                    "$set": {
+                        "last_run": today_str,
+                        "next_run": next_run.isoformat()
+                    },
+                    "$inc": {"total_entries_created": 1}
+                }
+            )
+            
+            created_payables.append({
+                "payable_id": payable_id,
+                "template_name": template["name"],
+                "amount": template["amount"],
+                "due_date": today_str
+            })
+            
+        except Exception as e:
+            errors.append({"template": template["name"], "error": str(e)})
+    
+    return {
+        "success": True,
+        "created_count": len(created_payables),
+        "created_payables": created_payables,
+        "errors": errors
+    }
+
+
+@api_router.get("/finance/recurring/payables")
+async def get_recurring_payables(
+    request: Request,
+    status: Optional[str] = None,
+    include_overdue: bool = True
+):
+    """Get pending recurring payables"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.cashbook.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if status:
+        query["status"] = status
+    
+    payables = await db.recurring_payables.find(
+        query,
+        {"_id": 0}
+    ).sort("due_date", 1).to_list(500)
+    
+    # Mark overdue payables
+    today = datetime.now(timezone.utc).date().isoformat()
+    pending_count = 0
+    overdue_count = 0
+    total_pending_amount = 0
+    
+    for payable in payables:
+        if payable["status"] == "pending":
+            pending_count += 1
+            total_pending_amount += payable["amount"]
+            if payable["due_date"] < today:
+                payable["is_overdue"] = True
+                overdue_count += 1
+    
+    return {
+        "payables": payables,
+        "summary": {
+            "total": len(payables),
+            "pending": pending_count,
+            "overdue": overdue_count,
+            "total_pending_amount": total_pending_amount
+        }
+    }
+
+
+class RecordPaymentRequest(BaseModel):
+    amount: Optional[float] = None  # If not provided, use payable amount
+    payment_date: Optional[str] = None  # If not provided, use today
+    mode: str = "bank_transfer"
+    remarks: Optional[str] = None
+
+
+@api_router.post("/finance/recurring/payables/{payable_id}/pay")
+async def record_recurring_payment(payable_id: str, payment: RecordPaymentRequest, request: Request):
+    """Record payment for a pending payable - creates cashbook entry"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.cashbook.edit"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    payable = await db.recurring_payables.find_one({"payable_id": payable_id})
+    if not payable:
+        raise HTTPException(status_code=404, detail="Payable not found")
+    
+    if payable["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"Payable is already {payable['status']}")
+    
+    now = datetime.now(timezone.utc)
+    payment_date = payment.payment_date or now.date().isoformat()
+    payment_amount = payment.amount or payable["amount"]
+    
+    # Create cashbook entry
+    transaction_id = f"txn_{uuid.uuid4().hex[:10]}"
+    new_txn = {
+        "transaction_id": transaction_id,
+        "date": payment_date,
+        "transaction_type": "outflow",
+        "amount": payment_amount,
+        "mode": payment.mode,
+        "category_id": payable["category_id"],
+        "category_name": payable["category_name"],
+        "account_id": payable["account_id"],
+        "account_name": payable["account_name"],
+        "project_id": None,
+        "paid_to": payable.get("paid_to", ""),
+        "remarks": payment.remarks or f"[RECURRING] {payable['template_name']} - {payable.get('description', '')}",
+        "is_verified": False,
+        "needs_review": False,
+        "recurring_payable_id": payable_id,
+        "recurring_template_id": payable.get("template_id"),
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat()
+    }
+    
+    await db.accounting_transactions.insert_one(new_txn)
+    
+    # Update account balance
+    await db.accounting_accounts.update_one(
+        {"account_id": payable["account_id"]},
+        {"$inc": {"current_balance": -payment_amount}}
+    )
+    
+    # Mark payable as paid
+    await db.recurring_payables.update_one(
+        {"payable_id": payable_id},
+        {"$set": {
+            "status": "paid",
+            "paid_at": now.isoformat(),
+            "paid_amount": payment_amount,
+            "paid_via_transaction_id": transaction_id,
+            "paid_by": user.user_id,
+            "paid_by_name": user.name
+        }}
+    )
+    
+    # Audit log
+    await create_audit_log(
+        entity_type="cashbook",
+        entity_id=transaction_id,
+        action="create",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"amount": payment_amount, "type": "outflow", "from_recurring": payable["template_name"]},
+        details=f"Paid recurring expense: {payable['template_name']} ₹{payment_amount:,.0f}"
+    )
+    
+    return {
+        "success": True,
+        "message": f"Payment recorded for {payable['template_name']}",
+        "transaction_id": transaction_id,
+        "amount": payment_amount
+    }
+
+
+@api_router.post("/finance/recurring/payables/{payable_id}/cancel")
+async def cancel_recurring_payable(payable_id: str, request: Request):
+    """Cancel a pending payable (skip this occurrence)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder", "SeniorAccountant"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    payable = await db.recurring_payables.find_one({"payable_id": payable_id})
+    if not payable:
+        raise HTTPException(status_code=404, detail="Payable not found")
+    
+    if payable["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"Payable is already {payable['status']}")
+    
+    await db.recurring_payables.update_one(
+        {"payable_id": payable_id},
+        {"$set": {
+            "status": "cancelled",
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+            "cancelled_by": user.user_id,
+            "cancelled_by_name": user.name
+        }}
+    )
+    
+    return {"success": True, "message": "Payable cancelled"}
+
+
+# ============ EXECUTION LEDGER MODULE ============
+# Purely observational - does NOT affect accounting logic
+
+EXECUTION_CATEGORIES = [
+    "Modular Material",
+    "Hardware & Accessories", 
+    "Factory / Job Work",
+    "Installation",
+    "Transportation / Logistics",
+    "Non-Modular Furniture",
+    "Site Expense"
+]
+
+
+# ============ EXECUTION LEDGER MODELS (Invoice-based) ============
+
+class ExecutionLineItem(BaseModel):
+    """Single line item within an execution entry (invoice)"""
+    category: str  # Plywood, Hardware, Laminate, Service, etc.
+    material_name: str
+    specification: Optional[str] = None
+    brand: Optional[str] = None
+    quantity: float
+    unit: str = "pcs"  # pcs, sqft, kg, meter, etc.
+    rate: float
+    # line_total is auto-calculated: quantity * rate
+
+
+class ExecutionEntryCreate(BaseModel):
+    """Create execution entry - represents ONE vendor invoice"""
+    project_id: str
+    vendor_id: Optional[str] = None  # Link to unified vendor master
+    vendor_name: str  # Vendor name (for display)
+    invoice_no: Optional[str] = None
+    invoice_date: Optional[str] = None  # YYYY-MM-DD
+    execution_date: str  # YYYY-MM-DD
+    purchase_type: str = "credit"  # "cash" or "credit"
+    items: List[ExecutionLineItem]  # Multiple line items per invoice
+    linked_cashbook_id: Optional[str] = None  # Reference to payment (for cash purchase)
+    linked_liability_id: Optional[str] = None  # Reference to liability (for credit purchase)
+    remarks: Optional[str] = None
+
+
+class ExecutionEntryUpdate(BaseModel):
+    """Update execution entry"""
+    vendor_id: Optional[str] = None
+    vendor_name: Optional[str] = None
+    invoice_no: Optional[str] = None
+    invoice_date: Optional[str] = None
+    execution_date: Optional[str] = None
+    purchase_type: Optional[str] = None
+    items: Optional[List[ExecutionLineItem]] = None
+    linked_cashbook_id: Optional[str] = None
+    linked_liability_id: Optional[str] = None
+    remarks: Optional[str] = None
+
+
+class InvoicePaymentRecord(BaseModel):
+    """Record a payment against an invoice entry"""
+    amount: float
+    payment_date: str  # YYYY-MM-DD
+    payment_mode: str  # cash, bank_transfer, upi, cheque, card
+    account_id: str
+    remarks: Optional[str] = None
+
+
+@api_router.get("/finance/execution-ledger/categories")
+async def get_execution_categories():
+    """Get available execution entry categories"""
+    return {"categories": EXECUTION_CATEGORIES}
+
+
+@api_router.post("/finance/execution-ledger")
+async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
+    """Create a new execution ledger entry (invoice-based with line items)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Permission: Admin, ProjectManager, Founder can add
+    if user_doc.get("role") not in ["Admin", "Founder", "ProjectManager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Validate project exists
+    project = await db.projects.find_one({"project_id": entry.project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Validate at least one item
+    if not entry.items or len(entry.items) == 0:
+        raise HTTPException(status_code=400, detail="At least one line item is required")
+    
+    # Validate item categories
+    for item in entry.items:
+        if item.category not in EXECUTION_CATEGORIES:
+            raise HTTPException(status_code=400, detail=f"Invalid category '{item.category}'. Must be one of: {EXECUTION_CATEGORIES}")
+    
+    # Handle vendor - if vendor_id provided, validate it
+    vendor_id = entry.vendor_id
+    vendor_name = entry.vendor_name
+    
+    if vendor_id:
+        vendor = await db.accounting_vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+        if vendor:
+            vendor_name = vendor.get("vendor_name", vendor_name)
+    elif vendor_name:
+        # Quick-create vendor if name provided but no ID
+        vendor = await get_or_create_unified_vendor(vendor_name, user.user_id, user.name)
+        vendor_id = vendor.get("vendor_id")
+    
+    entry_id = f"exec_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    # Process line items and calculate totals
+    processed_items = []
+    total_value = 0
+    
+    for idx, item in enumerate(entry.items):
+        line_total = item.quantity * item.rate
+        total_value += line_total
+        processed_items.append({
+            "item_id": f"item_{idx + 1}",
+            "category": item.category,
+            "material_name": item.material_name,
+            "specification": item.specification,
+            "brand": item.brand,
+            "quantity": item.quantity,
+            "unit": item.unit,
+            "rate": item.rate,
+            "line_total": line_total
+        })
+    
+    # Validate purchase_type
+    if entry.purchase_type not in ["cash", "credit"]:
+        raise HTTPException(status_code=400, detail="Invalid purchase_type. Must be 'cash' or 'credit'")
+    
+    new_entry = {
+        "execution_id": entry_id,
+        "project_id": entry.project_id,
+        "project_name": project.get("project_name", ""),
+        "vendor_id": vendor_id,
+        "vendor_name": vendor_name,
+        "invoice_no": entry.invoice_no,
+        "invoice_date": entry.invoice_date,
+        "execution_date": entry.execution_date,
+        "purchase_type": entry.purchase_type,
+        "items": processed_items,
+        "item_count": len(processed_items),
+        "total_value": total_value,
+        # Payment tracking fields
+        "total_paid": 0,
+        "amount_remaining": total_value,
+        "payment_status": "unpaid",  # unpaid, partial, paid
+        "payments": [],  # Array of payment records
+        # Legacy link fields (kept for backward compatibility, but now managed via payments)
+        "linked_cashbook_id": entry.linked_cashbook_id if entry.purchase_type == "cash" else None,
+        "linked_liability_id": entry.linked_liability_id if entry.purchase_type == "credit" else None,
+        "remarks": entry.remarks,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "edit_history": []  # Track edits for audit
+    }
+    
+    await db.execution_ledger.insert_one(new_entry)
+    
+    new_entry.pop("_id", None)
+    return {"success": True, "entry": new_entry}
+
+
+@api_router.get("/finance/execution-ledger/project/{project_id}")
+async def get_project_execution_entries(project_id: str, request: Request, category: Optional[str] = None):
+    """Get all execution entries (invoices) for a project"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Permission: Admin, Founder, Finance roles, ProjectManager can view
+    allowed_roles = ["Admin", "Founder", "SeniorAccountant", "JuniorAccountant", "ProjectManager", "CharteredAccountant", "FinanceManager"]
+    if user_doc.get("role") not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {"project_id": project_id}
+    # If category filter, search within items array
+    if category:
+        query["items.category"] = category
+    
+    entries = await db.execution_ledger.find(
+        query,
+        {"_id": 0}
+    ).sort("execution_date", -1).to_list(1000)
+    
+    # Calculate summary by category (from all line items across all entries)
+    summary = {}
+    total_value = 0
+    total_items = 0
+    
+    for entry in entries:
+        total_value += entry.get("total_value", 0)
+        items = entry.get("items", [])
+        total_items += len(items)
+        
+        # Summarize by category from line items
+        for item in items:
+            cat = item.get("category", "Other")
+            if cat not in summary:
+                summary[cat] = {"item_count": 0, "total_value": 0}
+            summary[cat]["item_count"] += 1
+            summary[cat]["total_value"] += item.get("line_total", 0)
+    
+    return {
+        "entries": entries,
+        "entry_count": len(entries),
+        "total_items": total_items,
+        "total_value": total_value,
+        "summary_by_category": summary
+    }
+
+
+@api_router.get("/finance/execution-ledger/{execution_id}")
+async def get_execution_entry(execution_id: str, request: Request):
+    """Get a single execution entry (invoice with line items)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    allowed_roles = ["Admin", "Founder", "SeniorAccountant", "JuniorAccountant", "ProjectManager", "CharteredAccountant", "FinanceManager"]
+    if user_doc.get("role") not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    entry = await db.execution_ledger.find_one({"execution_id": execution_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Execution entry not found")
+    
+    return entry
+
+
+@api_router.put("/finance/execution-ledger/{execution_id}")
+async def update_execution_entry(execution_id: str, update: ExecutionEntryUpdate, request: Request):
+    """Update an execution entry (invoice with line items) - with audit trail"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder", "ProjectManager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    entry = await db.execution_ledger.find_one({"execution_id": execution_id})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Execution entry not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Create audit record of what's being changed
+    changes = []
+    update_dict = {}
+    
+    for key, value in update.dict().items():
+        if value is not None:
+            old_value = entry.get(key)
+            if key == "items":
+                # Items changed - record summary
+                old_total = entry.get("total_value", 0)
+                changes.append(f"items modified")
+            elif old_value != value:
+                changes.append(f"{key}: {old_value} → {value}")
+            update_dict[key] = value
+    
+    # If items are being updated, validate categories and recalculate totals
+    if update.items:
+        for item in update.items:
+            if item.category not in EXECUTION_CATEGORIES:
+                raise HTTPException(status_code=400, detail=f"Invalid category '{item.category}'")
+        
+        # Process and recalculate
+        processed_items = []
+        total_value = 0
+        for idx, item in enumerate(update.items):
+            line_total = item.quantity * item.rate
+            total_value += line_total
+            processed_items.append({
+                "item_id": f"item_{idx + 1}",
+                "category": item.category,
+                "material_name": item.material_name,
+                "specification": item.specification,
+                "brand": item.brand,
+                "quantity": item.quantity,
+                "unit": item.unit,
+                "rate": item.rate,
+                "line_total": line_total
+            })
+        update_dict["items"] = processed_items
+        update_dict["item_count"] = len(processed_items)
+        
+        old_total = entry.get("total_value", 0)
+        if old_total != total_value:
+            changes.append(f"total_value: ₹{old_total:,.0f} → ₹{total_value:,.0f}")
+        update_dict["total_value"] = total_value
+    
+    # Handle purchase_type change and linkage
+    if update.purchase_type:
+        if update.purchase_type not in ["cash", "credit"]:
+            raise HTTPException(status_code=400, detail="Invalid purchase_type")
+        # Clear opposite linkage when type changes
+        if update.purchase_type == "cash":
+            update_dict["linked_liability_id"] = None
+        elif update.purchase_type == "credit":
+            update_dict["linked_cashbook_id"] = None
+    
+    update_dict["updated_at"] = now.isoformat()
+    
+    # Create edit history entry
+    edit_record = {
+        "edited_at": now.isoformat(),
+        "edited_by": user.user_id,
+        "edited_by_name": user.name,
+        "changes": changes,
+        "was_linked": bool(entry.get("linked_cashbook_id") or entry.get("linked_liability_id"))
+    }
+    
+    await db.execution_ledger.update_one(
+        {"execution_id": execution_id},
+        {
+            "$set": update_dict,
+            "$push": {"edit_history": edit_record}
+        }
+    )
+    
+    updated = await db.execution_ledger.find_one({"execution_id": execution_id}, {"_id": 0})
+    return {"success": True, "entry": updated, "changes_recorded": changes}
+
+
+@api_router.delete("/finance/execution-ledger/{execution_id}")
+async def delete_execution_entry(execution_id: str, request: Request):
+    """Delete an execution entry (Admin only - blocked if linked)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Admin can delete
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can delete execution entries")
+    
+    entry = await db.execution_ledger.find_one({"execution_id": execution_id})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Execution entry not found")
+    
+    # Block deletion if linked to cashbook or liability
+    if entry.get("linked_cashbook_id"):
+        raise HTTPException(status_code=400, detail="Cannot delete invoice linked to Cashbook. Please unlink first or edit the entry instead.")
+    if entry.get("linked_liability_id"):
+        raise HTTPException(status_code=400, detail="Cannot delete invoice linked to Liability. Please unlink first or edit the entry instead.")
+    
+    await db.execution_ledger.delete_one({"execution_id": execution_id})
+    
+    return {"success": True, "message": "Execution entry deleted"}
+
+
+@api_router.post("/finance/execution-ledger/{execution_id}/record-payment")
+async def record_invoice_payment(execution_id: str, payment: InvoicePaymentRecord, request: Request):
+    """
+    Record a payment against an invoice entry.
+    - Auto-creates Cashbook outflow entry
+    - For credit purchases with remaining balance: Auto-creates/updates Liability
+    - Tracks payment history on the invoice
+    - Updates payment status (unpaid/partial/paid)
+    """
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Permission check: Admin, Founder, SeniorAccountant, FinanceManager, ProjectManager
+    allowed_roles = ["Admin", "Founder", "SeniorAccountant", "FinanceManager", "ProjectManager"]
+    if user_doc.get("role") not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Access denied - insufficient permissions to record payments")
+    
+    # Get the invoice entry
+    entry = await db.execution_ledger.find_one({"execution_id": execution_id})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Invoice entry not found")
+    
+    # Validate amount
+    if payment.amount <= 0:
+        raise HTTPException(status_code=400, detail="Payment amount must be positive")
+    
+    # Calculate current payment status
+    existing_payments = entry.get("payments", [])
+    total_paid = sum(p.get("amount", 0) for p in existing_payments)
+    total_value = entry.get("total_value", 0)
+    amount_remaining = total_value - total_paid
+    
+    if payment.amount > amount_remaining:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Payment amount (₹{payment.amount:,.0f}) exceeds remaining balance (₹{amount_remaining:,.0f})"
+        )
+    
+    # Validate account exists
+    account = await db.accounting_accounts.find_one({"account_id": payment.account_id})
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    # Validate payment mode
+    valid_modes = ["cash", "bank_transfer", "upi", "cheque", "card"]
+    if payment.payment_mode not in valid_modes:
+        raise HTTPException(status_code=400, detail=f"Invalid payment mode. Must be one of: {', '.join(valid_modes)}")
+    
+    # Check if day is locked
+    payment_date = payment.payment_date[:10]
+    daily_closing = await db.accounting_daily_closings.find_one({"date": payment_date, "is_locked": True})
+    if daily_closing:
+        raise HTTPException(status_code=400, detail=f"Day {payment_date} is locked. Cannot add transactions.")
+    
+    now = datetime.now(timezone.utc)
+    payment_id = f"invpay_{uuid.uuid4().hex[:10]}"
+    txn_id = f"txn_{uuid.uuid4().hex[:10]}"
+    
+    # ============ STEP 1: Create Cashbook Outflow Entry ============
+    
+    # Get or create "Invoice Payment" category
+    invoice_payment_category = await db.accounting_categories.find_one({"category_id": "invoice_payment"})
+    if not invoice_payment_category:
+        invoice_payment_category = {
+            "category_id": "invoice_payment",
+            "name": "Invoice Payment",
+            "type": "expense",
+            "description": "Payments made against vendor invoices",
+            "created_at": now.isoformat()
+        }
+        await db.accounting_categories.insert_one(invoice_payment_category)
+    
+    # Build description
+    vendor_name = entry.get("vendor_name", "Vendor")
+    invoice_no = entry.get("invoice_no")
+    project_name = entry.get("project_name", "")
+    description = f"Invoice Payment: {vendor_name}"
+    if invoice_no:
+        description += f" (Inv# {invoice_no})"
+    if project_name:
+        description += f" - {project_name}"
+    
+    cashbook_entry = {
+        "transaction_id": txn_id,
+        "transaction_date": payment.payment_date,
+        "transaction_type": "outflow",
+        "amount": payment.amount,
+        "mode": payment.payment_mode,
+        "category_id": "invoice_payment",
+        "account_id": payment.account_id,
+        "project_id": entry.get("project_id"),
+        "paid_to": vendor_name,
+        "vendor_id": entry.get("vendor_id"),
+        "remarks": payment.remarks or description,
+        "attachment_url": None,
+        "is_verified": False,
+        "verified_by": None,
+        "verified_at": None,
+        "requested_by": user.user_id,
+        "requested_by_name": user.name,
+        "paid_by": user.user_id,
+        "paid_by_name": user.name,
+        "paid_from_account": account.get("name", "Unknown"),
+        "approved_by": None,
+        "approved_by_name": None,
+        "expense_request_id": None,
+        "needs_review": False,
+        "approval_status": "not_required",
+        "reviewed_by": None,
+        "reviewed_at": None,
+        # System-generated marker
+        "system_generated": True,
+        "source_module": "invoice_ledger",
+        "source_id": execution_id,
+        # Reference for linking
+        "reference_type": "invoice_payment",
+        "reference_id": payment_id,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "updated_at": now.isoformat()
+    }
+    
+    await db.accounting_transactions.insert_one(cashbook_entry)
+    
+    # Update account balance (reduce by outflow amount)
+    await db.accounting_accounts.update_one(
+        {"account_id": payment.account_id},
+        {"$inc": {"current_balance": -payment.amount}}
+    )
+    
+    # ============ STEP 2: Handle Liability for Credit Purchase ============
+    
+    liability_id = None
+    new_remaining_after_payment = amount_remaining - payment.amount
+    
+    # For credit purchases: create or update liability if there's remaining balance
+    if entry.get("purchase_type") == "credit":
+        existing_liability_id = entry.get("linked_liability_id")
+        
+        if existing_liability_id:
+            # Update existing liability
+            liability = await db.finance_liabilities.find_one({"liability_id": existing_liability_id})
+            if liability:
+                # Record settlement on the liability
+                new_settled = liability.get("amount_settled", 0) + payment.amount
+                new_lia_remaining = liability.get("amount", 0) - new_settled
+                new_status = "closed" if new_lia_remaining <= 0 else "partially_settled"
+                
+                settlement_entry = {
+                    "settlement_id": f"stl_{uuid.uuid4().hex[:8]}",
+                    "amount": payment.amount,
+                    "transaction_id": txn_id,
+                    "payment_date": payment.payment_date,
+                    "payment_mode": payment.payment_mode,
+                    "account_id": payment.account_id,
+                    "account_name": account.get("name", "Unknown"),
+                    "remarks": payment.remarks,
+                    "settled_by": user.user_id,
+                    "settled_by_name": user.name,
+                    "settled_at": now.isoformat()
+                }
+                
+                await db.finance_liabilities.update_one(
+                    {"liability_id": existing_liability_id},
+                    {
+                        "$set": {
+                            "amount_settled": new_settled,
+                            "amount_remaining": new_lia_remaining,
+                            "status": new_status,
+                            "updated_at": now.isoformat()
+                        },
+                        "$push": {"settlements": settlement_entry}
+                    }
+                )
+                liability_id = existing_liability_id
+        
+        elif new_remaining_after_payment > 0:
+            # Create new liability for remaining amount (first partial payment)
+            liability_id = f"lia_{uuid.uuid4().hex[:10]}"
+            
+            new_liability = {
+                "liability_id": liability_id,
+                "project_id": entry.get("project_id"),
+                "project_name": entry.get("project_name"),
+                "vendor_id": entry.get("vendor_id"),
+                "vendor_name": vendor_name,
+                "category": "raw_material",  # Default category
+                "description": f"Invoice: {invoice_no or 'N/A'} - {vendor_name}",
+                "amount": total_value,  # Full invoice amount
+                "amount_settled": payment.amount,  # This payment
+                "amount_remaining": new_remaining_after_payment,
+                "due_date": None,
+                "source": "invoice_ledger",
+                "source_id": execution_id,
+                "status": "partially_settled",
+                "settlements": [{
+                    "settlement_id": f"stl_{uuid.uuid4().hex[:8]}",
+                    "amount": payment.amount,
+                    "transaction_id": txn_id,
+                    "payment_date": payment.payment_date,
+                    "payment_mode": payment.payment_mode,
+                    "account_id": payment.account_id,
+                    "account_name": account.get("name", "Unknown"),
+                    "remarks": payment.remarks,
+                    "settled_by": user.user_id,
+                    "settled_by_name": user.name,
+                    "settled_at": now.isoformat()
+                }],
+                "created_by": user.user_id,
+                "created_by_name": user.name,
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            }
+            
+            await db.finance_liabilities.insert_one(new_liability)
+    
+    # ============ STEP 3: Update Invoice Entry ============
+    
+    new_payment_record = {
+        "payment_id": payment_id,
+        "amount": payment.amount,
+        "payment_date": payment.payment_date,
+        "payment_mode": payment.payment_mode,
+        "account_id": payment.account_id,
+        "account_name": account.get("name", "Unknown"),
+        "transaction_id": txn_id,
+        "remarks": payment.remarks,
+        "recorded_by": user.user_id,
+        "recorded_by_name": user.name,
+        "recorded_at": now.isoformat()
+    }
+    
+    new_total_paid = total_paid + payment.amount
+    new_payment_status = "paid" if new_total_paid >= total_value else "partial"
+    
+    update_data = {
+        "total_paid": new_total_paid,
+        "amount_remaining": new_remaining_after_payment,
+        "payment_status": new_payment_status,
+        "updated_at": now.isoformat()
+    }
+    
+    # Link to liability if created
+    if liability_id and not entry.get("linked_liability_id"):
+        update_data["linked_liability_id"] = liability_id
+    
+    # Link to cashbook transaction (for reference)
+    if not entry.get("linked_cashbook_id"):
+        update_data["linked_cashbook_id"] = txn_id
+    
+    await db.execution_ledger.update_one(
+        {"execution_id": execution_id},
+        {
+            "$set": update_data,
+            "$push": {"payments": new_payment_record}
+        }
+    )
+    
+    # ============ STEP 4: Create Audit Log Entry ============
+    
+    await db.finance_audit_log.insert_one({
+        "audit_id": f"aud_{uuid.uuid4().hex[:10]}",
+        "entity_type": "invoice_payment",
+        "entity_id": execution_id,
+        "action": "payment_recorded",
+        "old_value": None,
+        "new_value": {
+            "payment_id": payment_id,
+            "amount": payment.amount,
+            "total_paid": new_total_paid,
+            "payment_status": new_payment_status
+        },
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "timestamp": now.isoformat(),
+        "details": f"Recorded payment of ₹{payment.amount:,.0f} against invoice {invoice_no or execution_id}"
+    })
+    
+    # Get updated entry
+    updated_entry = await db.execution_ledger.find_one({"execution_id": execution_id}, {"_id": 0})
+    
+    return {
+        "success": True,
+        "message": f"Payment of ₹{payment.amount:,.0f} recorded successfully",
+        "payment": new_payment_record,
+        "transaction_id": txn_id,
+        "liability_id": liability_id,
+        "payment_status": new_payment_status,
+        "total_paid": new_total_paid,
+        "amount_remaining": new_remaining_after_payment,
+        "entry": updated_entry
+    }
+
+
+@api_router.get("/finance/execution-ledger/{execution_id}/payments")
+async def get_invoice_payments(execution_id: str, request: Request):
+    """Get payment history for an invoice entry"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    entry = await db.execution_ledger.find_one({"execution_id": execution_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Invoice entry not found")
+    
+    return {
+        "execution_id": execution_id,
+        "invoice_no": entry.get("invoice_no"),
+        "vendor_name": entry.get("vendor_name"),
+        "total_value": entry.get("total_value", 0),
+        "total_paid": entry.get("total_paid", 0),
+        "amount_remaining": entry.get("amount_remaining", entry.get("total_value", 0)),
+        "payment_status": entry.get("payment_status", "unpaid"),
+        "payments": entry.get("payments", []),
+        "linked_liability_id": entry.get("linked_liability_id"),
+        "linked_cashbook_id": entry.get("linked_cashbook_id")
+    }
+
+
+@api_router.get("/finance/execution-ledger/export/{project_id}")
+async def export_execution_ledger(project_id: str, request: Request, format: str = "csv"):
+    """Export execution ledger for a project (CSV or Excel)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    allowed_roles = ["Admin", "Founder", "SeniorAccountant", "ProjectManager"]
+    if user_doc.get("role") not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    entries = await db.execution_ledger.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).sort("execution_date", -1).to_list(5000)
+    
+    if not entries:
+        raise HTTPException(status_code=404, detail="No execution entries found for this project")
+    
+    # Prepare export data
+    export_rows = []
+    for entry in entries:
+        export_rows.append({
+            "Execution ID": entry.get("execution_id", ""),
+            "Date": entry.get("execution_date", ""),
+            "Category": entry.get("category", ""),
+            "Material/Service": entry.get("material_name", ""),
+            "Specification": entry.get("specification", ""),
+            "Brand": entry.get("brand", ""),
+            "Size/Unit": entry.get("size_unit", ""),
+            "Quantity": entry.get("quantity", 0),
+            "Rate": entry.get("rate_per_unit", 0),
+            "Total Value": entry.get("total_value", 0),
+            "Vendor": entry.get("vendor", ""),
+            "Remarks": entry.get("remarks", ""),
+            "Created By": entry.get("created_by_name", ""),
+            "Created At": entry.get("created_at", "")
+        })
+    
+    project_name = project.get("project_name", "Project").replace(" ", "_")
+    
+    if format.lower() == "excel":
+        from openpyxl import Workbook
+        from io import BytesIO
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Execution Ledger"
+        
+        # Header
+        headers = list(export_rows[0].keys()) if export_rows else []
+        ws.append(headers)
+        
+        # Data
+        for row in export_rows:
+            ws.append(list(row.values()))
+        
+        # Auto-width columns
+        for col in ws.columns:
+            max_length = 0
+            column = col[0].column_letter
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            ws.column_dimensions[column].width = min(max_length + 2, 50)
+        
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=Execution_Ledger_{project_name}.xlsx"}
+        )
+    else:
+        # CSV format
+        from io import StringIO
+        import csv
+        
+        output = StringIO()
+        if export_rows:
+            writer = csv.DictWriter(output, fieldnames=export_rows[0].keys())
+            writer.writeheader()
+            writer.writerows(export_rows)
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=Execution_Ledger_{project_name}.csv"}
+        )
+
+
 # ============ DOCUMENT ATTACHMENT (PROOF) LAYER ============
 
 # Finance attachments directory
@@ -22409,7 +25656,7 @@ ALLOWED_ATTACHMENT_TYPES = {
 MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024  # 15MB
 
 # Valid entity types for attachments
-VALID_ATTACHMENT_ENTITIES = ["cashbook", "expense", "project", "liability"]
+VALID_ATTACHMENT_ENTITIES = ["cashbook", "expense", "project", "liability", "execution"]
 
 
 class AttachmentMetadata(BaseModel):

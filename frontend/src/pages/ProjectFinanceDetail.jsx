@@ -71,6 +71,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import AttachmentUploader from '../components/AttachmentUploader';
+import ExecutionLedger from '../components/ExecutionLedger';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -123,6 +124,8 @@ const ProjectFinanceDetail = () => {
   const [lockOverrideForm, setLockOverrideForm] = useState({ lock_percentage: '', reason: '' });
   const [projectProfit, setProjectProfit] = useState(null);
   const [viewTransaction, setViewTransaction] = useState(null); // For viewing transaction details
+  const [projectLiabilities, setProjectLiabilities] = useState([]);
+  const [accountsList, setAccountsList] = useState([]);
   
   const [newMapping, setNewMapping] = useState({
     vendor_name: '',
@@ -136,7 +139,7 @@ const ProjectFinanceDetail = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [financeRes, decisionsRes, intelligenceRes, attrRes, overrunRes, receiptsRes, scheduleRes, lockRes, profitRes] = await Promise.all([
+      const [financeRes, decisionsRes, intelligenceRes, attrRes, overrunRes, receiptsRes, scheduleRes, lockRes, profitRes, liabilitiesRes, accountsRes] = await Promise.all([
         axios.get(`${API}/finance/project-finance/${projectId}`, { withCredentials: true }),
         axios.get(`${API}/finance/projects/${projectId}/decisions`, { withCredentials: true }).catch(() => ({ data: {} })),
         axios.get(`${API}/finance/cost-intelligence/${projectId}`, { withCredentials: true }).catch(() => ({ data: null })),
@@ -145,7 +148,9 @@ const ProjectFinanceDetail = () => {
         axios.get(`${API}/finance/receipts?project_id=${projectId}`, { withCredentials: true }).catch(() => ({ data: [] })),
         axios.get(`${API}/finance/payment-schedule/${projectId}`, { withCredentials: true }).catch(() => ({ data: null })),
         axios.get(`${API}/finance/project-lock-status/${projectId}`, { withCredentials: true }).catch(() => ({ data: null })),
-        axios.get(`${API}/finance/project-profit/${projectId}`, { withCredentials: true }).catch(() => ({ data: null }))
+        axios.get(`${API}/finance/project-profit/${projectId}`, { withCredentials: true }).catch(() => ({ data: null })),
+        axios.get(`${API}/finance/liabilities?project_id=${projectId}`, { withCredentials: true }).catch(() => ({ data: [] })),
+        axios.get(`${API}/accounting/accounts`, { withCredentials: true }).catch(() => ({ data: [] }))
       ]);
       setData(financeRes.data);
       setDecisions(decisionsRes.data);
@@ -156,6 +161,8 @@ const ProjectFinanceDetail = () => {
       setPaymentSchedule(scheduleRes.data);
       setLockStatus(lockRes.data);
       setProjectProfit(profitRes.data);
+      setProjectLiabilities(liabilitiesRes.data || []);
+      setAccountsList(accountsRes.data || []);
     } catch (error) {
       console.error('Failed to fetch project finance:', error);
       if (error.response?.status === 404) {
@@ -1709,6 +1716,13 @@ const ProjectFinanceDetail = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Execution Ledger Section */}
+      <ExecutionLedger 
+        projectId={projectId}
+        userRole={user?.role}
+        accounts={accountsList}
+      />
 
       {/* Project Receipts Section */}
       {hasPermission('finance.view_receipts') && (

@@ -818,22 +818,24 @@ const ProjectDetails = () => {
           </Card>
 
           {/* Right Column - Milestones (25%) */}
-          <Card className="border-slate-200 lg:col-span-1">
-            <CardContent className="p-4">
-              <StagesPanel 
-                currentStage={project?.stage}
-                completedSubStages={completedSubStages}
-                percentageSubStages={percentageSubStages}
-                onSubStageComplete={handleSubStageComplete}
-                onPercentageUpdate={handlePercentageUpdate}
-                canChangeStage={canChangeStage()}
-                isUpdating={isUpdatingStage}
-                userRole={user?.role}
-                holdStatus={project?.hold_status || 'Active'}
-                userMilestonePermissions={userMilestonePermissions}
-              />
-            </CardContent>
-          </Card>
+          <div className="lg:col-span-1 space-y-4">
+            <Card className="border-slate-200">
+              <CardContent className="p-4">
+                <StagesPanel 
+                  currentStage={project?.stage}
+                  completedSubStages={completedSubStages}
+                  percentageSubStages={percentageSubStages}
+                  onSubStageComplete={handleSubStageComplete}
+                  onPercentageUpdate={handlePercentageUpdate}
+                  canChangeStage={canChangeStage()}
+                  isUpdating={isUpdatingStage}
+                  userRole={user?.role}
+                  holdStatus={project?.hold_status || 'Active'}
+                  userMilestonePermissions={userMilestonePermissions}
+                />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
@@ -1152,16 +1154,7 @@ const ProjectDetails = () => {
                       <Receipt className="h-5 w-5 text-emerald-600" />
                       Payment History
                     </CardTitle>
-                    {financials.can_edit && (
-                      <Button 
-                        size="sm"
-                        onClick={() => setShowAddPaymentModal(true)}
-                        className="bg-emerald-600 hover:bg-emerald-700"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Payment
-                      </Button>
-                    )}
+                    {/* Add Payment button removed - payments via CashBook only */}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -1169,15 +1162,9 @@ const ProjectDetails = () => {
                     <div className="text-center py-8 text-slate-500">
                       <Receipt className="h-10 w-10 mx-auto text-slate-300 mb-3" />
                       <p>No payments recorded yet</p>
-                      {financials.can_edit && (
-                        <Button 
-                          variant="link" 
-                          onClick={() => setShowAddPaymentModal(true)}
-                          className="text-emerald-600 mt-2"
-                        >
-                          Record your first payment
-                        </Button>
-                      )}
+                      <p className="text-xs text-slate-400 mt-2">
+                        Payments are recorded via CashBook and linked to this project
+                      </p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">

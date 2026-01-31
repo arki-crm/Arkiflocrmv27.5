@@ -15291,6 +15291,146 @@ async def create_transaction(txn: TransactionCreate, request: Request):
     return {**new_txn, "_id": None}
 
 
+# ============ SELF-TRANSFER / INTERNAL TRANSFER ============
+class SelfTransferCreate(BaseModel):
+    from_account_id: str
+    to_account_id: str
+    amount: float
+    transfer_date: str
+    notes: Optional[str] = None
+
+
+@api_router.post("/accounting/self-transfer")
+async def create_self_transfer(transfer: SelfTransferCreate, request: Request):
+    """Create an internal transfer between two accounts (Bank→Bank, Bank→Petty Cash, etc.)
+    This creates TWO linked transactions: one outflow, one inflow, with a shared transfer_id.
+    No P&L impact, no vendor, no receipt."""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Permission check - same as regular transactions
+    if not has_permission(user_doc, "finance.add_transaction") and not has_permission(user_doc, "finance.cashbook.create"):
+        raise HTTPException(status_code=403, detail="Access denied - no permission to create transactions")
+    
+    # Validate accounts
+    if transfer.from_account_id == transfer.to_account_id:
+        raise HTTPException(status_code=400, detail="From and To accounts must be different")
+    
+    from_account = await db.accounting_accounts.find_one({"account_id": transfer.from_account_id})
+    if not from_account:
+        raise HTTPException(status_code=404, detail="Source account not found")
+    
+    to_account = await db.accounting_accounts.find_one({"account_id": transfer.to_account_id})
+    if not to_account:
+        raise HTTPException(status_code=404, detail="Destination account not found")
+    
+    if transfer.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+    
+    # Check sufficient balance in source account
+    if from_account.get("current_balance", 0) < transfer.amount:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Insufficient balance in {from_account.get('name')}. Available: ₹{from_account.get('current_balance', 0):,.0f}"
+        )
+    
+    now = datetime.now(timezone.utc)
+    transfer_id = f"trf_{uuid.uuid4().hex[:8]}"
+    
+    # Create OUTFLOW from source account
+    outflow_txn_id = f"txn_{uuid.uuid4().hex[:8]}"
+    outflow_txn = {
+        "transaction_id": outflow_txn_id,
+        "transaction_date": transfer.transfer_date,
+        "transaction_type": "outflow",
+        "amount": transfer.amount,
+        "mode": "bank_transfer",
+        "category_id": "internal_transfer",
+        "account_id": transfer.from_account_id,
+        "project_id": None,
+        "vendor_id": None,
+        "paid_to": f"Transfer to {to_account.get('name')}",
+        "remarks": f"Internal Transfer to {to_account.get('name')}" + (f" - {transfer.notes}" if transfer.notes else ""),
+        "is_verified": True,  # Auto-verified as it's a controlled transfer
+        "is_internal_transfer": True,
+        "transfer_id": transfer_id,
+        "paired_transaction_id": None,  # Will update after creating inflow
+        "transfer_direction": "out",
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "updated_at": now.isoformat()
+    }
+    
+    # Create INFLOW to destination account
+    inflow_txn_id = f"txn_{uuid.uuid4().hex[:8]}"
+    inflow_txn = {
+        "transaction_id": inflow_txn_id,
+        "transaction_date": transfer.transfer_date,
+        "transaction_type": "inflow",
+        "amount": transfer.amount,
+        "mode": "bank_transfer",
+        "category_id": "internal_transfer",
+        "account_id": transfer.to_account_id,
+        "project_id": None,
+        "vendor_id": None,
+        "received_from": f"Transfer from {from_account.get('name')}",
+        "remarks": f"Internal Transfer from {from_account.get('name')}" + (f" - {transfer.notes}" if transfer.notes else ""),
+        "is_verified": True,
+        "is_internal_transfer": True,
+        "transfer_id": transfer_id,
+        "paired_transaction_id": outflow_txn_id,
+        "transfer_direction": "in",
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "updated_at": now.isoformat()
+    }
+    
+    # Update outflow with paired transaction ID
+    outflow_txn["paired_transaction_id"] = inflow_txn_id
+    
+    # Insert both transactions
+    await db.accounting_transactions.insert_one(outflow_txn)
+    await db.accounting_transactions.insert_one(inflow_txn)
+    
+    # Update account balances
+    await db.accounting_accounts.update_one(
+        {"account_id": transfer.from_account_id},
+        {"$inc": {"current_balance": -transfer.amount}}
+    )
+    await db.accounting_accounts.update_one(
+        {"account_id": transfer.to_account_id},
+        {"$inc": {"current_balance": transfer.amount}}
+    )
+    
+    # Audit log
+    await create_audit_log(
+        entity_type="self_transfer",
+        entity_id=transfer_id,
+        action="create",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={
+            "from_account": from_account.get("name"),
+            "to_account": to_account.get("name"),
+            "amount": transfer.amount
+        },
+        details=f"Internal transfer of ₹{transfer.amount:,.0f} from {from_account.get('name')} to {to_account.get('name')}"
+    )
+    
+    return {
+        "success": True,
+        "transfer_id": transfer_id,
+        "outflow_transaction_id": outflow_txn_id,
+        "inflow_transaction_id": inflow_txn_id,
+        "from_account": from_account.get("name"),
+        "to_account": to_account.get("name"),
+        "amount": transfer.amount,
+        "message": f"Successfully transferred ₹{transfer.amount:,.0f} from {from_account.get('name')} to {to_account.get('name')}"
+    }
+
+
 @api_router.put("/accounting/transactions/{transaction_id}")
 async def update_transaction(transaction_id: str, txn: TransactionUpdate, request: Request):
     """Update a transaction (only if day is not locked)"""

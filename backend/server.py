@@ -25655,10 +25655,10 @@ async def update_execution_entry(execution_id: str, update: ExecutionEntryUpdate
         
         # Process and recalculate
         processed_items = []
-        total_value = 0
+        gross_total = 0
         for idx, item in enumerate(update.items):
             line_total = item.quantity * item.rate
-            total_value += line_total
+            gross_total += line_total
             processed_items.append({
                 "item_id": f"item_{idx + 1}",
                 "category": item.category,
@@ -25672,11 +25672,67 @@ async def update_execution_entry(execution_id: str, update: ExecutionEntryUpdate
             })
         update_dict["items"] = processed_items
         update_dict["item_count"] = len(processed_items)
+        update_dict["gross_total"] = gross_total
+        
+        # Recalculate discount and net_payable
+        discount_type = update.discount_type if update.discount_type is not None else entry.get("discount_type")
+        discount_value = update.discount_value if update.discount_value is not None else entry.get("discount_value", 0)
+        discount_amount = 0
+        
+        if discount_type and discount_value and discount_value > 0:
+            if discount_type == "flat":
+                discount_amount = min(discount_value, gross_total)
+            elif discount_type == "percentage":
+                discount_amount = (gross_total * min(discount_value, 100)) / 100
+        
+        net_payable = gross_total - discount_amount
+        
+        update_dict["discount_type"] = discount_type
+        update_dict["discount_value"] = discount_value
+        update_dict["discount_amount"] = discount_amount
+        update_dict["net_payable"] = net_payable
+        update_dict["total_value"] = net_payable  # backward compat
         
         old_total = entry.get("total_value", 0)
-        if old_total != total_value:
-            changes.append(f"total_value: ₹{old_total:,.0f} → ₹{total_value:,.0f}")
-        update_dict["total_value"] = total_value
+        if old_total != net_payable:
+            changes.append(f"net_payable: ₹{old_total:,.0f} → ₹{net_payable:,.0f}")
+        
+        # Recalculate amount_remaining based on payments already made
+        total_paid = entry.get("total_paid", 0)
+        new_remaining = max(0, net_payable - total_paid)
+        update_dict["amount_remaining"] = new_remaining
+        update_dict["payment_status"] = "paid" if new_remaining <= 0 else ("partial" if total_paid > 0 else "unpaid")
+    
+    # Handle discount update without item changes
+    elif update.discount_type is not None or update.discount_value is not None:
+        gross_total = entry.get("gross_total", entry.get("total_value", 0))
+        discount_type = update.discount_type if update.discount_type is not None else entry.get("discount_type")
+        discount_value = update.discount_value if update.discount_value is not None else entry.get("discount_value", 0)
+        discount_amount = 0
+        
+        if discount_type and discount_value and discount_value > 0:
+            if discount_type == "flat":
+                discount_amount = min(discount_value, gross_total)
+            elif discount_type == "percentage":
+                discount_amount = (gross_total * min(discount_value, 100)) / 100
+        
+        net_payable = gross_total - discount_amount
+        
+        old_net = entry.get("net_payable", entry.get("total_value", 0))
+        if old_net != net_payable:
+            changes.append(f"net_payable: ₹{old_net:,.0f} → ₹{net_payable:,.0f}")
+        
+        update_dict["discount_type"] = discount_type
+        update_dict["discount_value"] = discount_value
+        update_dict["discount_amount"] = discount_amount
+        update_dict["net_payable"] = net_payable
+        update_dict["total_value"] = net_payable  # backward compat
+        
+        # Recalculate amount_remaining based on payments already made
+        total_paid = entry.get("total_paid", 0)
+        new_remaining = max(0, net_payable - total_paid)
+        update_dict["amount_remaining"] = new_remaining
+        update_dict["payment_status"] = "paid" if new_remaining <= 0 else ("partial" if total_paid > 0 else "unpaid")
     
     # Handle purchase_type change and linkage
     if update.purchase_type:

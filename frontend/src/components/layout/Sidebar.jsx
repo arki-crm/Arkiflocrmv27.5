@@ -565,6 +565,15 @@ const Sidebar = () => {
               </>
             )}
           </button>
+          
+          {/* Version Label */}
+          {!isCollapsed && (
+            <div className="mt-2 px-3 text-center">
+              <span className="text-[10px] text-slate-400 font-medium tracking-wide" data-testid="app-version">
+                Arkiflo v{packageJson.version}
+              </span>
+            </div>
+          )}
         </div>
       </aside>
     </TooltipProvider>

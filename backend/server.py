@@ -25394,6 +25394,9 @@ class ExecutionEntryCreate(BaseModel):
     execution_date: str  # YYYY-MM-DD
     purchase_type: str = "credit"  # "cash" or "credit"
     items: List[ExecutionLineItem]  # Multiple line items per invoice
+    # Discount fields (invoice-level)
+    discount_type: Optional[str] = None  # "flat" or "percentage"
+    discount_value: Optional[float] = None  # Discount amount or percentage value
     linked_cashbook_id: Optional[str] = None  # Reference to payment (for cash purchase)
     linked_liability_id: Optional[str] = None  # Reference to liability (for credit purchase)
     remarks: Optional[str] = None
@@ -25408,6 +25411,9 @@ class ExecutionEntryUpdate(BaseModel):
     execution_date: Optional[str] = None
     purchase_type: Optional[str] = None
     items: Optional[List[ExecutionLineItem]] = None
+    # Discount fields (invoice-level)
+    discount_type: Optional[str] = None  # "flat" or "percentage"
+    discount_value: Optional[float] = None  # Discount amount or percentage value
     linked_cashbook_id: Optional[str] = None
     linked_liability_id: Optional[str] = None
     remarks: Optional[str] = None

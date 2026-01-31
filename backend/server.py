@@ -5947,7 +5947,11 @@ async def confirm_booking_payment(lead_id: str, request: Request):
 # ============ QUOTATION HISTORY (Append-Only Log) ============
 class QuotationHistoryEntry(BaseModel):
     quoted_value: float
+    status: str = "Tentative"  # Tentative, Revised, Approved, Superseded
     note: Optional[str] = None
+
+
+QUOTATION_STATUSES = ["Tentative", "Revised", "Approved", "Superseded"]
 
 
 @api_router.post("/leads/{lead_id}/quotation-history")

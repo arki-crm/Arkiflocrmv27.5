@@ -3171,7 +3171,21 @@ async def get_project(project_id: str, request: Request):
         "client_requirements": project.get("client_requirements"),
         "lead_source": project.get("lead_source"),
         "budget": project.get("budget"),
+        "inquiry_value": project.get("inquiry_value") or project.get("budget"),  # Original inquiry value
         "project_value": project.get("project_value"),
+        "contract_value": project.get("contract_value") or project.get("project_value"),  # Contract/Sign-off value
+        # Value Lifecycle fields
+        "booked_value": project.get("booked_value") or 0,  # Value at booking (immutable)
+        "contract_value_locked": project.get("contract_value_locked", False),
+        "contract_value_locked_at": project.get("contract_value_locked_at"),
+        "contract_value_locked_by": project.get("contract_value_locked_by"),
+        "contract_value_locked_by_name": project.get("contract_value_locked_by_name"),
+        "quotation_history": project.get("quotation_history", []),  # Append-only log
+        "discount_amount": project.get("discount_amount") or 0,
+        "discount_reason": project.get("discount_reason"),
+        "discount_approved_by": project.get("discount_approved_by"),
+        "discount_approved_by_name": project.get("discount_approved_by_name"),
+        "discount_approved_at": project.get("discount_approved_at"),
         "stage": project["stage"],
         "hold_status": project.get("hold_status", "Active"),
         "hold_reason": project.get("hold_reason"),

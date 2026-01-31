@@ -5967,15 +5967,30 @@ async def add_lead_quotation_history(lead_id: str, entry: QuotationHistoryEntry,
     current_history = lead.get("quotation_history", [])
     new_version = len(current_history) + 1
     
+    # Validate status
+    if entry.status not in QUOTATION_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(QUOTATION_STATUSES)}")
+    
     now = datetime.now(timezone.utc)
     new_entry = {
         "version": new_version,
         "quoted_value": entry.quoted_value,
+        "status": entry.status,
         "created_at": now.isoformat(),
         "created_by": user.user_id,
         "created_by_name": user.name,
         "note": entry.note
     }
+    
+    # If new entry is "Approved", mark all previous entries as "Superseded"
+    if entry.status == "Approved" and current_history:
+        for i, hist in enumerate(current_history):
+            if hist.get("status") not in ["Superseded"]:
+                current_history[i]["status"] = "Superseded"
+        await db.leads.update_one(
+            {"lead_id": lead_id},
+            {"$set": {"quotation_history": current_history}}
+        )
     
     await db.leads.update_one(
         {"lead_id": lead_id},

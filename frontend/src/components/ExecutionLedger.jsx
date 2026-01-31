@@ -346,6 +346,9 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
           unit: item.unit || 'pcs',
           rate: parseFloat(item.rate)
         })),
+        // Discount fields
+        discount_type: form.discount_type || null,
+        discount_value: form.discount_value ? parseFloat(form.discount_value) : null,
         remarks: form.remarks || null
       };
 

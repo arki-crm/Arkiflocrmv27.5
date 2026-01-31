@@ -127,6 +127,8 @@ const emptyForm = {
   execution_date: new Date().toISOString().split('T')[0],
   purchase_type: 'credit',
   items: [{ ...emptyLineItem }],
+  discount_type: '',  // 'flat' or 'percentage'
+  discount_value: '',  // Amount or percentage value
   remarks: ''
 };
 

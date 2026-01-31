@@ -240,10 +240,19 @@ const Login = () => {
         This provides critical build identification for debugging and support.
       */}
       <div 
-        className="fixed bottom-3 right-4 text-[10px] text-slate-400/70 font-mono tracking-tight select-none pointer-events-none z-50"
+        className="fixed bottom-3 right-4 z-50"
+        style={{
+          fontSize: '12px',
+          fontWeight: 500,
+          color: '#6B7280',
+          backgroundColor: 'rgba(255,255,255,0.85)',
+          padding: '4px 10px',
+          borderRadius: '6px',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+        }}
         data-testid="app-version-label"
       >
-        Arkiflo v{packageJson.version} • build {process.env.REACT_APP_BUILD_COMMIT || 'dev'}
+        Arkiflo v{packageJson.version} • Build 2026-01-31
       </div>
     </div>
   );

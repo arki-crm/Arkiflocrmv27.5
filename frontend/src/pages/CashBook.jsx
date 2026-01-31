@@ -366,6 +366,49 @@ const CashBook = () => {
     }
   };
 
+  // Handle Self-Transfer submission
+  const handleSelfTransfer = async () => {
+    if (!transferForm.from_account_id || !transferForm.to_account_id) {
+      toast.error('Please select both source and destination accounts');
+      return;
+    }
+    if (transferForm.from_account_id === transferForm.to_account_id) {
+      toast.error('Source and destination accounts must be different');
+      return;
+    }
+    if (!transferForm.amount || parseFloat(transferForm.amount) <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const response = await axios.post(`${API}/accounting/self-transfer`, {
+        from_account_id: transferForm.from_account_id,
+        to_account_id: transferForm.to_account_id,
+        amount: parseFloat(transferForm.amount),
+        transfer_date: transferForm.transfer_date,
+        notes: transferForm.notes || null
+      }, { withCredentials: true });
+
+      toast.success(response.data.message || 'Transfer completed successfully');
+      setIsTransferDialogOpen(false);
+      setTransferForm({
+        from_account_id: '',
+        to_account_id: '',
+        amount: '',
+        transfer_date: new Date().toISOString().split('T')[0],
+        notes: ''
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Self-transfer failed:', error);
+      toast.error(error.response?.data?.detail || 'Transfer failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const changeDate = (direction) => {
     const current = new Date(selectedDate);
     current.setDate(current.getDate() + direction);

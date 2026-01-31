@@ -111,10 +111,20 @@ const CashBook = () => {
   const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isCloseDayDialogOpen, setIsCloseDayDialogOpen] = useState(false);
+  const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showNeedsReviewOnly, setShowNeedsReviewOnly] = useState(false);
   const [viewTransaction, setViewTransaction] = useState(null); // For viewing transaction details with attachments
   const [pendingFiles, setPendingFiles] = useState([]); // Files to upload after transaction creation
+  
+  // Self-transfer form
+  const [transferForm, setTransferForm] = useState({
+    from_account_id: '',
+    to_account_id: '',
+    amount: '',
+    transfer_date: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
   
   // New transaction form
   const [newTxn, setNewTxn] = useState({

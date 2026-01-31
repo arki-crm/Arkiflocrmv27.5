@@ -25523,10 +25523,16 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
         "purchase_type": entry.purchase_type,
         "items": processed_items,
         "item_count": len(processed_items),
-        "total_value": total_value,
-        # Payment tracking fields
+        # Value fields - gross is sum of line items, net is payable after discount
+        "gross_total": gross_total,  # Sum of line items (immutable)
+        "discount_type": discount_type,  # "flat" or "percentage"
+        "discount_value": discount_value,  # Original discount input value
+        "discount_amount": discount_amount,  # Calculated discount amount
+        "net_payable": net_payable,  # Gross - Discount (this is what gets paid)
+        "total_value": net_payable,  # For backward compatibility, equals net_payable
+        # Payment tracking fields - based on net_payable
         "total_paid": 0,
-        "amount_remaining": total_value,
+        "amount_remaining": net_payable,
         "payment_status": "unpaid",  # unpaid, partial, paid
         "payments": [],  # Array of payment records
         # Legacy link fields (kept for backward compatibility, but now managed via payments)

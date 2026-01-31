@@ -21291,16 +21291,18 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
     # Also create a cashbook transaction (inflow)
     txn_doc = {
         "transaction_id": f"txn_{secrets.token_hex(4)}",
+        "transaction_date": payment_date,  # CRITICAL: Must match receipt payment date
         "transaction_type": "inflow",
         "amount": receipt.amount,
         "mode": receipt.payment_mode,
-        "category_id": None,  # Customer payment
+        "category_id": "customer_payment",  # Customer payment category
         "account_id": receipt.account_id,
         "project_id": receipt.project_id,
         "paid_to": None,
         "received_from": project.get("client_name"),
         "remarks": f"Payment receipt {receipt_number} - {receipt.stage_name or 'Customer Payment'}",
         "receipt_id": receipt_doc["receipt_id"],
+        "is_receipt_linked": True,  # Mark as receipt-linked to prevent duplicates
         "is_verified": False,
         "created_by": user.user_id,
         "created_by_name": user.name,
@@ -21310,6 +21312,12 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
     
     await db.finance_receipts.insert_one(receipt_doc)
     await db.accounting_transactions.insert_one(txn_doc)
+    
+    # Update account balance
+    await db.accounting_accounts.update_one(
+        {"account_id": receipt.account_id},
+        {"$inc": {"current_balance": receipt.amount}}
+    )
     
     # Audit log for receipt creation
     await create_audit_log(

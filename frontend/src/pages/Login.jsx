@@ -232,13 +232,18 @@ const Login = () => {
           </p>
         </CardContent>
       </Card>
-      
-      {/* Version Label */}
-      <div className="mt-4 text-center">
-        <span className="text-xs text-slate-400" data-testid="login-app-version">
-          Arkiflo v{packageJson.version}
-        </span>
       </div>
+      
+      {/* 
+        App Version Label - FIXED TO VIEWPORT
+        Do not remove or hide this label in future UI changes.
+        This provides critical build identification for debugging and support.
+      */}
+      <div 
+        className="fixed bottom-3 right-4 text-[10px] text-slate-400/70 font-mono tracking-tight select-none pointer-events-none z-50"
+        data-testid="app-version-label"
+      >
+        Arkiflo v{packageJson.version} • build {process.env.REACT_APP_BUILD_COMMIT || 'dev'}
       </div>
     </div>
   );

@@ -483,31 +483,160 @@ const CashBook = () => {
 
           {/* Actions */}
           {canAddTransaction && !isDayLocked && (
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700" data-testid="add-transaction-btn">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Entry
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
-                <DialogHeader className="flex-shrink-0">
-                  <DialogTitle>Add Transaction</DialogTitle>
-                  <DialogDescription>
-                    Record a new financial entry for {formatDate(selectedDate)}
-                  </DialogDescription>
-                </DialogHeader>
-                
-                <div className="space-y-4 py-4 overflow-y-auto flex-1 pr-2">
-                  {/* Type */}
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant={newTxn.transaction_type === 'inflow' ? 'default' : 'outline'}
-                      className={cn(
-                        "flex-1",
-                        newTxn.transaction_type === 'inflow' && "bg-green-600 hover:bg-green-700"
+            <>
+              {/* Self-Transfer Button */}
+              <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50" data-testid="self-transfer-btn">
+                    <ArrowLeftRight className="w-4 h-4 mr-2" />
+                    Self Transfer
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[450px]">
+                  <DialogHeader>
+                    <DialogTitle>Internal Transfer</DialogTitle>
+                    <DialogDescription>
+                      Transfer funds between your accounts (Bank ↔ Bank, Bank ↔ Petty Cash)
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="space-y-4 py-4">
+                    {/* From Account */}
+                    <div className="space-y-2">
+                      <Label>From Account *</Label>
+                      <Select 
+                        value={transferForm.from_account_id} 
+                        onValueChange={(v) => setTransferForm(p => ({ ...p, from_account_id: v }))}
+                      >
+                        <SelectTrigger data-testid="transfer-from-account">
+                          <SelectValue placeholder="Select source account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accounts.map((acc) => (
+                            <SelectItem 
+                              key={acc.account_id} 
+                              value={acc.account_id}
+                              disabled={acc.account_id === transferForm.to_account_id}
+                            >
+                              {acc.name} (₹{(acc.current_balance || 0).toLocaleString('en-IN')})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* To Account */}
+                    <div className="space-y-2">
+                      <Label>To Account *</Label>
+                      <Select 
+                        value={transferForm.to_account_id} 
+                        onValueChange={(v) => setTransferForm(p => ({ ...p, to_account_id: v }))}
+                      >
+                        <SelectTrigger data-testid="transfer-to-account">
+                          <SelectValue placeholder="Select destination account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accounts.map((acc) => (
+                            <SelectItem 
+                              key={acc.account_id} 
+                              value={acc.account_id}
+                              disabled={acc.account_id === transferForm.from_account_id}
+                            >
+                              {acc.name} (₹{(acc.current_balance || 0).toLocaleString('en-IN')})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Amount */}
+                    <div className="space-y-2">
+                      <Label>Amount (₹) *</Label>
+                      <Input
+                        type="number"
+                        value={transferForm.amount}
+                        onChange={(e) => setTransferForm(p => ({ ...p, amount: e.target.value }))}
+                        placeholder="Enter amount"
+                        min="1"
+                        data-testid="transfer-amount"
+                      />
+                    </div>
+
+                    {/* Transfer Date */}
+                    <div className="space-y-2">
+                      <Label>Transfer Date</Label>
+                      <Input
+                        type="date"
+                        value={transferForm.transfer_date}
+                        onChange={(e) => setTransferForm(p => ({ ...p, transfer_date: e.target.value }))}
+                        data-testid="transfer-date"
+                      />
+                    </div>
+
+                    {/* Notes */}
+                    <div className="space-y-2">
+                      <Label>Notes (Optional)</Label>
+                      <Input
+                        value={transferForm.notes}
+                        onChange={(e) => setTransferForm(p => ({ ...p, notes: e.target.value }))}
+                        placeholder="e.g., Monthly petty cash replenishment"
+                        data-testid="transfer-notes"
+                      />
+                    </div>
+                  </div>
+
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsTransferDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleSelfTransfer} 
+                      disabled={submitting}
+                      className="bg-purple-600 hover:bg-purple-700"
+                      data-testid="submit-transfer-btn"
+                    >
+                      {submitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Transferring...
+                        </>
+                      ) : (
+                        <>
+                          <ArrowLeftRight className="w-4 h-4 mr-2" />
+                          Transfer Funds
+                        </>
                       )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Add Entry Button */}
+              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-blue-600 hover:bg-blue-700" data-testid="add-transaction-btn">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Entry
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
+                  <DialogHeader className="flex-shrink-0">
+                    <DialogTitle>Add Transaction</DialogTitle>
+                    <DialogDescription>
+                      Record a new financial entry for {formatDate(selectedDate)}
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="space-y-4 py-4 overflow-y-auto flex-1 pr-2">
+                    {/* Type */}
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant={newTxn.transaction_type === 'inflow' ? 'default' : 'outline'}
+                        className={cn(
+                          "flex-1",
+                          newTxn.transaction_type === 'inflow' && "bg-green-600 hover:bg-green-700"
+                        )}
                       onClick={() => setNewTxn(prev => ({ ...prev, transaction_type: 'inflow', category_id: '' }))}
                       data-testid="type-inflow-btn"
                     >

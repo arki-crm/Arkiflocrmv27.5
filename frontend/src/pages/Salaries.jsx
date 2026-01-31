@@ -351,14 +351,14 @@ export default function Salaries() {
   }
 
   return (
-    <div className="space-y-6" data-testid="salaries-page">
+    <div className="space-y-6 p-6 min-h-screen overflow-y-auto" data-testid="salaries-page">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Salary Management</h1>
           <p className="text-gray-500 mt-1">Track employee salaries, advances, and payments</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button 
             variant="outline" 
             onClick={() => setShowLadderConfig(true)}

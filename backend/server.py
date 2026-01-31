@@ -6274,6 +6274,21 @@ async def convert_to_project(lead_id: str, request: Request):
         "files": project_files,  # Files from lead
         "notes": [],
         "project_value": lead.get("budget") or 0,
+        # ========== VALUE LIFECYCLE FIELDS ==========
+        "inquiry_value": lead.get("budget") or 0,  # Original inquiry value
+        "booked_value": lead.get("booked_value") or lead.get("budget") or 0,  # Value at booking (immutable)
+        "contract_value": lead.get("budget") or 0,  # Final contract value (lockable)
+        "contract_value_locked": False,
+        "contract_value_locked_at": None,
+        "contract_value_locked_by": None,
+        "quotation_history": lead.get("quotation_history", []),  # Carried from lead
+        # Discount tracking
+        "discount_amount": 0,
+        "discount_reason": None,
+        "discount_approved_by": None,
+        "discount_approved_by_name": None,
+        "discount_approved_at": None,
+        # ============================================
         "payment_schedule": [
             {
                 "stage": "Design Booking",

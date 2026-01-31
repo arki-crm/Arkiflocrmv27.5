@@ -627,7 +627,22 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="font-semibold text-lg">{formatCurrency(entry.total_value)}</p>
+                      {/* Show gross and discount if discount exists */}
+                      {entry.discount_amount > 0 ? (
+                        <>
+                          <p className="text-xs text-gray-400 line-through">{formatCurrency(entry.gross_total)}</p>
+                          <p className="font-semibold text-lg flex items-center justify-end gap-1">
+                            {formatCurrency(entry.net_payable || entry.total_value)}
+                            <span className="text-xs font-normal text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                              -{entry.discount_type === 'percentage' 
+                                ? `${entry.discount_value}%` 
+                                : formatCurrency(entry.discount_amount)}
+                            </span>
+                          </p>
+                        </>
+                      ) : (
+                        <p className="font-semibold text-lg">{formatCurrency(entry.total_value)}</p>
+                      )}
                       {paymentStatus !== 'unpaid' && (
                         <p className="text-xs text-gray-500">
                           Paid: <span className="text-green-600">{formatCurrency(totalPaid)}</span>

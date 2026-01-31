@@ -566,10 +566,13 @@ const Sidebar = () => {
             )}
           </button>
           
-          {/* Version Label */}
+          {/* Version Label - Do not remove or hide this label in future UI changes */}
           {!isCollapsed && (
             <div className="mt-2 px-3 text-center">
-              <span className="text-[10px] text-slate-400 font-medium tracking-wide" data-testid="app-version">
+              <span 
+                style={{ fontSize: '11px', fontWeight: 500, color: '#6B7280' }}
+                data-testid="app-version"
+              >
                 Arkiflo v{packageJson.version}
               </span>
             </div>

@@ -140,6 +140,7 @@ const emptyPaymentForm = {
 };
 
 export default function ExecutionLedger({ projectId, userRole, accounts = [] }) {
+  const { hasPermission } = useAuth();
   const [entries, setEntries] = useState([]);
   const [summary, setSummary] = useState({});
   const [totalValue, setTotalValue] = useState(0);

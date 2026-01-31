@@ -293,15 +293,15 @@ export default function Liabilities() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6" data-testid="liabilities-page">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-slate-50 p-6 overflow-y-auto" data-testid="liabilities-page">
+      <div className="max-w-7xl mx-auto space-y-6 pb-12">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Liability Register</h1>
+            <h1 className="text-2xl font-bold text-slate-900 whitespace-nowrap">Liability Register</h1>
             <p className="text-slate-500 text-sm mt-1">Track and manage financial obligations</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={exportToCSV} data-testid="export-csv-btn">
               <Download className="w-4 h-4 mr-2" />
               Export CSV

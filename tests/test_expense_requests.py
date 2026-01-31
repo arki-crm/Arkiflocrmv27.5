@@ -7,7 +7,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://revgatekeeper.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://quote-history.preview.emergentagent.com').rstrip('/')
 
 # Test data
 TEST_CATEGORY_ID = "cat_1a54fe27"  # Project Expenses

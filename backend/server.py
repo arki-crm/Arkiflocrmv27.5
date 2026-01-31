@@ -5902,7 +5902,10 @@ async def confirm_booking_payment(lead_id: str, request: Request):
         "created_at": now.isoformat()
     }
     
-    # Update lead with payment confirmation
+    # Update lead with payment confirmation AND capture booked_value
+    # booked_value is immutable once set - represents the value at which customer agreed to proceed
+    booked_value = lead.get("budget", 0) or 0
+    
     await db.leads.update_one(
         {"lead_id": lead_id},
         {
@@ -5911,6 +5914,7 @@ async def confirm_booking_payment(lead_id: str, request: Request):
                 "booking_payment_confirmed_by": user.user_id,
                 "booking_payment_confirmed_by_name": user.name,
                 "booking_payment_confirmed_at": now.isoformat(),
+                "booked_value": booked_value,  # Captured at booking, immutable
                 "updated_at": now.isoformat()
             },
             "$push": {"comments": system_comment}

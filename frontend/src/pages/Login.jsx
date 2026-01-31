@@ -94,10 +94,11 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4" data-testid="login-page">
-      <Card className="w-full max-w-md shadow-lg border-slate-200">
-        <CardHeader className="text-center pb-2">
-          {/* Logo */}
-          <div className="mx-auto mb-4 w-14 h-14 bg-blue-600 rounded-xl flex items-center justify-center">
+      <div className="flex flex-col items-center">
+        <Card className="w-full max-w-md shadow-lg border-slate-200">
+          <CardHeader className="text-center pb-2">
+            {/* Logo */}
+            <div className="mx-auto mb-4 w-14 h-14 bg-blue-600 rounded-xl flex items-center justify-center">
             <span className="text-white font-bold text-2xl" style={{ fontFamily: 'Manrope, sans-serif' }}>A</span>
           </div>
           <CardTitle 

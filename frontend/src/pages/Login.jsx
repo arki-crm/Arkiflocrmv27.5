@@ -231,6 +231,13 @@ const Login = () => {
           </p>
         </CardContent>
       </Card>
+      
+      {/* Version Label */}
+      <div className="mt-4 text-center">
+        <span className="text-xs text-slate-400" data-testid="login-app-version">
+          Arkiflo v{packageJson.version}
+        </span>
+      </div>
     </div>
   );
 };

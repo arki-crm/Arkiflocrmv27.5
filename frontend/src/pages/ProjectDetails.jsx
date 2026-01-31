@@ -67,6 +67,8 @@ import {
   NotesTab, 
   CollaboratorsTab,
   CustomPaymentScheduleEditor,
+  QuotationHistorySection,
+  ValueLifecycleCard,
   STAGES,
   STAGE_COLORS,
   ROLE_BADGE_STYLES,

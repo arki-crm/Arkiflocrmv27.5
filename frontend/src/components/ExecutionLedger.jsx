@@ -235,6 +235,8 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
         unit: item.unit || 'pcs',
         rate: item.rate?.toString() || ''
       })) || [{ ...emptyLineItem }],
+      discount_type: entry.discount_type || '',
+      discount_value: entry.discount_value?.toString() || '',
       remarks: entry.remarks || ''
     });
     setShowModal(true);

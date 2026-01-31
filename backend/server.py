@@ -7014,6 +7014,10 @@ async def add_project_quotation_history(project_id: str, entry: QuotationHistory
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    # Validate status
+    if entry.status not in QUOTATION_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(QUOTATION_STATUSES)}")
+    
     current_history = project.get("quotation_history", [])
     new_version = len(current_history) + 1
     
@@ -7021,17 +7025,29 @@ async def add_project_quotation_history(project_id: str, entry: QuotationHistory
     new_entry = {
         "version": new_version,
         "quoted_value": entry.quoted_value,
+        "status": entry.status,
         "created_at": now.isoformat(),
         "created_by": user.user_id,
         "created_by_name": user.name,
         "note": entry.note
     }
     
+    # If new entry is "Approved", mark all previous entries as "Superseded"
+    if entry.status == "Approved" and current_history:
+        for i, hist in enumerate(current_history):
+            if hist.get("status") not in ["Superseded"]:
+                current_history[i]["status"] = "Superseded"
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {"$set": {"quotation_history": current_history}}
+        )
+    
     await db.projects.update_one(
         {"project_id": project_id},
         {
             "$push": {"quotation_history": new_entry},
             "$set": {"updated_at": now.isoformat()}
+        }
         }
     )
     

@@ -1993,7 +1993,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.view_receipts", "finance.add_receipt",
         "finance.view_vendors", "finance.manage_vendors",
         "finance.view_expense_requests", "finance.create_expense_request",
-        "finance.approve_expense", "finance.record_expense"
+        "finance.approve_expense", "finance.record_expense",
+        "finance.create_invoice"  # Invoice creation permission
     ],
     
     # Finance Manager - Full finance control, all approvals, budget overrides

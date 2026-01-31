@@ -958,6 +958,7 @@ const CashBook = () => {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            </>
           )}
 
           {canCloseDay && !isDayLocked && transactions.length > 0 && (

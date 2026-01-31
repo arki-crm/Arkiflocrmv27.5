@@ -1116,9 +1116,22 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                 {payingEntry.invoice_no && (
                   <p className="text-sm text-gray-500">Invoice: {payingEntry.invoice_no}</p>
                 )}
+                {/* Show gross and discount if discount exists */}
+                {payingEntry.discount_amount > 0 && (
+                  <>
+                    <div className="flex justify-between mt-2 text-sm text-gray-500">
+                      <span>Gross Total:</span>
+                      <span>{formatCurrency(payingEntry.gross_total)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-amber-600">
+                      <span>Discount ({payingEntry.discount_type === 'percentage' ? `${payingEntry.discount_value}%` : 'Flat'}):</span>
+                      <span>−{formatCurrency(payingEntry.discount_amount)}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between mt-2 text-sm">
-                  <span>Invoice Total:</span>
-                  <span className="font-semibold">{formatCurrency(payingEntry.total_value)}</span>
+                  <span>Net Payable:</span>
+                  <span className="font-semibold">{formatCurrency(payingEntry.net_payable || payingEntry.total_value)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Already Paid:</span>

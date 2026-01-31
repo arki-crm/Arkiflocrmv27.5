@@ -798,45 +798,73 @@ const ProjectDetails = () => {
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6" data-testid="overview-tab">
-          {/* Left Column - Timeline (25%) */}
-          <Card className="border-slate-200 lg:col-span-1">
-            <CardContent className="p-4">
-              <TimelinePanel timeline={project?.timeline || []} currentStage={project?.stage} />
-            </CardContent>
-          </Card>
-
-          {/* Center Column - Comments (50%) */}
-          <Card className="border-slate-200 lg:col-span-2 flex flex-col" style={{ minHeight: '500px' }}>
-            <CardContent className="p-4 flex-1 flex flex-col">
-              <CommentsPanel 
-                comments={project?.comments || []}
-                onAddComment={handleAddComment}
-                isSubmitting={isSubmittingComment}
-                showLeadHistory={!!project?.lead_id}
-                leadId={project?.lead_id}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Right Column - Milestones (25%) */}
-          <div className="lg:col-span-1 space-y-4">
-            <Card className="border-slate-200">
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6" data-testid="overview-tab">
+            {/* Left Column - Timeline (25%) */}
+            <Card className="border-slate-200 lg:col-span-1">
               <CardContent className="p-4">
-                <StagesPanel 
-                  currentStage={project?.stage}
-                  completedSubStages={completedSubStages}
-                  percentageSubStages={percentageSubStages}
-                  onSubStageComplete={handleSubStageComplete}
-                  onPercentageUpdate={handlePercentageUpdate}
-                  canChangeStage={canChangeStage()}
-                  isUpdating={isUpdatingStage}
-                  userRole={user?.role}
-                  holdStatus={project?.hold_status || 'Active'}
-                  userMilestonePermissions={userMilestonePermissions}
+                <TimelinePanel timeline={project?.timeline || []} currentStage={project?.stage} />
+              </CardContent>
+            </Card>
+
+            {/* Center Column - Comments (50%) */}
+            <Card className="border-slate-200 lg:col-span-2 flex flex-col" style={{ minHeight: '500px' }}>
+              <CardContent className="p-4 flex-1 flex flex-col">
+                <CommentsPanel 
+                  comments={project?.comments || []}
+                  onAddComment={handleAddComment}
+                  isSubmitting={isSubmittingComment}
+                  showLeadHistory={!!project?.lead_id}
+                  leadId={project?.lead_id}
                 />
               </CardContent>
             </Card>
+
+            {/* Right Column - Milestones (25%) */}
+            <div className="lg:col-span-1 space-y-4">
+              <Card className="border-slate-200">
+                <CardContent className="p-4">
+                  <StagesPanel 
+                    currentStage={project?.stage}
+                    completedSubStages={completedSubStages}
+                    percentageSubStages={percentageSubStages}
+                    onSubStageComplete={handleSubStageComplete}
+                    onPercentageUpdate={handlePercentageUpdate}
+                    canChangeStage={canChangeStage()}
+                    isUpdating={isUpdatingStage}
+                    userRole={user?.role}
+                    holdStatus={project?.hold_status || 'Active'}
+                    userMilestonePermissions={userMilestonePermissions}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* Value Lifecycle & Quotation History - Below main grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ValueLifecycleCard
+              projectId={id}
+              inquiryValue={project?.budget || project?.inquiry_value || 0}
+              bookedValue={project?.booked_value || 0}
+              contractValue={project?.contract_value || project?.project_value || 0}
+              isContractLocked={project?.contract_value_locked || false}
+              lockedAt={project?.contract_value_locked_at}
+              lockedByName={project?.contract_value_locked_by_name}
+              discountAmount={project?.discount_amount || 0}
+              discountReason={project?.discount_reason}
+              discountApprovedByName={project?.discount_approved_by_name}
+              currentStage={project?.stage}
+              userRole={user?.role}
+              onDataUpdated={fetchProject}
+            />
+            <QuotationHistorySection
+              entityType="project"
+              entityId={id}
+              quotationHistory={project?.quotation_history || []}
+              canAddEntry={canChangeStage() || user?.role === 'Admin' || user?.role === 'Founder'}
+              onHistoryUpdated={fetchProject}
+            />
           </div>
         </div>
       )}

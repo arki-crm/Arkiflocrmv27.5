@@ -239,6 +239,7 @@ const Login = () => {
           Arkiflo v{packageJson.version}
         </span>
       </div>
+      </div>
     </div>
   );
 };

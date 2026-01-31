@@ -62,7 +62,9 @@ import {
   DollarSign,
   CheckCircle,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Percent,
+  Tag
 } from 'lucide-react';
 import VendorSelect from './VendorSelect';
 

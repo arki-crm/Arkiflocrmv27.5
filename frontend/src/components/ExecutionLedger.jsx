@@ -445,7 +445,11 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
     }));
   };
 
-  const canEdit = ['Admin', 'Founder', 'ProjectManager'].includes(userRole);
+  // Permission check - Finance users with proper permissions can add entries
+  const canEdit = ['Admin', 'Founder', 'ProjectManager'].includes(userRole) || 
+                  hasPermission('finance.execution_ledger.create') ||
+                  hasPermission('finance.add_transaction') ||
+                  hasPermission('finance.cashbook.create');
   const canDelete = userRole === 'Admin';
   const canRecordPayment = ['Admin', 'Founder', 'SeniorAccountant', 'FinanceManager', 'ProjectManager'].includes(userRole);
 

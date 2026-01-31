@@ -727,6 +727,24 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                       </TableBody>
                     </Table>
                     
+                    {/* Discount Summary in expanded view */}
+                    {entry.discount_amount > 0 && (
+                      <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Gross Total:</span>
+                          <span className="font-medium">{formatCurrency(entry.gross_total)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-amber-700">
+                          <span>Vendor Discount ({entry.discount_type === 'percentage' ? `${entry.discount_value}%` : 'Flat'}):</span>
+                          <span className="font-medium">−{formatCurrency(entry.discount_amount)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-semibold pt-1 mt-1 border-t border-amber-300">
+                          <span>Net Payable:</span>
+                          <span className="text-emerald-700">{formatCurrency(entry.net_payable || entry.total_value)}</span>
+                        </div>
+                      </div>
+                    )}
+                    
                     {/* Payment History */}
                     {hasPayments && (
                       <div className="mt-4 pt-4 border-t">

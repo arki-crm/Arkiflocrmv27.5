@@ -5944,6 +5944,45 @@ async def confirm_booking_payment(lead_id: str, request: Request):
         "system_comment": system_comment
     }
 
+# ============ QUOTATION HISTORY (Append-Only Log) ============
+class QuotationHistoryEntry(BaseModel):
+    quoted_value: float
+    note: Optional[str] = None
+
+
+@api_router.post("/leads/{lead_id}/quotation-history")
+async def add_lead_quotation_history(lead_id: str, entry: QuotationHistoryEntry, request: Request):
+    """Append a quotation entry to lead's quotation history. Append-only, no edit/delete."""
+    user = await get_current_user(request)
+    
+    lead = await db.leads.find_one({"lead_id": lead_id})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Get current history and determine version
+    current_history = lead.get("quotation_history", [])
+    new_version = len(current_history) + 1
+    
+    now = datetime.now(timezone.utc)
+    new_entry = {
+        "version": new_version,
+        "quoted_value": entry.quoted_value,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "note": entry.note
+    }
+    
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {
+            "$push": {"quotation_history": new_entry},
+            "$set": {"updated_at": now.isoformat()}
+        }
+    )
+    
+    return {"success": True, "entry": new_entry}
+
 @api_router.put("/leads/{lead_id}/assign-designer")
 async def assign_designer(lead_id: str, assign_data: LeadAssignDesigner, request: Request):
     """Assign a designer to a lead - requires leads.update permission"""

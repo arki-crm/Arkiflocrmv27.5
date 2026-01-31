@@ -15332,7 +15332,7 @@ async def create_self_transfer(transfer: SelfTransferCreate, request: Request):
     if from_account.get("current_balance", 0) < transfer.amount:
         raise HTTPException(
             status_code=400, 
-            detail=f"Insufficient balance in {from_account.get('name')}. Available: ₹{from_account.get('current_balance', 0):,.0f}"
+            detail=f"Insufficient balance in {from_account.get('account_name')}. Available: ₹{from_account.get('current_balance', 0):,.0f}"
         )
     
     now = datetime.now(timezone.utc)
@@ -15350,8 +15350,8 @@ async def create_self_transfer(transfer: SelfTransferCreate, request: Request):
         "account_id": transfer.from_account_id,
         "project_id": None,
         "vendor_id": None,
-        "paid_to": f"Transfer to {to_account.get('name')}",
-        "remarks": f"Internal Transfer to {to_account.get('name')}" + (f" - {transfer.notes}" if transfer.notes else ""),
+        "paid_to": f"Transfer to {to_account.get('account_name')}",
+        "remarks": f"Internal Transfer to {to_account.get('account_name')}" + (f" - {transfer.notes}" if transfer.notes else ""),
         "is_verified": True,  # Auto-verified as it's a controlled transfer
         "is_internal_transfer": True,
         "transfer_id": transfer_id,
@@ -15375,8 +15375,8 @@ async def create_self_transfer(transfer: SelfTransferCreate, request: Request):
         "account_id": transfer.to_account_id,
         "project_id": None,
         "vendor_id": None,
-        "received_from": f"Transfer from {from_account.get('name')}",
-        "remarks": f"Internal Transfer from {from_account.get('name')}" + (f" - {transfer.notes}" if transfer.notes else ""),
+        "received_from": f"Transfer from {from_account.get('account_name')}",
+        "remarks": f"Internal Transfer from {from_account.get('account_name')}" + (f" - {transfer.notes}" if transfer.notes else ""),
         "is_verified": True,
         "is_internal_transfer": True,
         "transfer_id": transfer_id,
@@ -15417,7 +15417,7 @@ async def create_self_transfer(transfer: SelfTransferCreate, request: Request):
             "to_account": to_account.get("name"),
             "amount": transfer.amount
         },
-        details=f"Internal transfer of ₹{transfer.amount:,.0f} from {from_account.get('name')} to {to_account.get('name')}"
+        details=f"Internal transfer of ₹{transfer.amount:,.0f} from {from_account.get('account_name')} to {to_account.get('account_name')}"
     )
     
     return {
@@ -15428,7 +15428,7 @@ async def create_self_transfer(transfer: SelfTransferCreate, request: Request):
         "from_account": from_account.get("name"),
         "to_account": to_account.get("name"),
         "amount": transfer.amount,
-        "message": f"Successfully transferred ₹{transfer.amount:,.0f} from {from_account.get('name')} to {to_account.get('name')}"
+        "message": f"Successfully transferred ₹{transfer.amount:,.0f} from {from_account.get('account_name')} to {to_account.get('account_name')}"
     }
 
 

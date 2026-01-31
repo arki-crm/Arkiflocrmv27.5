@@ -1521,6 +1521,62 @@ Final Value = Contract Value - Discount Amount
 
 ---
 
+## ✅ Vendor Invoice Discount Handling - COMPLETED Jan 31, 2026
+
+Invoice-level discount support for Execution Ledger to handle vendor discounts correctly for accounting and audit purposes.
+
+### Data Model Changes
+
+**New Fields in `execution_ledger` collection:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `gross_total` | float | Sum of line items (immutable) |
+| `discount_type` | string | "flat" or "percentage" |
+| `discount_value` | float | Discount input value |
+| `discount_amount` | float | Calculated discount amount |
+| `net_payable` | float | Gross - Discount (payment basis) |
+
+### Calculation Logic
+
+```
+Gross Total = Σ(quantity × rate) for all line items
+Discount Amount = 
+  - If flat: min(discount_value, gross_total)
+  - If percentage: (gross_total × discount_value) / 100
+Net Payable = Gross Total - Discount Amount
+```
+
+### Financial Flow
+
+| Operation | Uses Value |
+|-----------|------------|
+| Liability Creation (credit) | Net Payable |
+| Cashbook Outflow | Net Payable |
+| Project Actual Cost | Net Payable (via cashbook) |
+| Amount Remaining | Net Payable - Total Paid |
+| Reporting/Audit | Both Gross and Net stored |
+
+### UI Changes
+
+**Add/Edit Invoice Modal:**
+- "Vendor Discount (if any)" section with Type dropdown and Amount input
+- Summary shows: Gross Total, Discount (if any), Net Payable
+
+**Invoice List Display:**
+- Gross total shown crossed out for discounted invoices
+- Net payable with discount badge (e.g., "-5%" or "-₹2,000")
+- Expanded view shows full discount breakdown
+
+**Record Payment Modal:**
+- Shows Gross, Discount, and Net Payable summary
+
+### Testing Status:
+- ✅ Backend: Discount calculation verified for both flat and percentage
+- ✅ Frontend: UI displays correctly with discount badges
+- ✅ Payments: Correctly track remaining balance against net_payable
+
+---
+
 ## 🔜 Upcoming Tasks
 
 ### P1: Quotation Builder Module

@@ -963,11 +963,75 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                 </Table>
               </div>
               
-              {/* Total */}
-              <div className="flex justify-end mt-3">
-                <div className="text-right">
-                  <p className="text-sm text-gray-500">Invoice Total</p>
-                  <p className="text-2xl font-bold">{formatCurrency(calculateTotal())}</p>
+              {/* Discount & Total Section */}
+              <div className="flex justify-between items-start mt-3 gap-4">
+                {/* Discount Section */}
+                <div className="flex-1 border rounded-lg p-3 bg-amber-50">
+                  <Label className="text-sm font-medium flex items-center gap-1 mb-2">
+                    <Tag className="h-4 w-4 text-amber-600" />
+                    Vendor Discount (if any)
+                  </Label>
+                  <div className="flex gap-3 items-center">
+                    <Select
+                      value={form.discount_type}
+                      onValueChange={(v) => setForm(prev => ({ 
+                        ...prev, 
+                        discount_type: v,
+                        discount_value: v ? prev.discount_value : '' // Clear value if type cleared
+                      }))}
+                    >
+                      <SelectTrigger className="w-[120px] h-9">
+                        <SelectValue placeholder="Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="flat">Flat (₹)</SelectItem>
+                        <SelectItem value="percentage">Percent (%)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="relative flex-1">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                        {form.discount_type === 'percentage' ? '%' : '₹'}
+                      </span>
+                      <Input
+                        type="number"
+                        value={form.discount_value}
+                        onChange={(e) => setForm(prev => ({ ...prev, discount_value: e.target.value }))}
+                        placeholder="0"
+                        className="pl-6 h-9"
+                        disabled={!form.discount_type}
+                      />
+                    </div>
+                    {form.discount_type && form.discount_value && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-9 w-9"
+                        onClick={() => setForm(prev => ({ ...prev, discount_type: '', discount_value: '' }))}
+                      >
+                        <Trash2 className="h-4 w-4 text-gray-400" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Total Summary */}
+                <div className="text-right min-w-[180px]">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>Gross Total:</span>
+                      <span className="font-medium">{formatCurrency(calculateTotal())}</span>
+                    </div>
+                    {calculateDiscountAmount() > 0 && (
+                      <div className="flex justify-between text-sm text-amber-600">
+                        <span>Discount:</span>
+                        <span className="font-medium">−{formatCurrency(calculateDiscountAmount())}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between pt-1 border-t">
+                      <span className="font-semibold">Net Payable:</span>
+                      <span className="text-xl font-bold text-emerald-700">{formatCurrency(calculateNetPayable())}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

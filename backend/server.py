@@ -25476,11 +25476,11 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
     
     # Process line items and calculate totals
     processed_items = []
-    total_value = 0
+    gross_total = 0
     
     for idx, item in enumerate(entry.items):
         line_total = item.quantity * item.rate
-        total_value += line_total
+        gross_total += line_total
         processed_items.append({
             "item_id": f"item_{idx + 1}",
             "category": item.category,
@@ -25492,6 +25492,20 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
             "rate": item.rate,
             "line_total": line_total
         })
+    
+    # Calculate discount amount based on type
+    discount_type = entry.discount_type
+    discount_value = entry.discount_value or 0
+    discount_amount = 0
+    
+    if discount_type and discount_value > 0:
+        if discount_type == "flat":
+            discount_amount = min(discount_value, gross_total)  # Cap at gross total
+        elif discount_type == "percentage":
+            discount_amount = (gross_total * min(discount_value, 100)) / 100
+    
+    # Net payable = Gross - Discount
+    net_payable = gross_total - discount_amount
     
     # Validate purchase_type
     if entry.purchase_type not in ["cash", "credit"]:

@@ -285,6 +285,26 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
     }, 0);
   };
 
+  // Calculate discount amount based on type
+  const calculateDiscountAmount = () => {
+    const grossTotal = calculateTotal();
+    const discountValue = parseFloat(form.discount_value) || 0;
+    
+    if (!form.discount_type || discountValue <= 0) return 0;
+    
+    if (form.discount_type === 'flat') {
+      return Math.min(discountValue, grossTotal);
+    } else if (form.discount_type === 'percentage') {
+      return (grossTotal * Math.min(discountValue, 100)) / 100;
+    }
+    return 0;
+  };
+
+  // Net payable = Gross - Discount
+  const calculateNetPayable = () => {
+    return calculateTotal() - calculateDiscountAmount();
+  };
+
   const handleSubmit = async () => {
     // Validation
     if (!form.vendor_name) {

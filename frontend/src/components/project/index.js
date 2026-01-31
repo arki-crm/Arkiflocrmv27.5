@@ -7,6 +7,8 @@ export { NotesTab } from './NotesTab';
 export { CollaboratorsTab } from './CollaboratorsTab';
 export { CustomPaymentScheduleEditor } from './CustomPaymentScheduleEditor';
 export { default as FinancialGatesCard } from './FinancialGatesCard';
+export { default as QuotationHistorySection } from './QuotationHistorySection';
+export { default as ValueLifecycleCard } from './ValueLifecycleCard';
 export { 
   STAGES, 
   STAGE_COLORS, 

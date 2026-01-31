@@ -7062,7 +7062,6 @@ async def add_project_quotation_history(project_id: str, entry: QuotationHistory
             "$push": {"quotation_history": new_entry},
             "$set": {"updated_at": now.isoformat()}
         }
-        }
     )
     
     return {"success": True, "entry": new_entry}

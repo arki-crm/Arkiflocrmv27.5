@@ -6984,6 +6984,243 @@ async def seed_projects(request: Request):
     
     return {"message": f"Seeded {len(sample_projects)} sample projects", "count": len(sample_projects)}
 
+# ============ PROJECT VALUE LIFECYCLE ============
+
+@api_router.post("/projects/{project_id}/quotation-history")
+async def add_project_quotation_history(project_id: str, entry: QuotationHistoryEntry, request: Request):
+    """Append a quotation entry to project's quotation history. Append-only, no edit/delete."""
+    user = await get_current_user(request)
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    current_history = project.get("quotation_history", [])
+    new_version = len(current_history) + 1
+    
+    now = datetime.now(timezone.utc)
+    new_entry = {
+        "version": new_version,
+        "quoted_value": entry.quoted_value,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "note": entry.note
+    }
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$push": {"quotation_history": new_entry},
+            "$set": {"updated_at": now.isoformat()}
+        }
+    )
+    
+    return {"success": True, "entry": new_entry}
+
+
+@api_router.post("/projects/{project_id}/lock-contract-value")
+async def lock_contract_value(project_id: str, request: Request):
+    """Lock contract value after design sign-off. Once locked, only Admin/Founder can override."""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if project.get("contract_value_locked"):
+        raise HTTPException(status_code=400, detail="Contract value is already locked")
+    
+    now = datetime.now(timezone.utc)
+    contract_value = project.get("contract_value") or project.get("project_value") or 0
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$set": {
+                "contract_value": contract_value,
+                "contract_value_locked": True,
+                "contract_value_locked_at": now.isoformat(),
+                "contract_value_locked_by": user.user_id,
+                "contract_value_locked_by_name": user.name,
+                "updated_at": now.isoformat()
+            }
+        }
+    )
+    
+    # Add audit comment
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$push": {
+                "comments": {
+                    "id": f"comment_{uuid.uuid4().hex[:8]}",
+                    "user_id": user.user_id,
+                    "user_name": user.name,
+                    "message": f"🔒 Contract value locked at ₹{contract_value:,.0f}",
+                    "is_system": True,
+                    "created_at": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    return {"success": True, "contract_value": contract_value, "locked_at": now.isoformat()}
+
+
+class ContractValueOverride(BaseModel):
+    new_value: float
+    reason: str
+
+
+@api_router.post("/projects/{project_id}/override-contract-value")
+async def override_contract_value(project_id: str, override: ContractValueOverride, request: Request):
+    """Override locked contract value. Admin/Founder only with mandatory reason."""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Admin/Founder can override
+    if user_doc.get("role") not in ["Admin", "Founder"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Founder can override contract value")
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    old_value = project.get("contract_value") or project.get("project_value") or 0
+    now = datetime.now(timezone.utc)
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$set": {
+                "contract_value": override.new_value,
+                "project_value": override.new_value,  # Keep in sync
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "contract_value_overrides": {
+                    "old_value": old_value,
+                    "new_value": override.new_value,
+                    "reason": override.reason,
+                    "overridden_by": user.user_id,
+                    "overridden_by_name": user.name,
+                    "overridden_at": now.isoformat()
+                },
+                "comments": {
+                    "id": f"comment_{uuid.uuid4().hex[:8]}",
+                    "user_id": user.user_id,
+                    "user_name": user.name,
+                    "message": f"⚠️ CONTRACT VALUE OVERRIDE: ₹{old_value:,.0f} → ₹{override.new_value:,.0f}. Reason: {override.reason}",
+                    "is_system": True,
+                    "created_at": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    return {
+        "success": True,
+        "old_value": old_value,
+        "new_value": override.new_value,
+        "reason": override.reason
+    }
+
+
+class DiscountApplication(BaseModel):
+    discount_amount: float
+    reason: str
+
+
+@api_router.post("/projects/{project_id}/apply-discount")
+async def apply_discount(project_id: str, discount: DiscountApplication, request: Request):
+    """Apply discount to project. Admin/Founder only. Tracked with reason."""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Admin/Founder can apply discounts
+    if user_doc.get("role") not in ["Admin", "Founder"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Founder can apply discounts")
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if discount.discount_amount < 0:
+        raise HTTPException(status_code=400, detail="Discount amount cannot be negative")
+    
+    contract_value = project.get("contract_value") or project.get("project_value") or 0
+    if discount.discount_amount > contract_value:
+        raise HTTPException(status_code=400, detail="Discount cannot exceed contract value")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$set": {
+                "discount_amount": discount.discount_amount,
+                "discount_reason": discount.reason,
+                "discount_approved_by": user.user_id,
+                "discount_approved_by_name": user.name,
+                "discount_approved_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "comments": {
+                    "id": f"comment_{uuid.uuid4().hex[:8]}",
+                    "user_id": user.user_id,
+                    "user_name": user.name,
+                    "message": f"💰 Discount applied: ₹{discount.discount_amount:,.0f}. Reason: {discount.reason}. Final value: ₹{contract_value - discount.discount_amount:,.0f}",
+                    "is_system": True,
+                    "created_at": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    return {
+        "success": True,
+        "contract_value": contract_value,
+        "discount_amount": discount.discount_amount,
+        "final_value": contract_value - discount.discount_amount,
+        "reason": discount.reason
+    }
+
+
+@api_router.get("/projects/{project_id}/value-lifecycle")
+async def get_project_value_lifecycle(project_id: str, request: Request):
+    """Get complete value lifecycle data for analytics."""
+    user = await get_current_user(request)
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    contract_value = project.get("contract_value") or project.get("project_value") or 0
+    discount = project.get("discount_amount") or 0
+    
+    return {
+        "project_id": project_id,
+        "inquiry_value": project.get("inquiry_value") or project.get("budget") or 0,
+        "quotation_history": project.get("quotation_history", []),
+        "booked_value": project.get("booked_value") or 0,
+        "contract_value": contract_value,
+        "contract_value_locked": project.get("contract_value_locked", False),
+        "contract_value_locked_at": project.get("contract_value_locked_at"),
+        "contract_value_overrides": project.get("contract_value_overrides", []),
+        "discount_amount": discount,
+        "discount_reason": project.get("discount_reason"),
+        "discount_approved_by_name": project.get("discount_approved_by_name"),
+        "final_value": contract_value - discount,
+        # Analytics
+        "inquiry_to_booked_jump": (project.get("booked_value") or 0) - (project.get("inquiry_value") or project.get("budget") or 0),
+        "booked_to_contract_jump": contract_value - (project.get("booked_value") or 0),
+        "quotation_revisions_count": len(project.get("quotation_history", []))
+    }
+
+
 # ============ PROJECT FINANCIALS ============
 
 # Default payment schedule - Arki Dots business rules

@@ -438,15 +438,15 @@ const CashBook = () => {
   return (
     <div className="space-y-6 p-6 bg-slate-50 min-h-screen" data-testid="cash-book-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: 'Manrope, sans-serif' }}>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex-shrink-0">
+          <h1 className="text-2xl font-bold text-slate-900 whitespace-nowrap" style={{ fontFamily: 'Manrope, sans-serif' }}>
             Cash Book
           </h1>
           <p className="text-slate-500 text-sm mt-1">Daily financial transactions</p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Needs Review Badge - Visible to Admin/CEO */}
           {isAdminOrCEO && reviewSummary?.needs_review_count > 0 && (
             <Button

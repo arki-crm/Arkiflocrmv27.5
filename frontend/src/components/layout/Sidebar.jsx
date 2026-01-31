@@ -446,10 +446,10 @@ const Sidebar = () => {
           />
         </button>
         
-        {/* Submenu */}
+        {/* Submenu - scrollable for long lists */}
         <div className={cn(
           "overflow-hidden transition-all duration-200",
-          isExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+          isExpanded ? "max-h-[70vh] opacity-100 overflow-y-auto" : "max-h-0 opacity-0"
         )}>
           <div className="pl-4 py-1 space-y-0.5">
             {item.children?.map(child => {

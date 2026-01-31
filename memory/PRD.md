@@ -1426,6 +1426,101 @@ All auto-created Cashbook entries include:
 
 ---
 
+## ✅ Project Value & Quotation History - COMPLETED Jan 31, 2026
+
+A clean, minimal system to provide data capture and audit clarity for financial analysis on project value lifecycle.
+
+### Value Lifecycle Tracking
+
+**Independently Stored Values:**
+| Value Type | Description | Field |
+|------------|-------------|-------|
+| **Inquiry/Expected** | Initial budget from lead | `budget` / `inquiry_value` |
+| **Booked Value** | Value at booking confirmation (immutable) | `booked_value` |
+| **Contract/Sign-off Value** | Final agreed value (lockable) | `contract_value` |
+
+### Quotation History (Append-Only Log)
+
+**Purpose:** Track pricing evolution from initial inquiry to final contract.
+
+**Fields per Entry:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `version` | int | Auto-incrementing version number |
+| `quoted_value` | float | Quotation amount |
+| `status` | string | Tentative / Revised / Approved / Superseded |
+| `created_at` | datetime | When entry was created |
+| `created_by` | string | User ID who created |
+| `created_by_name` | string | User name |
+| `note` | string | Reason for change |
+
+**Status Logic:**
+- **Tentative**: Initial or exploratory quote
+- **Revised**: Updated quote based on scope changes
+- **Approved**: Final approved quote (auto-supersedes all previous)
+- **Superseded**: Replaced by newer approved quote (auto-set)
+
+### Contract Value Locking
+
+**Lock Behavior:**
+- Lock button visible **ONLY** at Design Finalization or Production Preparation stages
+- Once locked, value cannot be edited by regular users
+- UI shows "Contract Locked" badge with lock icon
+- Lock timestamp and user name displayed
+
+**Admin/Founder Override:**
+- Override button visible only for Admin/Founder when contract is locked
+- Mandatory reason required
+- Full audit trail: old value, new value, reason, timestamp, user
+
+### Discount Tracking
+
+**Fields:**
+- `discount_amount`: Approved discount value
+- `discount_reason`: Reason for discount
+- `discount_approved_by`: User ID who approved
+- `discount_approved_by_name`: User name
+
+**Final Value Calculation:**
+```
+Final Value = Contract Value - Discount Amount
+```
+
+### New API Endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/leads/{id}/quotation-history` | POST | Add quotation entry to lead |
+| `/api/projects/{id}/quotation-history` | POST | Add quotation entry to project |
+| `/api/projects/{id}/lock-contract-value` | POST | Lock contract value |
+| `/api/projects/{id}/override-contract-value` | POST | Admin override lock (with reason) |
+| `/api/projects/{id}/apply-discount` | POST | Apply approved discount |
+
+### Frontend Components:
+
+| Component | Location | Description |
+|-----------|----------|-------------|
+| `QuotationHistorySection` | `/app/frontend/src/components/project/` | Table display + Add Quote modal |
+| `ValueLifecycleCard` | `/app/frontend/src/components/project/` | Value summary + Lock/Override/Discount controls |
+
+### Integration Points:
+- **LeadDetails.jsx**: QuotationHistorySection added for leads not yet converted
+- **ProjectDetails.jsx**: Both components added in Overview tab below main grid
+- **GET /api/projects/{id}**: Returns all value lifecycle fields
+
+### Permissions:
+- **Add Quotation**: Any user who can update lead/project stage
+- **Lock Contract**: Any user with stage update permissions (visible at specific stages only)
+- **Override Lock**: Admin/Founder only
+- **Apply Discount**: Admin/Founder only
+
+### Testing Status:
+- ✅ Backend: 22/22 API tests passed
+- ✅ Frontend: All UI components verified
+- ✅ Test report: `/app/test_reports/iteration_29.json`
+
+---
+
 ## 🔜 Upcoming Tasks
 
 ### P1: Quotation Builder Module

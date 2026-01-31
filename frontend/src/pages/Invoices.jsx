@@ -156,11 +156,11 @@ const Invoices = () => {
   }
 
   return (
-    <div className="p-6 space-y-6" data-testid="invoices-page">
+    <div className="p-6 space-y-6 min-h-screen overflow-y-auto" data-testid="invoices-page">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-800 flex items-center gap-2">
+          <h1 className="text-2xl font-semibold text-slate-800 flex items-center gap-2 whitespace-nowrap">
             <FileText className="w-6 h-6 text-indigo-600" />
             Tax Invoices
           </h1>

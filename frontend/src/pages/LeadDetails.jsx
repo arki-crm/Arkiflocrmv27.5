@@ -1391,6 +1391,17 @@ const LeadDetails = () => {
         </div>
       )}
 
+      {/* Quotation History Section - Visible on leads not converted */}
+      {!lead?.is_converted && (
+        <QuotationHistorySection
+          entityType="lead"
+          entityId={id}
+          quotationHistory={lead?.quotation_history || []}
+          canAddEntry={canChangeStage()}
+          onHistoryUpdated={fetchLead}
+        />
+      )}
+
       {/* Meeting Modal */}
       <MeetingModal
         open={showMeetingModal}

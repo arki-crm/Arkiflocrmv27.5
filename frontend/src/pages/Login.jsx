@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label';
 import { Loader2, Mail, Lock, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import packageJson from '../../package.json';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 

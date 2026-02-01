@@ -110,7 +110,6 @@ const CashBook = () => {
   const [reviewSummary, setReviewSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isCloseDayDialogOpen, setIsCloseDayDialogOpen] = useState(false);
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showNeedsReviewOnly, setShowNeedsReviewOnly] = useState(false);
@@ -351,21 +350,6 @@ const CashBook = () => {
     }
   };
 
-  const handleCloseDay = async () => {
-    try {
-      setSubmitting(true);
-      await axios.post(`${API}/accounting/close-day/${selectedDate}`, {}, { withCredentials: true });
-      toast.success(`Day ${formatDate(selectedDate)} has been locked`);
-      setIsCloseDayDialogOpen(false);
-      fetchData();
-    } catch (error) {
-      console.error('Failed to close day:', error);
-      toast.error(error.response?.data?.detail || 'Failed to close day');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   // Handle Self-Transfer submission
   const handleSelfTransfer = async () => {
     if (!transferForm.from_account_id || !transferForm.to_account_id) {
@@ -416,7 +400,6 @@ const CashBook = () => {
   };
 
   const canAddTransaction = hasPermission('finance.add_transaction');
-  const canCloseDay = hasPermission('finance.close_day');
   const isDayLocked = dailySummary?.is_locked;
   const isAdminOrCEO = user?.role === 'Admin' || user?.role === 'CEO' || user?.role === 'Founder' || hasPermission('finance.founder_dashboard');
 
@@ -961,37 +944,6 @@ const CashBook = () => {
             </>
           )}
 
-          {canCloseDay && !isDayLocked && transactions.length > 0 && (
-            <Dialog open={isCloseDayDialogOpen} onOpenChange={setIsCloseDayDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="border-amber-500 text-amber-600 hover:bg-amber-50" data-testid="close-day-btn">
-                  <Lock className="w-4 h-4 mr-2" />
-                  Close Day
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Close Day - {formatDate(selectedDate)}</DialogTitle>
-                  <DialogDescription>
-                    This will lock all transactions for this day. No one will be able to add, edit, or delete entries after closing.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="py-4 space-y-2">
-                  <p className="text-sm"><strong>Total Inflow:</strong> {formatCurrency(dailySummary?.total_inflow)}</p>
-                  <p className="text-sm"><strong>Total Outflow:</strong> {formatCurrency(dailySummary?.total_outflow)}</p>
-                  <p className="text-sm"><strong>Net Change:</strong> {formatCurrency(dailySummary?.net_change)}</p>
-                  <p className="text-sm"><strong>Transactions:</strong> {dailySummary?.transaction_count}</p>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsCloseDayDialogOpen(false)}>Cancel</Button>
-                  <Button onClick={handleCloseDay} disabled={submitting} className="bg-amber-600 hover:bg-amber-700">
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Lock className="w-4 h-4 mr-2" />}
-                    Lock Day
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
         </div>
       </div>
 

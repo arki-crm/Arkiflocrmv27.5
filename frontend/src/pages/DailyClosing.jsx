@@ -119,15 +119,15 @@ const DailyClosing = () => {
   }
 
   return (
-    <div className="space-y-6 p-6 bg-slate-50 min-h-screen" data-testid="daily-closing-page">
+    <div className="space-y-6 p-6 bg-slate-50 min-h-screen" data-testid="daybook-page">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: 'Manrope, sans-serif' }}>
-            Daily Closing
+            Daybook
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Review and close daily financial entries
+            Daily summary for verification and closing
           </p>
         </div>
       </div>

@@ -25818,7 +25818,7 @@ async def update_execution_entry(execution_id: str, update: ExecutionEntryUpdate
         
         # Recalculate amount_remaining based on payments already made
         total_paid = entry.get("total_paid", 0)
-        new_remaining = max(0, net_payable - total_paid)
+        new_remaining = max(0, grand_total - total_paid)
         update_dict["amount_remaining"] = new_remaining
         update_dict["payment_status"] = "paid" if new_remaining <= 0 else ("partial" if total_paid > 0 else "unpaid")
     

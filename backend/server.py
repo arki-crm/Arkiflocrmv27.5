@@ -6246,20 +6246,20 @@ async def create_lead(lead_data: LeadCreate, request: Request):
         "customer_requirements": lead_data.customer_requirements,
         "source": lead_data.source,
         "budget": lead_data.budget,
-        # Lead Status
+        # Lead Status - starts at "Lead Allocated" (designer must manually progress to BC Call Done)
         "status": lead_data.status or "In Progress",
-        "stage": "BC Call Done",
+        "stage": "Lead Allocated",  # Starting stage - designer must manually complete BC Call
         "assigned_to": user.user_id if not has_view_all else lead_data.assigned_to,
         "designer_id": None,
         "is_converted": False,
         "project_id": None,
-        "timeline": generate_lead_timeline("BC Call Done", now.isoformat()),
+        "timeline": generate_lead_timeline("Lead Allocated", now.isoformat()),
         "comments": [{
             "id": f"comment_{uuid.uuid4().hex[:8]}",
             "user_id": "system",
             "user_name": "System",
             "role": "System",
-            "message": f"Lead created directly by {user.name}. PID: {pid}",
+            "message": f"Lead created directly by {user.name}. PID: {pid}. Designer has 24 hours to complete BC Call.",
             "is_system": True,
             "created_at": now.isoformat()
         }],

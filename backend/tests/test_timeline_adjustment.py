@@ -38,8 +38,10 @@ class TestSetup:
         })
         assert response.status_code == 200, f"Login failed: {response.text}"
         data = response.json()
-        assert "session_token" in data, "No session token in response"
+        assert data.get("success") == True, "Login not successful"
         assert "user" in data, "No user in response"
+        # Session token is set via Set-Cookie header
+        assert "session_token" in response.cookies or "set-cookie" in response.headers.get("set-cookie", "").lower() or response.cookies.get("session_token"), "No session token cookie"
         print(f"Login successful for: {data['user'].get('email')}")
 
 
@@ -49,19 +51,18 @@ def admin_session():
     # Setup admin first
     requests.post(f"{BASE_URL}/api/auth/setup-local-admin")
     
-    # Login
-    response = requests.post(f"{BASE_URL}/api/auth/local-login", json={
+    # Login with session to capture cookies
+    session = requests.Session()
+    session.headers.update({"Content-Type": "application/json"})
+    
+    response = session.post(f"{BASE_URL}/api/auth/local-login", json={
         "email": ADMIN_EMAIL,
         "password": ADMIN_PASSWORD
     })
     assert response.status_code == 200, f"Login failed: {response.text}"
     
-    data = response.json()
-    session_token = data.get("session_token")
-    
-    session = requests.Session()
-    session.cookies.set("session_token", session_token)
-    session.headers.update({"Content-Type": "application/json"})
+    # Session token is set via Set-Cookie header and captured by session
+    assert session.cookies.get("session_token"), "No session token cookie captured"
     
     return session
 

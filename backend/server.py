@@ -11935,6 +11935,7 @@ async def update_design_task(task_id: str, update: DesignTaskUpdate, request: Re
 async def create_measurement_request(design_project_id: str, data: MeasurementRequest, request: Request):
     """Create measurement request - auto-creates task and notifies team"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
     design_project = await db.design_projects.find_one(
         {"id": design_project_id},
@@ -11944,9 +11945,10 @@ async def create_measurement_request(design_project_id: str, data: MeasurementRe
     if not design_project:
         raise HTTPException(status_code=404, detail="Design project not found")
     
-    # Check permissions
-    if user.role not in ["Admin", "Manager", "DesignManager", "Designer", "HybridDesigner"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Check permissions - need tasks.create or be assigned designer
+    is_assigned = design_project.get("designer_id") == user.user_id
+    if not is_assigned and not has_permission(user_doc, "tasks.create"):
+        raise HTTPException(status_code=403, detail="Permission denied: tasks.create required or must be assigned designer")
     
     now = datetime.now(timezone.utc)
     

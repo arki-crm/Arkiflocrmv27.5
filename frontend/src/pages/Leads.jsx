@@ -127,20 +127,54 @@ const Leads = () => {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('all');
-  const [timeFilter, setTimeFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [seeding, setSeeding] = useState(false);
+  const [designers, setDesigners] = useState([]);
+  
+  // Advanced filters - loaded from localStorage
+  const [advancedFilters, setAdvancedFilters] = useState(() => loadFiltersFromStorage('leads'));
+
+  // Fetch designers for filter dropdown
+  const fetchDesigners = async () => {
+    if (!['Admin', 'SalesManager', 'DesignManager'].includes(user?.role)) return;
+    try {
+      const response = await axios.get(`${API}/users/designers`, { withCredentials: true });
+      setDesigners(response.data || []);
+    } catch (error) {
+      console.warn('Failed to fetch designers:', error);
+    }
+  };
 
   // Fetch leads
   const fetchLeads = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
+      
+      // Status filter
       if (activeFilter !== 'all') {
         params.append('status', activeFilter);
       }
-      if (timeFilter !== 'all') {
-        params.append('time_filter', timeFilter);
+      
+      // Time filter
+      if (advancedFilters.timeFilter && advancedFilters.timeFilter !== 'all') {
+        params.append('time_filter', advancedFilters.timeFilter);
+        if (advancedFilters.timeFilter === 'custom') {
+          if (advancedFilters.startDate) params.append('start_date', advancedFilters.startDate);
+          if (advancedFilters.endDate) params.append('end_date', advancedFilters.endDate);
+        }
+      }
+      
+      // Designer filter
+      if (advancedFilters.designerId && advancedFilters.designerId !== 'all') {
+        params.append('designer_id', advancedFilters.designerId);
+      }
+      
+      // Sorting
+      if (advancedFilters.sortBy) {
+        const [sortField, sortOrder] = advancedFilters.sortBy.split(':');
+        params.append('sort_by', sortField);
+        params.append('sort_order', sortOrder);
       }
       
       const response = await axios.get(`${API}/leads?${params.toString()}`, {
@@ -160,10 +194,21 @@ const Leads = () => {
     }
   };
 
+  // Save filters to localStorage when they change
+  const handleFiltersChange = (newFilters) => {
+    setAdvancedFilters(newFilters);
+    saveFiltersToStorage('leads', newFilters);
+  };
+
+  useEffect(() => {
+    fetchDesigners();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.role]);
+
   useEffect(() => {
     fetchLeads();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFilter, timeFilter]);
+  }, [activeFilter, advancedFilters]);
 
   // Client-side search
   const filteredLeads = useMemo(() => {

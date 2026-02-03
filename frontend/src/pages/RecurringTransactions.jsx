@@ -332,7 +332,7 @@ export default function RecurringTransactions() {
     return `₹${(amount || 0).toLocaleString('en-IN')}`;
   };
 
-  const canManage = user && ['Admin', 'Founder', 'SeniorAccountant'].includes(user.role);
+  const canManage = user && hasPermission('finance.cashbook.create');
   const pendingPayables = payables.filter(p => p.status === 'pending');
   const paidPayables = payables.filter(p => p.status === 'paid');
 

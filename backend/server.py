@@ -1611,6 +1611,29 @@ AVAILABLE_PERMISSIONS = {
             {"id": "service.update", "name": "Update Service Requests", "description": "Update service request status"}
         ]
     },
+    # Meetings Permissions
+    "meetings": {
+        "name": "Meetings",
+        "permissions": [
+            {"id": "meetings.view", "name": "View Meetings", "description": "View meetings (own only)"},
+            {"id": "meetings.view_all", "name": "View All Meetings", "description": "View all meetings in the system"},
+            {"id": "meetings.create", "name": "Create Meetings", "description": "Schedule new meetings"},
+            {"id": "meetings.update", "name": "Update Meetings", "description": "Update meeting details"},
+            {"id": "meetings.delete", "name": "Delete Meetings", "description": "Delete any meeting"}
+        ]
+    },
+    # Tasks Permissions
+    "tasks": {
+        "name": "Tasks",
+        "permissions": [
+            {"id": "tasks.view", "name": "View Tasks", "description": "View tasks (assigned only)"},
+            {"id": "tasks.view_all", "name": "View All Tasks", "description": "View all tasks in the system"},
+            {"id": "tasks.create", "name": "Create Tasks", "description": "Create new tasks"},
+            {"id": "tasks.update", "name": "Update Tasks", "description": "Update task status and details"},
+            {"id": "tasks.assign", "name": "Assign Tasks", "description": "Assign tasks to other users"},
+            {"id": "tasks.delete", "name": "Delete Tasks", "description": "Delete tasks"}
+        ]
+    },
     # Academy Permissions
     "academy": {
         "name": "Academy",

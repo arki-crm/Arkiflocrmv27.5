@@ -14120,8 +14120,9 @@ async def create_service_request_from_google_form(data: ServiceRequestFromGoogle
 async def assign_technician(request_id: str, data: ServiceRequestAssignTechnician, request: Request):
     """Assign a technician to a service request (requires service.assign_technician permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if not has_permission(user, "service.assign_technician"):
+    if not has_permission(user_doc, "service.assign_technician"):
         raise HTTPException(status_code=403, detail="You don't have permission to assign technicians")
     
     sr = await db.service_requests.find_one({"service_request_id": request_id}, {"_id": 0})

@@ -116,12 +116,13 @@ const Receipts = () => {
         payment_mode: newReceipt.payment_mode,
         account_id: newReceipt.account_id,
         stage_name: newReceipt.stage_name || null,
-        notes: newReceipt.notes || null
+        notes: newReceipt.notes || null,
+        payment_date: newReceipt.payment_date  // Custom receipt date
       }, { withCredentials: true });
       
       toast.success(`Receipt ${res.data.receipt_number} created`);
       setIsAddDialogOpen(false);
-      setNewReceipt({ project_id: '', amount: '', payment_mode: '', account_id: '', stage_name: '', notes: '' });
+      setNewReceipt({ project_id: '', amount: '', payment_mode: '', account_id: '', stage_name: '', notes: '', payment_date: new Date().toISOString().split('T')[0] });
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create receipt');

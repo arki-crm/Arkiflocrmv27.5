@@ -4663,11 +4663,11 @@ async def upload_file(project_id: str, file_data: FileUpload, request: Request):
 
 @api_router.delete("/projects/{project_id}/files/{file_id}")
 async def delete_file(project_id: str, file_id: str, request: Request):
-    """Delete a file (Admin only)"""
+    """Delete a file (requires admin.delete_files permission)"""
     user = await get_current_user(request)
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user, "admin.delete_files"):
+        raise HTTPException(status_code=403, detail="You don't have permission to delete files")
     
     result = await db.projects.update_one(
         {"project_id": project_id},

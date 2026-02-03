@@ -135,13 +135,13 @@ export default function AuditTrail() {
 
   const totalPages = Math.ceil(total / limit);
 
-  // Access check
-  if (!user || !['Admin', 'Founder'].includes(user.role)) {
+  // Access check - requires admin.view_logs permission
+  if (!user || !hasPermission('admin.view_logs')) {
     return (
       <div className="p-6">
         <Card className="border-red-200 bg-red-50">
           <CardContent className="p-6 text-center">
-            <p className="text-red-600">Access Denied. Only Admin and Founder can view the audit trail.</p>
+            <p className="text-red-600">Access Denied. Requires view logs permission to access audit trail.</p>
           </CardContent>
         </Card>
       </div>

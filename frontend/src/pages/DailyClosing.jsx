@@ -112,6 +112,164 @@ const DailyClosing = () => {
     }
   };
 
+  // Fetch detailed transactions for a specific date
+  const fetchDetailedTransactions = async (date) => {
+    try {
+      setLoadingDetailed(true);
+      setDetailedDate(date);
+      setShowDetailedView(true);
+      setDetailFilter({ account: 'all', type: 'all', search: '' });
+      
+      const response = await axios.get(`${API}/finance/daily-closing/${date}/transactions`, {
+        withCredentials: true
+      });
+      setDetailedData(response.data);
+    } catch (error) {
+      console.error('Failed to fetch detailed transactions:', error);
+      toast.error('Failed to load transaction details');
+      setShowDetailedView(false);
+    } finally {
+      setLoadingDetailed(false);
+    }
+  };
+
+  // Filter transactions in detailed view
+  const getFilteredTransactions = () => {
+    if (!detailedData?.transactions) return [];
+    
+    return detailedData.transactions.filter(txn => {
+      // Account filter
+      if (detailFilter.account !== 'all' && txn.account_id !== detailFilter.account) return false;
+      
+      // Type filter (inflow/outflow)
+      if (detailFilter.type === 'inflow' && txn.transaction_type !== 'inflow') return false;
+      if (detailFilter.type === 'outflow' && txn.transaction_type !== 'outflow') return false;
+      
+      // Search filter
+      if (detailFilter.search) {
+        const searchLower = detailFilter.search.toLowerCase();
+        const searchFields = [
+          txn.account_name,
+          txn.reference,
+          txn.category_name,
+          txn.purpose,
+          txn.counterparty,
+          txn.mode
+        ].filter(Boolean).join(' ').toLowerCase();
+        
+        if (!searchFields.includes(searchLower)) return false;
+      }
+      
+      return true;
+    });
+  };
+
+  // Export to CSV
+  const exportToCSV = () => {
+    const transactions = getFilteredTransactions();
+    if (transactions.length === 0) {
+      toast.error('No transactions to export');
+      return;
+    }
+    
+    const headers = ['Time', 'Account', 'Reference', 'Category/Purpose', 'Project/Vendor', 'Mode', 'Inflow', 'Outflow', 'Recorded By'];
+    const rows = transactions.map(txn => [
+      new Date(txn.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      txn.account_name,
+      txn.reference,
+      txn.purpose || txn.category_name,
+      txn.counterparty || '-',
+      txn.mode,
+      txn.inflow || '',
+      txn.outflow || '',
+      txn.recorded_by
+    ]);
+    
+    const csvContent = [
+      `Daybook - ${detailedDate}`,
+      '',
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `daybook_${detailedDate}.csv`;
+    link.click();
+    toast.success('Exported to CSV');
+  };
+
+  // Print daybook
+  const printDaybook = () => {
+    const printWindow = window.open('', '_blank');
+    const transactions = getFilteredTransactions();
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Daybook - ${detailedDate}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { font-size: 18px; margin-bottom: 5px; }
+          h2 { font-size: 14px; color: #666; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f5f5f5; }
+          .inflow { color: green; }
+          .outflow { color: red; }
+          .summary { margin-top: 20px; padding: 10px; background: #f9f9f9; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <h1>Daybook</h1>
+        <h2>${formatDate(detailedDate)}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Account</th>
+              <th>Reference</th>
+              <th>Category/Purpose</th>
+              <th>Project/Vendor</th>
+              <th>Mode</th>
+              <th>Inflow</th>
+              <th>Outflow</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${transactions.map(txn => `
+              <tr>
+                <td>${new Date(txn.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td>
+                <td>${txn.account_name}</td>
+                <td>${txn.reference}</td>
+                <td>${txn.purpose || txn.category_name}</td>
+                <td>${txn.counterparty || '-'}</td>
+                <td>${txn.mode}</td>
+                <td class="inflow">${txn.inflow ? formatCurrency(txn.inflow) : ''}</td>
+                <td class="outflow">${txn.outflow ? formatCurrency(txn.outflow) : ''}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="summary">
+          <strong>Summary:</strong> 
+          ${transactions.length} transactions | 
+          Inflow: ${formatCurrency(transactions.reduce((s, t) => s + (t.inflow || 0), 0))} | 
+          Outflow: ${formatCurrency(transactions.reduce((s, t) => s + (t.outflow || 0), 0))} | 
+          Net: ${formatCurrency(transactions.reduce((s, t) => s + (t.inflow || 0) - (t.outflow || 0), 0))}
+        </div>
+        <script>window.print();</script>
+      </body>
+      </html>
+    `;
+    
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps

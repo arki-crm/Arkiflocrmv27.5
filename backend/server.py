@@ -1916,13 +1916,18 @@ DEFAULT_ROLE_PERMISSIONS = {
     "Designer": [
         "leads.view", "leads.update",
         "projects.view", "milestones.update.design",
-        "academy.view"
+        "academy.view",
+        # Designer can hold projects/leads
+        "projects.hold", "leads.hold"
     ],
     "DesignManager": [
         "leads.view", "leads.view_all", "leads.update",
         "projects.view", "projects.view_all", "milestones.update.design", "projects.manage_collaborators",
         "academy.view", "academy.manage",
-        "admin.view_reports"
+        "admin.view_reports",
+        # DesignManager can hold/activate/deactivate
+        "projects.hold", "projects.activate", "projects.deactivate",
+        "leads.hold", "leads.activate", "leads.deactivate"
     ],
     "ProductionOpsManager": [
         "projects.view", "projects.view_all", 
@@ -1934,7 +1939,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "admin.view_reports",
         # Project Finance - view and edit vendor mapping
         "finance.project.view", "finance.project.vendor_mapping",
-        "finance.view_project_finance", "finance.edit_vendor_mapping"
+        "finance.view_project_finance", "finance.edit_vendor_mapping",
+        # ProductionOpsManager can hold/activate/deactivate projects
+        "projects.hold", "projects.activate", "projects.deactivate"
     ],
     "OperationLead": [
         # Ground-level execution role - assigned projects only

@@ -31,19 +31,20 @@ const SOURCE_COLORS = {
 };
 
 const LeadReport = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (user?.role && !['Admin', 'Manager', 'PreSales'].includes(user.role)) {
+    // PreSales can view lead reports, others need admin.view_reports
+    if (user && !hasPermission('admin.view_reports') && !hasPermission('presales.view')) {
       navigate('/reports');
       return;
     }
     fetchData();
-  }, [user, navigate]);
+  }, [user, navigate, hasPermission]);
 
   const fetchData = async () => {
     try {

@@ -131,6 +131,12 @@ const ProjectDetails = () => {
   const [holdReason, setHoldReason] = useState('');
   const [isUpdatingHoldStatus, setIsUpdatingHoldStatus] = useState(false);
   
+  // Timeline Adjustment state
+  const [showTimelineAdjustmentModal, setShowTimelineAdjustmentModal] = useState(false);
+  const [showTimelineHistoryModal, setShowTimelineHistoryModal] = useState(false);
+  const [isAdjustingTimeline, setIsAdjustingTimeline] = useState(false);
+  const [timelineHistory, setTimelineHistory] = useState([]);
+  
   // Settings state
   const [gstApplicable, setGstApplicable] = useState(false);
   const [gstNumber, setGstNumber] = useState('');

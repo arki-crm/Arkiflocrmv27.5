@@ -408,8 +408,8 @@ const UserEdit = () => {
       <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="profile">Profile</TabsTrigger>
-          {isAdmin && <TabsTrigger value="permissions">Permissions</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="security">Security</TabsTrigger>}
+          {canAssignPermissions && <TabsTrigger value="permissions">Permissions</TabsTrigger>}
+          {canAssignPermissions && <TabsTrigger value="security">Security</TabsTrigger>}
         </TabsList>
 
         {/* Profile Tab */}
@@ -567,7 +567,7 @@ const UserEdit = () => {
         </TabsContent>
 
         {/* Permissions Tab (Admin Only) */}
-        {isAdmin && (
+        {canAssignPermissions && (
           <TabsContent value="permissions">
             <Card className="border-slate-200">
               <CardHeader>
@@ -721,7 +721,7 @@ const UserEdit = () => {
         )}
 
         {/* Security Tab (Admin Only) */}
-        {isAdmin && (
+        {canAssignPermissions && (
           <TabsContent value="security">
             <Card className="border-slate-200">
               <CardHeader>

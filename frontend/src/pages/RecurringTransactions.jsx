@@ -13,7 +13,7 @@ import { RefreshCw, Plus, Play, Pause, Calendar, Edit2, Loader2, CheckCircle, XC
 const API = process.env.REACT_APP_BACKEND_URL;
 
 export default function RecurringTransactions() {
-  const { token, user } = useAuth();
+  const { token, user, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState('payables');
   const [templates, setTemplates] = useState([]);
   const [payables, setPayables] = useState([]);

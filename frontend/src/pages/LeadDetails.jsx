@@ -64,10 +64,12 @@ import TimelineAdjustmentModal, { TimelineHistoryModal } from '../components/Tim
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-// Lead stages
+// Lead stages - "Lead Allocated" is auto-completed on creation
+// Designer must manually progress through subsequent stages
 const LEAD_STAGES = [
-  "BC Call Done",
-  "BOQ Shared",
+  "Lead Allocated",      // Starting stage - auto-completed
+  "BC Call Done",        // Designer must complete within 24h
+  "BOQ Shared",          // Designer must complete within 48h after BC Call
   "Site Meeting",
   "Revised BOQ Shared",
   "Waiting for Booking",
@@ -75,6 +77,7 @@ const LEAD_STAGES = [
 ];
 
 const STAGE_COLORS = {
+  'Lead Allocated': { bg: 'bg-blue-100', text: 'text-blue-700', ring: 'ring-blue-400' },
   'BC Call Done': { bg: 'bg-slate-100', text: 'text-slate-600', ring: 'ring-slate-400' },
   'BOQ Shared': { bg: 'bg-amber-100', text: 'text-amber-700', ring: 'ring-amber-400' },
   'Site Meeting': { bg: 'bg-cyan-100', text: 'text-cyan-700', ring: 'ring-cyan-400' },

@@ -37,18 +37,19 @@ const DESIGN_STAGES = [
 ];
 
 const DesignManagerDashboard = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user?.role && !['Admin', 'Manager', 'DesignManager'].includes(user.role)) {
+    // Design managers and those with admin.view_reports can access
+    if (user && !hasPermission('admin.view_reports') && !hasPermission('projects.manage_collaborators')) {
       navigate('/dashboard');
       return;
     }
     fetchData();
-  }, [user, navigate]);
+  }, [user, navigate, hasPermission]);
 
   const fetchData = async () => {
     try {

@@ -252,7 +252,7 @@ const Login = () => {
         }}
         data-testid="app-version-label"
       >
-        Arkiflo v{packageJson.version} • Build 2026-01-31
+        Arkiflo v{packageJson.version} • Build 2026-02-03
       </div>
     </div>
   );

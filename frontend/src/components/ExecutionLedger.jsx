@@ -500,6 +500,10 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <FileText className="h-5 w-5 text-blue-600" />
+            Purchase Invoices
+          </h3>
           <p className="text-sm text-gray-500">
             {filteredEntries.length} purchase invoice(s) • Total: {formatCurrency(totalValue)}
           </p>

@@ -1,0 +1,73 @@
+{
+  "summary": "Lead Timeline/Milestone Business Logic Fix verified successfully. All 9 backend tests passed (100%). Frontend UI correctly displays 'Lead Allocated' as starting stage with auto-completion, 'BC Call Done' as pending (not auto-completed), and correct TAT-based expected dates.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: New lead starts at 'Lead Allocated' stage (not 'BC Call Done')",
+    "Backend: 'Lead Allocated' milestone is auto-completed on creation",
+    "Backend: 'BC Call Done' milestone is pending (NOT auto-completed)",
+    "Backend: 'First BOQ Sent' has correct TAT (48h/2 days after BC Call, cumulative 3 days)",
+    "Backend: Stage progression Lead Allocated -> BC Call Done works",
+    "Backend: Stage progression BC Call Done -> BOQ Shared works",
+    "Backend: Timeline shows correct expected dates based on TAT rules",
+    "Backend: LEAD_STAGES array includes 'Lead Allocated' as first stage",
+    "Backend: Existing test lead (lead_a0f72655) verified at 'Lead Allocated' stage",
+    "Frontend: Login flow works correctly",
+    "Frontend: Dashboard shows 'Lead Allocated' in Lead Stage Distribution chart",
+    "Frontend: Leads list shows 'Lead Allocated' stage badge (blue)",
+    "Frontend: Lead details shows 'Lead Allocated' as current stage",
+    "Frontend: Lead Timeline panel shows 'Lead Allocated' as completed (green checkmark)",
+    "Frontend: Lead Timeline panel shows 'BC Call Done' as pending (not auto-completed)",
+    "Frontend: Lead Timeline panel shows correct expected dates (day 0, day 1, day 3)",
+    "Frontend: Lead Stage panel shows correct progression order starting with 'Lead Allocated'"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_lead_timeline_milestone.py",
+    "/app/test_reports/pytest/lead_timeline_milestone_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend server.py: LEAD_STAGES correctly includes 'Lead Allocated' as first stage (line 587-595)",
+    "Backend server.py: LEAD_MILESTONES correctly maps 'Lead Allocated' to stage_ref (line 599-607)",
+    "Backend server.py: LEAD_TAT correctly defines TAT rules - Lead Allocated: 0, BC Call Done: 1, First BOQ Sent: 2 (line 613-621)",
+    "Backend server.py: generate_lead_timeline() correctly auto-completes only 'Lead Allocated' (line 5838-5841)",
+    "Backend server.py: create_lead() correctly starts at 'Lead Allocated' stage (line 6251)",
+    "Backend server.py: convert_presales_to_lead() correctly starts at 'Lead Allocated' stage (line 11875)",
+    "Frontend LeadDetails.jsx: LEAD_STAGES and STAGE_COLORS include 'Lead Allocated' (line 68-85)",
+    "Frontend Leads.jsx: STAGE_STYLES includes 'Lead Allocated' with blue styling (line 49-57)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_lead_timeline_milestone.py"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 tests passed, 1 skipped for pre-sales conversion)",
+    "frontend": "100% (all UI verifications passed)"
+  },
+  "test_credentials": {
+    "admin": {
+      "email": "thaha.pakayil@gmail.com",
+      "password": "password123"
+    }
+  },
+  "seed_data_creation": "Created multiple TEST_ prefixed leads during backend testing for verification. These are cleaned up after each test class.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Lead Timeline/Milestone business logic fix is fully verified. Key changes: 1) Leads now start at 'Lead Allocated' stage (not 'BC Call Done'), 2) Only 'Lead Allocated' is auto-completed on creation, 3) 'BC Call Done' requires manual completion by designer (24h TAT), 4) 'First BOQ Sent' requires manual completion (48h TAT after BC Call). Test file at /app/backend/tests/test_lead_timeline_milestone.py can be reused for regression testing.",
+  "verified_business_logic": {
+    "starting_stage": "Lead Allocated (correct - not BC Call Done)",
+    "auto_completed_milestone": "Lead Allocated only (correct)",
+    "pending_milestones": ["BC Call Done", "First BOQ Sent", "Site Meeting", "etc."],
+    "tat_rules": {
+      "Lead Allocated": "0 days (immediate, auto-completed)",
+      "BC Call Done": "1 day (24h TAT from lead allocation)",
+      "First BOQ Sent": "3 days cumulative (48h TAT after BC Call)"
+    }
+  }
+}

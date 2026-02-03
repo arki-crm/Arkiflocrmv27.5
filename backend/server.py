@@ -12537,7 +12537,7 @@ async def get_operations_dashboard(request: Request):
     """Dashboard for Operations Lead - post-production delivery and installation tracking"""
     user = await get_current_user(request)
     
-    if user.role not in ["Admin", "Manager", "OperationsLead"]:
+    if user.role not in ["Admin", "Manager", "OperationLead", "ProductionOpsManager"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
     now = datetime.now(timezone.utc)

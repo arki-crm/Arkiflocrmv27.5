@@ -5823,7 +5823,7 @@ async def update_lead_stage(lead_id: str, stage_update: LeadStageUpdate, request
     
     if new_index < old_index:
         # Backward movement requested - requires stage rollback permission
-        if not has_permission(user, "admin.stage_rollback"):
+        if not has_permission(user_doc, "admin.stage_rollback"):
             raise HTTPException(
                 status_code=400, 
                 detail=f"Cannot move backward from '{old_stage}' to '{new_stage}'. Stage progression is forward-only. Requires stage rollback permission."

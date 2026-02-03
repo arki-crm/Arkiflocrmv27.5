@@ -1970,7 +1970,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         # SalesManager can hold/activate/deactivate leads
         "leads.hold", "leads.activate", "leads.deactivate",
         # SalesManager can assign technicians
-        "service.assign_technician"
+        "service.assign_technician",
+        # SalesManager can adjust timelines
+        "timeline.adjust"
     ],
     "Designer": [
         "leads.view", "leads.update",
@@ -1986,7 +1988,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "admin.view_reports",
         # DesignManager can hold/activate/deactivate
         "projects.hold", "projects.activate", "projects.deactivate",
-        "leads.hold", "leads.activate", "leads.deactivate"
+        "leads.hold", "leads.activate", "leads.deactivate",
+        # DesignManager can adjust timelines
+        "timeline.adjust"
     ],
     "ProductionOpsManager": [
         "projects.view", "projects.view_all", 

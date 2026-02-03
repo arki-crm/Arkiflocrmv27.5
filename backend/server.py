@@ -2484,11 +2484,13 @@ async def get_designers(request: Request):
 
 @api_router.get("/users/{user_id}")
 async def get_user_by_id(user_id: str, request: Request):
-    """Get single user by ID (Admin and Manager only)"""
+    """Get single user by ID (requires admin.manage_users or admin.assign_permissions)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Can view own profile OR need admin permissions
+    if user.user_id != user_id and not has_permission(user_doc, "admin.manage_users") and not has_permission(user_doc, "admin.assign_permissions"):
+        raise HTTPException(status_code=403, detail="Permission denied")
     
     target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     

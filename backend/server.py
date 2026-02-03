@@ -1907,7 +1907,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "academy.view"
     ],
     "SalesManager": [
-        "presales.view", "presales.create", "presales.update", "presales.convert",
+        "presales.view", "presales.view_all", "presales.create", "presales.update", "presales.convert",
         "leads.view", "leads.view_all", "leads.create", "leads.update", "leads.convert",
         "projects.view", "projects.view_all",
         "warranty.view", "service.view", "service.view_all", "service.create",

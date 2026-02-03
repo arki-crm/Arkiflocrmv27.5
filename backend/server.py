@@ -11508,12 +11508,15 @@ def generate_meet_link():
 
 @api_router.post("/design-projects")
 async def create_design_project(data: DesignProjectCreate, request: Request):
-    """Initialize design workflow for a project after booking"""
+    """Initialize design workflow for a project after booking (requires design.manage)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    # Check permissions
-    if user.role not in ["Admin", "Manager", "DesignManager", "HybridDesigner"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Check permissions - need design.manage or be a collaborator on the project
+    has_design_manage = has_permission(user_doc, "projects.manage_collaborators")
+    
+    if not has_design_manage:
+        raise HTTPException(status_code=403, detail="Permission denied: projects.manage_collaborators required")
     
     # Check if project exists
     project = await db.projects.find_one(

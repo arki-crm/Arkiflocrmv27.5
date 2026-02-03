@@ -347,7 +347,7 @@ export default function RecurringTransactions() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {user?.role === 'Admin' && (
+          {hasPermission('admin.system_settings') && (
             <Button
               variant="outline"
               onClick={handleRunScheduled}

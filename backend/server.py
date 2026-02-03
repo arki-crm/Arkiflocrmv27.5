@@ -10650,12 +10650,12 @@ async def get_presales_detail(presales_id: str, request: Request):
     if not presales_lead:
         raise HTTPException(status_code=404, detail="Pre-sales lead not found")
     
-    # Permission check - PreSales can only see their own leads
-    if user.role == "PreSales":
-        if presales_lead.get("assigned_to") != user.user_id and presales_lead.get("created_by") != user.user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
-    elif user.role not in ["Admin", "SalesManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Permission check - users without presales.view_all can only see their own leads
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    is_owner = presales_lead.get("assigned_to") == user.user_id or presales_lead.get("created_by") == user.user_id
+    
+    if not is_owner and not has_permission(user_doc, "presales.view_all"):
+        raise HTTPException(status_code=403, detail="Permission denied")
     
     return presales_lead
 

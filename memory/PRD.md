@@ -12,12 +12,13 @@ Build a full-stack CRM application for an interior design company, managing the 
 ## Current Status: Permission System Purification COMPLETE ✅
 **As of February 2026**
 
-Major architectural refactoring completed. Permissions are now the single source of truth for access control across both backend AND frontend.
+Major architectural refactoring completed. Permissions are now the single source of truth for access control across both backend AND frontend. Role Management UI is now available.
 
 **Results:**
 - Backend: 199 → 105 role checks (47% reduction, all access gates migrated)
 - Frontend: 37 → 14 role checks (62% reduction, all access gates migrated)
 - Remaining checks are data-scoping/business logic (appropriately retained)
+- **NEW: Role Management UI** - Admins can create, edit, and delete custom roles
 
 ---
 

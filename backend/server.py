@@ -12994,11 +12994,13 @@ async def get_production_ops_dashboard(request: Request):
 async def get_sales_manager_dashboard(request: Request):
     """
     Dashboard for Sales Manager - monitors all pre-booking leads, sales performance, funnel analytics
+    Requires leads.view_all permission
     """
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in SALES_MANAGER_ROLES:
-        raise HTTPException(status_code=403, detail="Access denied. Sales Manager role required.")
+    if not has_permission(user_doc, "leads.view_all"):
+        raise HTTPException(status_code=403, detail="Permission denied: leads.view_all required")
     
     now = datetime.now(timezone.utc)
     

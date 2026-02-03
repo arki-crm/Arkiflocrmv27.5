@@ -4958,6 +4958,257 @@ async def update_project_hold_status(project_id: str, status_update: HoldStatusU
         "history_entry": history_entry
     }
 
+
+# ============ PROJECT TIMELINE ADJUSTMENT ============
+
+@api_router.post("/projects/{project_id}/adjust-timeline")
+async def adjust_project_timeline(project_id: str, adjustment: TimelineAdjustmentRequest, request: Request):
+    """Adjust project timeline - shift dates, set new completion, or mark on hold"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "timeline.adjust"):
+        raise HTTPException(status_code=403, detail="Permission denied: timeline.adjust required")
+    
+    # Validate adjustment reason
+    if adjustment.reason not in TIMELINE_ADJUSTMENT_REASONS:
+        raise HTTPException(status_code=400, detail=f"Invalid reason. Must be one of: {TIMELINE_ADJUSTMENT_REASONS}")
+    
+    # Validate remarks
+    if not adjustment.remarks or len(adjustment.remarks.strip()) < 10:
+        raise HTTPException(status_code=400, detail="Remarks are mandatory and must be at least 10 characters")
+    
+    # Validate adjustment type
+    valid_types = ["shift_forward", "new_completion_date", "on_hold", "resume"]
+    if adjustment.adjustment_type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"Invalid adjustment_type. Must be one of: {valid_types}")
+    
+    # Validate type-specific fields
+    if adjustment.adjustment_type == "shift_forward" and (not adjustment.shift_days or adjustment.shift_days < 1):
+        raise HTTPException(status_code=400, detail="shift_days must be provided and positive for shift_forward type")
+    
+    if adjustment.adjustment_type == "new_completion_date" and not adjustment.new_completion_date:
+        raise HTTPException(status_code=400, detail="new_completion_date must be provided for new_completion_date type")
+    
+    # Get the project
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Initialize timeline structures if not present
+    current_timeline = project.get("current_timeline", {})
+    baseline_timeline = project.get("baseline_timeline")
+    timeline_adjustments = project.get("timeline_adjustments", [])
+    
+    # If no baseline, create it from conversion date (project creation)
+    if not baseline_timeline:
+        baseline_timeline = {
+            "created_at": project.get("converted_at", project.get("created_at", now.isoformat())),
+            "expected_completion": project.get("expected_completion_date"),
+            "milestone_deadlines": project.get("milestone_deadlines", {})
+        }
+    
+    # Get completed milestones (these stay locked)
+    completed_milestones = []
+    milestones = project.get("milestones", {})
+    for stage_key, stage_data in milestones.items():
+        for substage in stage_data.get("substages", []):
+            if substage.get("completed"):
+                completed_milestones.append(substage.get("id", substage.get("name")))
+    
+    # Build adjustment record
+    adjustment_record = {
+        "id": f"adj_{uuid.uuid4().hex[:8]}",
+        "date": now.isoformat(),
+        "reason": adjustment.reason,
+        "remarks": adjustment.remarks.strip(),
+        "effective_date": adjustment.effective_date,
+        "adjustment_type": adjustment.adjustment_type,
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "previous_completion": current_timeline.get("expected_completion") or project.get("expected_completion_date"),
+        "affected_milestones": []
+    }
+    
+    # Process based on adjustment type
+    if adjustment.adjustment_type == "on_hold":
+        # Mark timeline as on hold
+        current_timeline["on_hold"] = True
+        current_timeline["hold_since"] = now.isoformat()
+        adjustment_record["new_completion"] = None
+        adjustment_record["shift_days"] = None
+        
+    elif adjustment.adjustment_type == "resume":
+        # Resume from hold - auto-shift by hold duration
+        if not current_timeline.get("on_hold"):
+            raise HTTPException(status_code=400, detail="Project is not on hold")
+        
+        hold_since = datetime.fromisoformat(current_timeline.get("hold_since", now.isoformat()).replace('Z', '+00:00'))
+        hold_duration = (now - hold_since).days
+        if hold_duration < 1:
+            hold_duration = 1
+        
+        adjustment_record["shift_days"] = hold_duration
+        
+        # Shift all future milestone deadlines
+        milestone_deadlines = current_timeline.get("milestone_deadlines", {}) or project.get("milestone_deadlines", {})
+        new_deadlines = {}
+        for milestone, deadline in milestone_deadlines.items():
+            if milestone in completed_milestones:
+                new_deadlines[milestone] = deadline  # Keep completed milestones unchanged
+            else:
+                if deadline:
+                    try:
+                        old_date = datetime.fromisoformat(deadline.replace('Z', '+00:00')) if 'T' in deadline else datetime.strptime(deadline, "%Y-%m-%d")
+                        new_date = old_date + timedelta(days=hold_duration)
+                        new_deadlines[milestone] = new_date.strftime("%Y-%m-%d")
+                        adjustment_record["affected_milestones"].append(milestone)
+                    except:
+                        new_deadlines[milestone] = deadline
+                else:
+                    new_deadlines[milestone] = deadline
+        
+        # Update completion date
+        old_completion = current_timeline.get("expected_completion") or project.get("expected_completion_date")
+        if old_completion:
+            try:
+                old_comp_date = datetime.fromisoformat(old_completion.replace('Z', '+00:00')) if 'T' in old_completion else datetime.strptime(old_completion, "%Y-%m-%d")
+                new_completion = old_comp_date + timedelta(days=hold_duration)
+                current_timeline["expected_completion"] = new_completion.strftime("%Y-%m-%d")
+                adjustment_record["new_completion"] = new_completion.strftime("%Y-%m-%d")
+            except:
+                pass
+        
+        current_timeline["milestone_deadlines"] = new_deadlines
+        current_timeline["on_hold"] = False
+        current_timeline["hold_since"] = None
+        
+    elif adjustment.adjustment_type == "shift_forward":
+        shift_days = adjustment.shift_days
+        adjustment_record["shift_days"] = shift_days
+        
+        # Shift all future milestone deadlines
+        milestone_deadlines = current_timeline.get("milestone_deadlines", {}) or project.get("milestone_deadlines", {})
+        new_deadlines = {}
+        for milestone, deadline in milestone_deadlines.items():
+            if milestone in completed_milestones:
+                new_deadlines[milestone] = deadline  # Keep completed milestones unchanged
+            else:
+                if deadline:
+                    try:
+                        old_date = datetime.fromisoformat(deadline.replace('Z', '+00:00')) if 'T' in deadline else datetime.strptime(deadline, "%Y-%m-%d")
+                        new_date = old_date + timedelta(days=shift_days)
+                        new_deadlines[milestone] = new_date.strftime("%Y-%m-%d")
+                        adjustment_record["affected_milestones"].append(milestone)
+                    except:
+                        new_deadlines[milestone] = deadline
+                else:
+                    new_deadlines[milestone] = deadline
+        
+        # Update completion date
+        old_completion = current_timeline.get("expected_completion") or project.get("expected_completion_date")
+        if old_completion:
+            try:
+                old_comp_date = datetime.fromisoformat(old_completion.replace('Z', '+00:00')) if 'T' in old_completion else datetime.strptime(old_completion, "%Y-%m-%d")
+                new_completion = old_comp_date + timedelta(days=shift_days)
+                current_timeline["expected_completion"] = new_completion.strftime("%Y-%m-%d")
+                adjustment_record["new_completion"] = new_completion.strftime("%Y-%m-%d")
+            except:
+                pass
+        
+        current_timeline["milestone_deadlines"] = new_deadlines
+        
+    elif adjustment.adjustment_type == "new_completion_date":
+        new_comp_date = datetime.strptime(adjustment.new_completion_date, "%Y-%m-%d")
+        old_completion = current_timeline.get("expected_completion") or project.get("expected_completion_date")
+        
+        if old_completion:
+            try:
+                old_comp_date = datetime.fromisoformat(old_completion.replace('Z', '+00:00')) if 'T' in old_completion else datetime.strptime(old_completion, "%Y-%m-%d")
+                # Calculate the shift needed
+                shift_days = (new_comp_date - old_comp_date).days
+                adjustment_record["shift_days"] = shift_days
+            except:
+                shift_days = 0
+        else:
+            shift_days = 0
+        
+        adjustment_record["new_completion"] = adjustment.new_completion_date
+        current_timeline["expected_completion"] = adjustment.new_completion_date
+        
+        # Proportionally adjust future milestone deadlines if shift_days != 0
+        if shift_days != 0:
+            milestone_deadlines = current_timeline.get("milestone_deadlines", {}) or project.get("milestone_deadlines", {})
+            new_deadlines = {}
+            for milestone, deadline in milestone_deadlines.items():
+                if milestone in completed_milestones:
+                    new_deadlines[milestone] = deadline
+                else:
+                    if deadline:
+                        try:
+                            old_date = datetime.fromisoformat(deadline.replace('Z', '+00:00')) if 'T' in deadline else datetime.strptime(deadline, "%Y-%m-%d")
+                            new_date = old_date + timedelta(days=shift_days)
+                            new_deadlines[milestone] = new_date.strftime("%Y-%m-%d")
+                            adjustment_record["affected_milestones"].append(milestone)
+                        except:
+                            new_deadlines[milestone] = deadline
+                    else:
+                        new_deadlines[milestone] = deadline
+            current_timeline["milestone_deadlines"] = new_deadlines
+    
+    # Update tracking fields
+    current_timeline["last_adjusted_at"] = now.isoformat()
+    current_timeline["adjustment_count"] = len(timeline_adjustments) + 1
+    
+    # Add adjustment to history
+    timeline_adjustments.append(adjustment_record)
+    
+    # Update the project
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "baseline_timeline": baseline_timeline,
+            "current_timeline": current_timeline,
+            "timeline_adjustments": timeline_adjustments,
+            "updated_at": now.isoformat()
+        }}
+    )
+    
+    # Log the action
+    await log_system_action("project_timeline_adjusted", user, {
+        "project_id": project_id,
+        "adjustment_type": adjustment.adjustment_type,
+        "reason": adjustment.reason
+    })
+    
+    return {
+        "message": "Timeline adjusted successfully",
+        "project_id": project_id,
+        "adjustment": adjustment_record,
+        "current_timeline": current_timeline
+    }
+
+
+@api_router.get("/projects/{project_id}/timeline-history")
+async def get_project_timeline_history(project_id: str, request: Request):
+    """Get timeline adjustment history for a project"""
+    user = await get_current_user(request)
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    return {
+        "project_id": project_id,
+        "baseline_timeline": project.get("baseline_timeline"),
+        "current_timeline": project.get("current_timeline"),
+        "timeline_adjustments": project.get("timeline_adjustments", []),
+        "is_on_hold": project.get("current_timeline", {}).get("on_hold", False)
+    }
+
+
 # ============ FILES ENDPOINTS ============
 
 @api_router.get("/projects/{project_id}/files")

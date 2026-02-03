@@ -79,6 +79,9 @@ import BackupManagement from './pages/BackupManagement';
 import PaymentReminders from './pages/PaymentReminders';
 import RecurringTransactions from './pages/RecurringTransactions';
 
+// Role Management
+import RoleManagement from './pages/RoleManagement';
+
 import './App.css';
 
 // Router component that handles session_id detection synchronously

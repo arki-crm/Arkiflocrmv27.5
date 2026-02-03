@@ -276,16 +276,26 @@ const PreSales = () => {
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <Input
-          type="text"
-          placeholder="Search by name or phone..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 bg-white border-slate-200 focus:border-blue-500"
-          data-testid="presales-search-input"
+      {/* Search Bar and Advanced Filters */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            type="text"
+            placeholder="Search by name or phone..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 bg-white border-slate-200 focus:border-blue-500"
+            data-testid="presales-search-input"
+          />
+        </div>
+        
+        {/* Advanced Filters */}
+        <AdvancedFilters
+          filters={advancedFilters}
+          onFiltersChange={handleFiltersChange}
+          type="presales"
+          showDesignerFilter={false}
         />
       </div>
 

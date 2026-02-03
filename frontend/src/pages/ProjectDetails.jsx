@@ -522,22 +522,22 @@ const ProjectDetails = () => {
   // Check if user can change stage
   const canChangeStage = () => {
     if (!user || !project) return false;
-    if (user.role === 'Admin' || user.role === 'SalesManager') return true;
-    if (user.role === 'Designer' || user.role === 'DesignManager') {
-      return project.collaborators?.some(c => c.user_id === user.user_id);
-    }
+    // Users with projects.update permission can change stage
+    if (hasPermission('projects.update') || hasPermission('milestones.update.design')) return true;
+    // Collaborators on the project can also change stage
+    if (project.collaborators?.some(c => c.user_id === user.user_id)) return true;
     return false;
   };
   
   // Hold/Activate/Deactivate permission checks
   const canHold = () => {
     if (!user) return false;
-    return ['Admin', 'Manager', 'DesignManager', 'ProductionManager', 'Designer'].includes(user.role);
+    return hasPermission('projects.hold');
   };
   
   const canActivateOrDeactivate = () => {
     if (!user) return false;
-    return ['Admin', 'Manager', 'DesignManager', 'ProductionManager'].includes(user.role);
+    return hasPermission('projects.activate') || hasPermission('projects.deactivate');
   };
   
   // Handle hold status actions

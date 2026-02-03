@@ -370,8 +370,9 @@ const TATSettings = ({ canEdit }) => {
   }
 
   const leadTATLabels = {
+    lead_allocated: 'Lead Allocated',
     bc_call_done: 'BC Call Done',
-    boq_shared: 'BOQ Shared',
+    first_boq_sent: 'First BOQ Sent',
     site_meeting: 'Site Meeting',
     revised_boq_shared: 'Revised BOQ Shared'
   };

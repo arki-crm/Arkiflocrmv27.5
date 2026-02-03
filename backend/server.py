@@ -11851,7 +11851,7 @@ async def convert_presales_to_lead(presales_id: str, request: Request):
         "user_id": user.user_id,
         "user_name": user.name,
         "role": user.role,
-        "message": f"Converted from Pre-Sales to Lead. PID assigned: {pid}",
+        "message": f"Converted from Pre-Sales to Lead. PID assigned: {pid}. Designer has 24 hours to complete BC Call.",
         "is_system": True,
         "created_at": now.isoformat()
     }
@@ -11861,9 +11861,9 @@ async def convert_presales_to_lead(presales_id: str, request: Request):
     if not isinstance(existing_collaborators, list):
         existing_collaborators = []
     
-    # Mark as converted, assign PID, change lead_type, and update stage to BC Call Done (first sales stage)
-    # Generate timeline for the lead
-    lead_timeline = generate_lead_timeline("BC Call Done", now.isoformat())
+    # Mark as converted, assign PID, change lead_type, and update stage to "Lead Allocated"
+    # Designer must manually progress to "BC Call Done" within 24 hours
+    lead_timeline = generate_lead_timeline("Lead Allocated", now.isoformat())
     
     await db.leads.update_one(
         {"lead_id": presales_id},
@@ -11872,7 +11872,7 @@ async def convert_presales_to_lead(presales_id: str, request: Request):
                 "lead_type": "lead",  # Change from presales to lead
                 "is_converted": False,  # Reset - it's now a proper lead, not converted to project yet
                 "pid": pid,  # Assign PID at conversion
-                "stage": "BC Call Done",  # Move to sales stages
+                "stage": "Lead Allocated",  # Starting stage - designer must manually complete BC Call
                 "status": "In Progress",  # Lead status
                 "timeline": lead_timeline,  # Generate timeline for the lead
                 "updated_at": now.isoformat(),

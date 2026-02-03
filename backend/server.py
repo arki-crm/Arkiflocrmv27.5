@@ -2006,7 +2006,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         # ProductionOpsManager can hold/activate/deactivate projects
         "projects.hold", "projects.activate", "projects.deactivate",
         # ProductionOpsManager can assign technicians
-        "service.assign_technician"
+        "service.assign_technician",
+        # ProductionOpsManager can adjust timelines
+        "timeline.adjust"
     ],
     "OperationLead": [
         # Ground-level execution role - assigned projects only

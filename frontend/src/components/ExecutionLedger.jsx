@@ -935,116 +935,170 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                 </Button>
               </div>
               
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[140px]">Category *</TableHead>
-                      <TableHead>Material *</TableHead>
-                      <TableHead className="w-[100px]">Spec</TableHead>
-                      <TableHead className="w-[80px]">Brand</TableHead>
-                      <TableHead className="w-[70px]">Qty *</TableHead>
-                      <TableHead className="w-[70px]">Unit</TableHead>
-                      <TableHead className="w-[90px]">Rate *</TableHead>
-                      <TableHead className="w-[90px] text-right">Total</TableHead>
-                      <TableHead className="w-[40px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {form.items.map((item, idx) => {
-                      const lineTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
-                      return (
-                        <TableRow key={idx}>
-                          <TableCell className="p-1">
-                            <Select 
-                              value={item.category} 
-                              onValueChange={(v) => updateLineItem(idx, 'category', v)}
-                            >
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder="Category" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {categories.map(cat => (
-                                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell className="p-1">
-                            <Input
-                              value={item.material_name}
-                              onChange={(e) => updateLineItem(idx, 'material_name', e.target.value)}
-                              placeholder="Material name"
-                              className="h-8 text-sm"
-                            />
-                          </TableCell>
-                          <TableCell className="p-1">
+              <div className="space-y-3">
+                {form.items.map((item, idx) => {
+                  const lineTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+                  const cgstAmt = (lineTotal * (parseFloat(item.cgst_percent) || 0)) / 100;
+                  const sgstAmt = (lineTotal * (parseFloat(item.sgst_percent) || 0)) / 100;
+                  const igstAmt = (lineTotal * (parseFloat(item.igst_percent) || 0)) / 100;
+                  const lineTotalWithGst = lineTotal + cgstAmt + sgstAmt + igstAmt;
+                  
+                  return (
+                    <div key={idx} className="border rounded-lg p-3 bg-gray-50">
+                      {/* Main Row - Category, Material, Qty, Rate */}
+                      <div className="grid grid-cols-12 gap-2 items-center mb-2">
+                        <div className="col-span-2">
+                          <Label className="text-xs text-gray-500">Category *</Label>
+                          <Select 
+                            value={item.category} 
+                            onValueChange={(v) => updateLineItem(idx, 'category', v)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {categories.map(cat => (
+                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-3">
+                          <Label className="text-xs text-gray-500">Material *</Label>
+                          <Input
+                            value={item.material_name}
+                            onChange={(e) => updateLineItem(idx, 'material_name', e.target.value)}
+                            placeholder="Material name"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Label className="text-xs text-gray-500">Spec / Brand</Label>
+                          <div className="flex gap-1">
                             <Input
                               value={item.specification}
                               onChange={(e) => updateLineItem(idx, 'specification', e.target.value)}
                               placeholder="Spec"
-                              className="h-8 text-sm"
+                              className="h-8 text-xs"
                             />
-                          </TableCell>
-                          <TableCell className="p-1">
                             <Input
                               value={item.brand}
                               onChange={(e) => updateLineItem(idx, 'brand', e.target.value)}
                               placeholder="Brand"
-                              className="h-8 text-sm"
+                              className="h-8 text-xs"
                             />
-                          </TableCell>
-                          <TableCell className="p-1">
-                            <Input
-                              type="number"
-                              value={item.quantity}
-                              onChange={(e) => updateLineItem(idx, 'quantity', e.target.value)}
-                              placeholder="0"
-                              className="h-8 text-sm text-right"
-                            />
-                          </TableCell>
-                          <TableCell className="p-1">
-                            <Select 
-                              value={item.unit} 
-                              onValueChange={(v) => updateLineItem(idx, 'unit', v)}
-                            >
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {UNITS.map(u => (
-                                  <SelectItem key={u} value={u}>{u}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell className="p-1">
-                            <Input
-                              type="number"
-                              value={item.rate}
-                              onChange={(e) => updateLineItem(idx, 'rate', e.target.value)}
-                              placeholder="0"
-                              className="h-8 text-sm text-right"
-                            />
-                          </TableCell>
-                          <TableCell className="p-1 text-right font-medium">
-                            {formatCurrency(lineTotal)}
-                          </TableCell>
-                          <TableCell className="p-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => removeLineItem(idx)}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                          </div>
+                        </div>
+                        <div className="col-span-1">
+                          <Label className="text-xs text-gray-500">Qty *</Label>
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => updateLineItem(idx, 'quantity', e.target.value)}
+                            placeholder="0"
+                            className="h-8 text-sm text-right"
+                          />
+                        </div>
+                        <div className="col-span-1">
+                          <Label className="text-xs text-gray-500">Unit</Label>
+                          <Select 
+                            value={item.unit} 
+                            onValueChange={(v) => updateLineItem(idx, 'unit', v)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {UNITS.map(u => (
+                                <SelectItem key={u} value={u}>{u}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-1">
+                          <Label className="text-xs text-gray-500">Rate *</Label>
+                          <Input
+                            type="number"
+                            value={item.rate}
+                            onChange={(e) => updateLineItem(idx, 'rate', e.target.value)}
+                            placeholder="0"
+                            className="h-8 text-sm text-right"
+                          />
+                        </div>
+                        <div className="col-span-1 text-right">
+                          <Label className="text-xs text-gray-500">Total</Label>
+                          <p className="text-sm font-semibold mt-1">{formatCurrency(lineTotal)}</p>
+                        </div>
+                        <div className="col-span-1 flex justify-end">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 mt-4"
+                            onClick={() => removeLineItem(idx)}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      {/* GST Row */}
+                      <div className="grid grid-cols-12 gap-2 items-center pt-2 border-t border-gray-200">
+                        <div className="col-span-2">
+                          <Label className="text-xs text-gray-500">HSN Code</Label>
+                          <Input
+                            value={item.hsn_code}
+                            onChange={(e) => updateLineItem(idx, 'hsn_code', e.target.value)}
+                            placeholder="e.g., 4410"
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Label className="text-xs text-gray-500">CGST %</Label>
+                          <Input
+                            type="number"
+                            value={item.cgst_percent}
+                            onChange={(e) => updateLineItem(idx, 'cgst_percent', e.target.value)}
+                            placeholder="0"
+                            className="h-8 text-xs text-right"
+                            step="0.01"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Label className="text-xs text-gray-500">SGST %</Label>
+                          <Input
+                            type="number"
+                            value={item.sgst_percent}
+                            onChange={(e) => updateLineItem(idx, 'sgst_percent', e.target.value)}
+                            placeholder="0"
+                            className="h-8 text-xs text-right"
+                            step="0.01"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Label className="text-xs text-gray-500">IGST %</Label>
+                          <Input
+                            type="number"
+                            value={item.igst_percent}
+                            onChange={(e) => updateLineItem(idx, 'igst_percent', e.target.value)}
+                            placeholder="0"
+                            className="h-8 text-xs text-right"
+                            step="0.01"
+                          />
+                        </div>
+                        <div className="col-span-4 text-right">
+                          {(cgstAmt > 0 || sgstAmt > 0 || igstAmt > 0) && (
+                            <div className="text-xs text-gray-500 space-y-0.5">
+                              {cgstAmt > 0 && <p>CGST: {formatCurrency(cgstAmt)}</p>}
+                              {sgstAmt > 0 && <p>SGST: {formatCurrency(sgstAmt)}</p>}
+                              {igstAmt > 0 && <p>IGST: {formatCurrency(igstAmt)}</p>}
+                              <p className="font-medium text-emerald-700">With GST: {formatCurrency(lineTotalWithGst)}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
               
               {/* Discount & Total Section */}

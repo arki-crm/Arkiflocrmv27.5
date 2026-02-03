@@ -9,8 +9,20 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Permission System Purification COMPLETE ✅
+## Current Status: Timeline Adjustment Feature COMPLETE ✅
 **As of February 2026**
+
+New feature implemented: Timeline Adjustment for Leads and Projects, allowing users to manage delays without losing the original plan.
+
+**What's Implemented:**
+- **Adjust Timeline Modal** - Accessible via button on Lead/Project detail pages
+- **Adjustment Types**: Shift remaining milestones, Set new completion date, Mark as On Hold
+- **Reason Tracking**: Customer Hold, Customer Delay, Internal Delay, Payment Delay, Vendor Delay, Scope Change, Other
+- **Audit Trail**: Full history of all timeline adjustments with user, date, and affected milestones
+- **Resume from Hold**: Auto-shifts future dates by hold duration
+- **Permission-Gated**: Requires `timeline.adjust` permission (Admin has all permissions)
+
+**Previous Status: Permission System Purification COMPLETE ✅**
 
 Major architectural refactoring completed. Permissions are now the single source of truth for access control across both backend AND frontend. Role Management UI is now available.
 
@@ -19,6 +31,39 @@ Major architectural refactoring completed. Permissions are now the single source
 - Frontend: 37 → 14 role checks (62% reduction, all access gates migrated)
 - Remaining checks are data-scoping/business logic (appropriately retained)
 - **NEW: Role Management UI** - Admins can create, edit, and delete custom roles
+- **NEW: Timeline Adjustment** - Adjust Lead/Project timelines with audit trail
+
+---
+
+## ✅ Timeline Adjustment Feature - COMPLETED Feb 2026
+
+### Features Implemented:
+- [x] **Adjust Timeline Button** - Visible on Lead and Project detail pages (permission-gated)
+- [x] **Timeline Adjustment Modal** - Full UI with reason dropdown, date picker, adjustment options
+- [x] **Adjustment Types**:
+  - Shift remaining milestones forward by X days
+  - Set new expected completion date
+  - Mark timeline as "On Hold" (pauses delay calculations)
+- [x] **Resume from Hold** - Automatically shifts all future dates by hold duration
+- [x] **Timeline History Modal** - View complete audit trail of all adjustments
+- [x] **Backend API Endpoints** - POST /api/leads/{id}/adjust-timeline, POST /api/projects/{id}/adjust-timeline
+- [x] **History Endpoints** - GET /api/leads/{id}/timeline-history, GET /api/projects/{id}/timeline-history
+- [x] **Validation** - Reason and remarks are mandatory, minimum 10 characters for remarks
+- [x] **Completed Milestones Protected** - Only future milestones are affected by adjustments
+
+### Timeline Adjustment Permissions:
+| Permission Key | Description |
+|---------------|-------------|
+| `timeline.adjust` | Adjust lead/project timelines and manage holds |
+
+### Timeline Adjustment API Endpoints:
+- `POST /api/leads/{lead_id}/adjust-timeline` - Adjust lead timeline
+- `GET /api/leads/{lead_id}/timeline-history` - Get lead adjustment history
+- `POST /api/projects/{project_id}/adjust-timeline` - Adjust project timeline
+- `GET /api/projects/{project_id}/timeline-history` - Get project adjustment history
+
+### Test File:
+- `/app/backend/tests/test_timeline_adjustment.py` - Comprehensive API tests
 
 ---
 

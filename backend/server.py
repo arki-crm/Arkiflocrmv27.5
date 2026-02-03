@@ -25624,8 +25624,10 @@ async def update_execution_entry(execution_id: str, update: ExecutionEntryUpdate
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user_doc.get("role") not in ["Admin", "Founder", "ProjectManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Permission: Admin, Founder, ProjectManager, and Finance roles can edit
+    allowed_roles = ["Admin", "Founder", "ProjectManager", "SeniorAccountant", "JuniorAccountant", "FinanceManager"]
+    if user_doc.get("role") not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Access denied - requires finance or project management role")
     
     entry = await db.execution_ledger.find_one({"execution_id": execution_id})
     if not entry:

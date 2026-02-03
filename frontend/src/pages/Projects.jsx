@@ -6,13 +6,6 @@ import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
-import { 
   Search, 
   FolderKanban, 
   ChevronRight,
@@ -24,16 +17,13 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { 
+  AdvancedFilters, 
+  loadFiltersFromStorage, 
+  saveFiltersToStorage 
+} from '../components/AdvancedFilters';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-
-// Time filter options
-const TIME_FILTERS = [
-  { key: 'all', label: 'All Time' },
-  { key: 'this_month', label: 'This Month' },
-  { key: 'last_month', label: 'Last Month' },
-  { key: 'this_quarter', label: 'This Quarter' }
-];
 
 // Stage filter tabs - updated to 6 stages
 const STAGE_FILTERS = [
@@ -44,14 +34,6 @@ const STAGE_FILTERS = [
   { key: 'Delivery', label: 'Delivery' },
   { key: 'Installation', label: 'Installation' },
   { key: 'Handover', label: 'Handover' }
-];
-
-// Hold status filter tabs
-const HOLD_STATUS_FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'Active', label: 'Active' },
-  { key: 'Hold', label: 'On Hold' },
-  { key: 'Deactivated', label: 'Deactivated' }
 ];
 
 // Stage badge styles

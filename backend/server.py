@@ -29100,7 +29100,7 @@ async def create_import_record(data_type: str, row_data: dict, user, now: dateti
             "source": row_data.get("source", "Others"),
             "budget": float(row_data.get("budget", 0)) if row_data.get("budget") else None,
             "status": row_data.get("status", "In Progress"),
-            "stage": row_data.get("stage", "BC Call Done"),
+            "stage": row_data.get("stage", "Lead Allocated"),
             "assigned_to": row_data.get("assigned_to"),
             "designer_id": row_data.get("designer_id"),
             "is_converted": False,

@@ -72,12 +72,10 @@ export const AuthProvider = ({ children }) => {
     logout,
     checkAuth,
     setUserFromCallback,
-    // Permission helper
+    // Permission helper - checks effective_permissions array only (no role shortcuts)
     hasPermission: (permission) => {
       if (!user) return false;
-      // Admin always has all permissions
-      if (user.role === 'Admin') return true;
-      // Check effective permissions
+      // Check effective permissions - this is the SINGLE source of truth
       return (user.effective_permissions || []).includes(permission);
     }
   };

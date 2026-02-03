@@ -127,6 +127,11 @@ const ProjectDetails = () => {
   const [holdAction, setHoldAction] = useState(null); // 'Hold', 'Activate', 'Deactivate'
   const [holdReason, setHoldReason] = useState('');
   const [isUpdatingHoldStatus, setIsUpdatingHoldStatus] = useState(false);
+  
+  // Settings state
+  const [gstApplicable, setGstApplicable] = useState(false);
+  const [gstNumber, setGstNumber] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // PreSales redirect
   useEffect(() => {

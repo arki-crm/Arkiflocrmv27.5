@@ -12611,8 +12611,9 @@ async def get_design_manager_dashboard(request: Request):
 async def get_ceo_dashboard(request: Request):
     """Private CEO dashboard with performance scores and analytics (requires admin.view_reports permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if not has_permission(user, "admin.view_reports"):
+    if not has_permission(user_doc, "admin.view_reports"):
         raise HTTPException(status_code=403, detail="You don't have permission to view CEO dashboard")
     
     now = datetime.now(timezone.utc)

@@ -5815,19 +5815,19 @@ async def update_lead_stage(lead_id: str, stage_update: LeadStageUpdate, request
     if old_stage == new_stage:
         return {"message": "Stage unchanged", "stage": new_stage}
     
-    # FORWARD-ONLY VALIDATION (except Admin)
+    # FORWARD-ONLY VALIDATION (requires admin.stage_rollback permission for backward)
     old_index = LEAD_STAGES.index(old_stage) if old_stage in LEAD_STAGES else 0
     new_index = LEAD_STAGES.index(new_stage)
     
     if new_index < old_index:
-        # Backward movement requested
-        if user.role != "Admin":
+        # Backward movement requested - requires stage rollback permission
+        if not has_permission(user, "admin.stage_rollback"):
             raise HTTPException(
                 status_code=400, 
-                detail=f"Cannot move backward from '{old_stage}' to '{new_stage}'. Stage progression is forward-only. Only Admin can rollback stages."
+                detail=f"Cannot move backward from '{old_stage}' to '{new_stage}'. Stage progression is forward-only. Requires stage rollback permission."
             )
-        # Admin can rollback - add special comment
-        rollback_note = f" (Admin rollback from '{old_stage}')"
+        # User with permission can rollback - add special comment
+        rollback_note = f" (Rollback from '{old_stage}' by {user.name})"
     else:
         rollback_note = ""
     

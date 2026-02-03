@@ -1650,7 +1650,14 @@ AVAILABLE_PERMISSIONS = {
             {"id": "admin.manage_users", "name": "Manage Users", "description": "Create, edit, and manage user accounts"},
             {"id": "admin.assign_permissions", "name": "Assign Permissions", "description": "Modify user permissions"},
             {"id": "admin.view_reports", "name": "View Reports", "description": "Access analytics and reports"},
-            {"id": "admin.system_settings", "name": "System Settings", "description": "Modify system configuration"}
+            {"id": "admin.system_settings", "name": "System Settings", "description": "Modify system configuration"},
+            {"id": "admin.stage_rollback", "name": "Stage Rollback", "description": "Roll back project/lead stages (backward movement)"},
+            {"id": "admin.milestone_rollback", "name": "Milestone Rollback", "description": "Decrease milestone progress percentages"},
+            {"id": "admin.delete_files", "name": "Delete Files", "description": "Delete files from projects"},
+            {"id": "admin.email_templates", "name": "Email Templates", "description": "View and manage email templates"},
+            {"id": "admin.view_logs", "name": "View System Logs", "description": "Access system logs and audit trails"},
+            {"id": "admin.seed_data", "name": "Seed Test Data", "description": "Create test data for development"},
+            {"id": "service.assign_technician", "name": "Assign Technician", "description": "Assign technicians to service requests"}
         ]
     },
     # ============ FINANCE & ACCOUNTING PERMISSIONS (Granular) ============

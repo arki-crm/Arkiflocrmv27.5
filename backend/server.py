@@ -12802,11 +12802,12 @@ async def get_ceo_dashboard(request: Request):
 
 @api_router.get("/operations/dashboard")
 async def get_operations_dashboard(request: Request):
-    """Dashboard for Operations Lead - post-production delivery and installation tracking"""
+    """Dashboard for Operations Lead - post-production delivery and installation tracking (requires milestones.update.delivery)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "OperationLead", "ProductionOpsManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "milestones.update.delivery") and not has_permission(user_doc, "admin.view_reports"):
+        raise HTTPException(status_code=403, detail="Permission denied")
     
     now = datetime.now(timezone.utc)
     

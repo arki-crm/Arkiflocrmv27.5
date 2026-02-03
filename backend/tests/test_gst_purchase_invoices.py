@@ -87,8 +87,12 @@ class TestPurchaseInvoiceGSTCreate:
         response = api_client.post(f"{BASE_URL}/api/finance/execution-ledger", json=payload)
         assert response.status_code == 200, f"Create failed: {response.text}"
         
-        data = response.json()
-        assert "execution_id" in data
+        resp_data = response.json()
+        # API returns {"success": true, "entry": {...}}
+        assert resp_data.get("success") == True, f"Expected success=True, got {resp_data}"
+        data = resp_data.get("entry", {})
+        
+        assert "execution_id" in data, f"No execution_id in response: {data}"
         TestPurchaseInvoiceGSTCreate.created_entry_id = data["execution_id"]
         print(f"Created invoice: {data['execution_id']}")
         
@@ -161,7 +165,9 @@ class TestPurchaseInvoiceGSTUpdate:
         response = api_client.put(f"{BASE_URL}/api/finance/execution-ledger/{entry_id}", json=payload)
         assert response.status_code == 200, f"Update failed: {response.text}"
         
-        data = response.json()
+        resp_data = response.json()
+        # API returns {"success": true, "entry": {...}}
+        data = resp_data.get("entry", resp_data)
         
         # Verify recalculated GST
         # Item: 5 * 2000 = 10000, IGST = 1800
@@ -205,7 +211,10 @@ class TestPurchaseInvoiceWithoutGST:
         response = api_client.post(f"{BASE_URL}/api/finance/execution-ledger", json=payload)
         assert response.status_code == 200, f"Create failed: {response.text}"
         
-        data = response.json()
+        resp_data = response.json()
+        assert resp_data.get("success") == True
+        data = resp_data.get("entry", {})
+        
         assert "execution_id" in data
         TestPurchaseInvoiceWithoutGST.created_entry_id = data["execution_id"]
         
@@ -342,7 +351,10 @@ class TestPurchaseInvoiceGSTWithDiscount:
         response = api_client.post(f"{BASE_URL}/api/finance/execution-ledger", json=payload)
         assert response.status_code == 200, f"Create failed: {response.text}"
         
-        data = response.json()
+        resp_data = response.json()
+        assert resp_data.get("success") == True
+        data = resp_data.get("entry", {})
+        
         TestPurchaseInvoiceGSTWithDiscount.created_entry_id = data["execution_id"]
         
         # Calculations:

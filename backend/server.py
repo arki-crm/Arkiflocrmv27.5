@@ -3464,13 +3464,13 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
     
     if new_index < old_index:
         # Backward movement requested - requires stage rollback permission
-        if not has_permission(user, "admin.stage_rollback"):
+        if not has_permission(user_doc, "admin.stage_rollback"):
             raise HTTPException(
                 status_code=400, 
                 detail=f"Cannot move backward from '{old_stage}' to '{new_stage}'. Stage progression is forward-only. Requires stage rollback permission."
             )
-        # Admin can rollback - add special note
-        rollback_note = f" (Admin rollback from '{old_stage}')"
+        # User with permission can rollback - add special note
+        rollback_note = f" (Rollback from '{old_stage}' by {user.name})"
     else:
         rollback_note = ""
     

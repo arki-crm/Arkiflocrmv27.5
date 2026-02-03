@@ -1903,6 +1903,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "admin.stage_rollback", "admin.milestone_rollback", "admin.delete_files",
         "admin.email_templates", "admin.view_logs", "admin.seed_data",
         "service.assign_technician",
+        # Timeline adjustment permission
+        "timeline.adjust",
         # Hold/Activate/Deactivate permissions - Admin gets all
         "projects.hold", "projects.activate", "projects.deactivate",
         "leads.hold", "leads.activate", "leads.deactivate",

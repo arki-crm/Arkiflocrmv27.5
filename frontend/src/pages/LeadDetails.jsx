@@ -1697,6 +1697,27 @@ const LeadDetails = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Timeline Adjustment Modal */}
+      <TimelineAdjustmentModal
+        open={showTimelineAdjustmentModal}
+        onClose={() => setShowTimelineAdjustmentModal(false)}
+        onSubmit={handleTimelineAdjustment}
+        entityType="lead"
+        entityId={id}
+        entityName={lead?.customer_name}
+        currentTimeline={lead?.current_timeline}
+        isOnHold={lead?.current_timeline?.on_hold || false}
+        loading={isAdjustingTimeline}
+      />
+      
+      {/* Timeline History Modal */}
+      <TimelineHistoryModal
+        open={showTimelineHistoryModal}
+        onClose={() => setShowTimelineHistoryModal(false)}
+        history={timelineHistory}
+        entityType="lead"
+      />
     </div>
   );
 };

@@ -23,6 +23,9 @@
 | Backend: Add/Remove Collaborator | 2 | ✅ Done |
 | Backend: Project Hold Status | 1 | ✅ Done |
 | Backend: Lead Hold Status | 1 | ✅ Done |
+| Backend: Settings Endpoints (14) | 14 | ✅ Done |
+| Backend: Presales List | 1 | ✅ Done |
+| Backend: Reports (leads) | 1 | ✅ Done |
 | Frontend: AuthContext.js | 1 (role shortcut) | ✅ Done |
 | Frontend: Users.jsx | 7 | ✅ Done |
 | Frontend: Sidebar.jsx | Permission-based additions | ✅ Done |
@@ -38,17 +41,20 @@
 - `leads.activate` - Activate held/deactivated leads
 - `leads.deactivate` - Deactivate leads permanently
 
+**Pre-Sales:**
+- `presales.view_all` - View all pre-sales leads in the system
+
 **Finance (Previous):**
 - `finance.confirm_booking_payment`
 - `finance.confirm_milestone_payment`
 
-### Remaining Role Checks (192 total, down from 199)
+### Remaining Role Checks (174 total, down from 199)
 | Category | Count | Action |
 |----------|-------|--------|
 | Ownership checks (`Designer and not collaborator`) | 10 | **Keep** - Business logic |
 | PreSales scoping (`role == "PreSales"`) | 29 | **Keep** - Data scoping |
-| Access gates (`role not in [...]`) | 76 | **Migrate** - Future work (down from 81) |
-| Other | 77 | **Review** - Mixed |
+| Access gates (`role not in [...]`) | 66 | **Migrate** - Future work (down from 81) |
+| Other | 69 | **Review** - Mixed |
 
 ### Validation Results ✅ (Feb 3, 2026)
 

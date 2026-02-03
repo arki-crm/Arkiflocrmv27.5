@@ -14908,11 +14908,12 @@ async def delete_academy_lesson(lesson_id: str, request: Request):
 
 @api_router.post("/academy/seed")
 async def seed_academy_categories(request: Request):
-    """Seed default academy categories (Admin only)"""
+    """Seed default academy categories (requires admin.seed_data permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Only Admin can seed categories")
+    if not has_permission(user_doc, "admin.seed_data"):
+        raise HTTPException(status_code=403, detail="You don't have permission to seed categories")
     
     now = datetime.now(timezone.utc)
     created_count = 0

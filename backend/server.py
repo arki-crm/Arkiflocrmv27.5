@@ -13673,11 +13673,11 @@ async def add_warranty_collaborator(warranty_id: str, request: Request):
     if not user_doc:
         raise HTTPException(status_code=403, detail="User not found")
     
-    allowed_roles = ["Admin", "ProductionOpsManager", "SalesManager"]
+    # Permission check: need warranty.update
     has_warranty_update = has_permission(user_doc, "warranty.update")
     
-    if user.role not in allowed_roles and not has_warranty_update:
-        raise HTTPException(status_code=403, detail="Access denied - cannot manage warranty collaborators")
+    if not has_warranty_update:
+        raise HTTPException(status_code=403, detail="Permission denied: warranty.update required")
     
     warranty = await db.warranties.find_one({"warranty_id": warranty_id}, {"_id": 0})
     if not warranty:
@@ -13735,11 +13735,11 @@ async def remove_warranty_collaborator(warranty_id: str, collaborator_user_id: s
     if not user_doc:
         raise HTTPException(status_code=403, detail="User not found")
     
-    allowed_roles = ["Admin", "ProductionOpsManager", "SalesManager"]
+    # Permission check: need warranty.update
     has_warranty_update = has_permission(user_doc, "warranty.update")
     
-    if user.role not in allowed_roles and not has_warranty_update:
-        raise HTTPException(status_code=403, detail="Access denied - cannot manage warranty collaborators")
+    if not has_warranty_update:
+        raise HTTPException(status_code=403, detail="Permission denied: warranty.update required")
     
     warranty = await db.warranties.find_one({"warranty_id": warranty_id}, {"_id": 0})
     if not warranty:

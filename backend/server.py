@@ -582,21 +582,24 @@ class AcademyLessonUpdate(BaseModel):
     order: Optional[int] = None
     duration_minutes: Optional[int] = None
 
-# Lead stages
+# Lead stages - "Lead Allocated" is the starting stage (auto-completed on creation)
+# Designer must manually complete subsequent stages
 LEAD_STAGES = [
-    "BC Call Done",
-    "BOQ Shared",
+    "Lead Allocated",      # Starting stage - auto-completed when lead is created/converted
+    "BC Call Done",        # Designer must manually mark this (24h TAT)
+    "BOQ Shared",          # Designer must manually mark this (48h TAT after BC Call)
     "Site Meeting",
     "Revised BOQ Shared",
     "Waiting for Booking",
     "Booking Completed"
 ]
 
-# Lead milestones for timeline
+# Lead milestones for timeline - each milestone maps to a stage
+# "Lead Allocated" is auto-completed, all others require manual action
 LEAD_MILESTONES = [
-    {"title": "Lead Created", "stage_ref": "BC Call Done"},
-    {"title": "BC Call Completed", "stage_ref": "BC Call Done"},
-    {"title": "BOQ Shared", "stage_ref": "BOQ Shared"},
+    {"title": "Lead Allocated", "stage_ref": "Lead Allocated"},      # Auto-completed on creation
+    {"title": "BC Call Done", "stage_ref": "BC Call Done"},          # Manual - 24h TAT
+    {"title": "First BOQ Sent", "stage_ref": "BOQ Shared"},          # Manual - 48h TAT after BC Call
     {"title": "Site Meeting", "stage_ref": "Site Meeting"},
     {"title": "Revised BOQ Shared", "stage_ref": "Revised BOQ Shared"},
     {"title": "Waiting for Booking", "stage_ref": "Waiting for Booking"},
@@ -606,14 +609,15 @@ LEAD_MILESTONES = [
 # ============ TAT (Time-to-Action) CONFIGURATION ============
 
 # Lead TAT Rules (days from previous milestone completion)
+# These define SLA deadlines - after this time, milestone shows as "Delayed"
 LEAD_TAT = {
-    "Lead Created": 0,  # Immediate
-    "BC Call Completed": 1,  # 1 day after lead creation
-    "BOQ Shared": 3,  # 3 days after BC Call Done
-    "Site Meeting": 2,  # 2 days after BOQ Shared
-    "Revised BOQ Shared": 2,  # 2 days after Site Meeting
-    "Waiting for Booking": None,  # No fixed date
-    "Booking Completed": None  # No fixed date
+    "Lead Allocated": 0,       # Immediate - auto-completed on lead creation
+    "BC Call Done": 1,         # 24 hours (1 day) after lead allocation
+    "First BOQ Sent": 2,       # 48 hours (2 days) after BC Call completion
+    "Site Meeting": 2,         # 2 days after BOQ Shared
+    "Revised BOQ Shared": 2,   # 2 days after Site Meeting
+    "Waiting for Booking": None,  # No fixed TAT - depends on customer
+    "Booking Completed": None     # No fixed TAT - depends on customer
 }
 
 # Project TAT Rules (days from previous milestone completion)

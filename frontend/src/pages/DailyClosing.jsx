@@ -599,6 +599,196 @@ const DailyClosing = () => {
           )}
         </>
       )}
+
+      {/* Detailed Daybook Dialog */}
+      <Dialog open={showDetailedView} onOpenChange={setShowDetailedView}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+                <span>Daybook — {detailedDate && formatDate(detailedDate)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={exportToCSV} disabled={loadingDetailed}>
+                  <Download className="w-4 h-4 mr-1" /> CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={printDaybook} disabled={loadingDetailed}>
+                  <Printer className="w-4 h-4 mr-1" /> Print
+                </Button>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          {loadingDetailed ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            </div>
+          ) : detailedData ? (
+            <>
+              {/* Summary Bar */}
+              <div className="flex-shrink-0 grid grid-cols-4 gap-4 p-3 bg-slate-50 rounded-lg mb-4">
+                <div className="text-center">
+                  <p className="text-xs text-slate-500">Transactions</p>
+                  <p className="text-lg font-bold text-slate-900">{detailedData.summary.count}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-green-600">Total Inflow</p>
+                  <p className="text-lg font-bold text-green-600">+{formatCurrency(detailedData.summary.total_inflow)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-red-600">Total Outflow</p>
+                  <p className="text-lg font-bold text-red-600">-{formatCurrency(detailedData.summary.total_outflow)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-slate-500">Net</p>
+                  <p className={cn(
+                    "text-lg font-bold",
+                    detailedData.summary.net >= 0 ? "text-green-600" : "text-red-600"
+                  )}>
+                    {detailedData.summary.net >= 0 ? '+' : ''}{formatCurrency(detailedData.summary.net)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="flex-shrink-0 flex items-center gap-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-slate-400" />
+                  <Select 
+                    value={detailFilter.account} 
+                    onValueChange={(v) => setDetailFilter(p => ({ ...p, account: v }))}
+                  >
+                    <SelectTrigger className="w-[180px] h-8 text-sm">
+                      <SelectValue placeholder="All Accounts" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Accounts</SelectItem>
+                      {[...new Map(detailedData.transactions.map(t => [t.account_id, { id: t.account_id, name: t.account_name }])).values()].map(acc => (
+                        <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Select 
+                  value={detailFilter.type} 
+                  onValueChange={(v) => setDetailFilter(p => ({ ...p, type: v }))}
+                >
+                  <SelectTrigger className="w-[130px] h-8 text-sm">
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="inflow">Inflow Only</SelectItem>
+                    <SelectItem value="outflow">Outflow Only</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="relative flex-1">
+                  <Input
+                    placeholder="Search reference, category, vendor..."
+                    value={detailFilter.search}
+                    onChange={(e) => setDetailFilter(p => ({ ...p, search: e.target.value }))}
+                    className="h-8 text-sm pr-8"
+                  />
+                  {detailFilter.search && (
+                    <button 
+                      className="absolute right-2 top-1/2 -translate-y-1/2"
+                      onClick={() => setDetailFilter(p => ({ ...p, search: '' }))}
+                    >
+                      <X className="w-4 h-4 text-slate-400 hover:text-slate-600" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Transactions Table */}
+              <div className="flex-1 overflow-auto border rounded-lg">
+                <table className="w-full min-w-[900px]">
+                  <thead className="bg-slate-100 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Time</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Account</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Reference</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Category / Purpose</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Project / Vendor</th>
+                      <th className="px-3 py-2 text-center text-xs font-medium text-slate-500 uppercase">Mode</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-green-600 uppercase">Inflow</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-red-600 uppercase">Outflow</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {getFilteredTransactions().length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-8 text-center text-slate-500">
+                          No transactions match the current filters
+                        </td>
+                      </tr>
+                    ) : (
+                      getFilteredTransactions().map((txn) => (
+                        <tr key={txn.transaction_id} className="hover:bg-slate-50">
+                          <td className="px-3 py-2 text-sm text-slate-600">
+                            {new Date(txn.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="px-3 py-2">
+                            <p className="text-sm font-medium text-slate-900">{txn.account_name}</p>
+                            <p className="text-xs text-slate-400 capitalize">{txn.account_type}</p>
+                          </td>
+                          <td className="px-3 py-2 text-sm text-slate-600 max-w-[150px] truncate" title={txn.reference}>
+                            {txn.reference}
+                          </td>
+                          <td className="px-3 py-2">
+                            <p className="text-sm text-slate-900">{txn.purpose || txn.category_name}</p>
+                          </td>
+                          <td className="px-3 py-2">
+                            {txn.counterparty ? (
+                              <div className="flex items-center gap-1">
+                                <Badge variant="outline" className="text-xs capitalize">
+                                  {txn.counterparty_type}
+                                </Badge>
+                                <span className="text-sm text-slate-600 max-w-[150px] truncate" title={txn.counterparty}>
+                                  {txn.counterparty}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-slate-400">-</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <Badge variant="secondary" className="text-xs">
+                              {txn.mode}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-2 text-right text-sm font-medium text-green-600">
+                            {txn.inflow > 0 ? formatCurrency(txn.inflow) : ''}
+                          </td>
+                          <td className="px-3 py-2 text-right text-sm font-medium text-red-600">
+                            {txn.outflow > 0 ? formatCurrency(txn.outflow) : ''}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {getFilteredTransactions().length > 0 && (
+                    <tfoot className="bg-slate-100 sticky bottom-0">
+                      <tr>
+                        <td colSpan={6} className="px-3 py-2 text-sm font-semibold text-slate-700">
+                          Filtered Total ({getFilteredTransactions().length} transactions)
+                        </td>
+                        <td className="px-3 py-2 text-right text-sm font-bold text-green-600">
+                          {formatCurrency(getFilteredTransactions().reduce((s, t) => s + (t.inflow || 0), 0))}
+                        </td>
+                        <td className="px-3 py-2 text-right text-sm font-bold text-red-600">
+                          {formatCurrency(getFilteredTransactions().reduce((s, t) => s + (t.outflow || 0), 0))}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

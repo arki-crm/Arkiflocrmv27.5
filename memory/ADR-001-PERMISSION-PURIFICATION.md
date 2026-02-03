@@ -26,11 +26,32 @@
 | Backend: Settings Endpoints (14) | 14 | ✅ Done |
 | Backend: Presales List | 1 | ✅ Done |
 | Backend: Reports (leads) | 1 | ✅ Done |
+| Backend: Project Stage Rollback | 1 | ✅ Done |
+| Backend: Lead Stage Rollback | 1 | ✅ Done |
+| Backend: Milestone Progress Decrease | 1 | ✅ Done |
+| Backend: Delete Project Files | 1 | ✅ Done |
+| Backend: Update Milestones Config | 1 | ✅ Done |
+| Backend: System Logs | 1 | ✅ Done |
+| Backend: Email Templates (4 endpoints) | 4 | ✅ Done |
+| Backend: CEO Dashboard | 1 | ✅ Done |
+| Backend: Seed Design Workflow | 1 | ✅ Done |
+| Backend: Assign Technician | 1 | ✅ Done |
 | Frontend: AuthContext.js | 1 (role shortcut) | ✅ Done |
 | Frontend: Users.jsx | 7 | ✅ Done |
 | Frontend: Sidebar.jsx | Permission-based additions | ✅ Done |
 
 ### New Permissions Added (This Session)
+**Admin Operations:**
+- `admin.stage_rollback` - Roll back project/lead stages (backward movement)
+- `admin.milestone_rollback` - Decrease milestone progress percentages
+- `admin.delete_files` - Delete files from projects
+- `admin.email_templates` - View and manage email templates
+- `admin.view_logs` - Access system logs and audit trails
+- `admin.seed_data` - Create test data for development
+
+**Service:**
+- `service.assign_technician` - Assign technicians to service requests
+
 **Projects:**
 - `projects.hold` - Place projects on hold
 - `projects.activate` - Activate held/deactivated projects
@@ -48,13 +69,13 @@
 - `finance.confirm_booking_payment`
 - `finance.confirm_milestone_payment`
 
-### Remaining Role Checks (174 total, down from 199)
+### Remaining Role Checks (~160 total, down from 199)
 | Category | Count | Action |
 |----------|-------|--------|
 | Ownership checks (`Designer and not collaborator`) | 10 | **Keep** - Business logic |
 | PreSales scoping (`role == "PreSales"`) | 29 | **Keep** - Data scoping |
-| Access gates (`role not in [...]`) | 66 | **Migrate** - Future work (down from 81) |
-| Other | 69 | **Review** - Mixed |
+| Access gates (`role not in [...]`) | ~55 | **Migrate** - Future work (down from 66) |
+| Other | 66 | **Review** - Mixed |
 
 ### Validation Results ✅ (Feb 3, 2026)
 

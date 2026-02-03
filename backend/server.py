@@ -10323,11 +10323,12 @@ async def get_projects_report(request: Request):
 
 @api_router.get("/reports/leads")
 async def get_leads_report(request: Request):
-    """Lead Conversion Report - Admin/Manager/PreSales"""
+    """Lead Conversion Report (requires admin.view_reports)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "PreSales"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.view_reports"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.view_reports required")
     
     # Get all leads
     leads = await db.leads.find({}, {"_id": 0}).to_list(1000)

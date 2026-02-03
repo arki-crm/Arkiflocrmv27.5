@@ -6030,7 +6030,7 @@ async def get_pending_booking_confirmations(request: Request):
 
 @api_router.put("/leads/{lead_id}/confirm-booking-payment")
 async def confirm_booking_payment(lead_id: str, request: Request):
-    """Confirm booking payment received - Accounts team only"""
+    """Confirm booking payment received - requires finance.confirm_booking_payment permission"""
     user = await get_current_user(request)
     
     # Get user document for permission check
@@ -6038,17 +6038,11 @@ async def confirm_booking_payment(lead_id: str, request: Request):
     if not user_doc:
         raise HTTPException(status_code=403, detail="User not found")
     
-    # Check if user has finance permissions (Accounts team)
-    has_finance_access = (
-        user.role in ["Accountant", "SeniorAccountant", "CharteredAccountant", "Admin"] or
-        has_permission(user_doc, "finance.receipts.create") or
-        has_permission(user_doc, "finance.cashbook.create")
-    )
-    
-    if not has_finance_access:
+    # Check if user has finance.confirm_booking_payment permission
+    if not has_permission(user_doc, "finance.confirm_booking_payment"):
         raise HTTPException(
             status_code=403, 
-            detail="Access denied - Only Accounts team can confirm booking payments"
+            detail="Access denied - requires finance.confirm_booking_payment permission"
         )
     
     # Find the lead

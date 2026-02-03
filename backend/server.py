@@ -10909,11 +10909,12 @@ async def delete_presales_file(presales_id: str, file_id: str, request: Request)
 
 @api_router.post("/presales/{presales_id}/convert-to-lead")
 async def convert_presales_to_lead(presales_id: str, request: Request):
-    """Convert qualified pre-sales lead to regular lead with PID generation"""
+    """Convert qualified pre-sales lead to regular lead with PID generation (requires presales.convert)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "SalesManager", "PreSales"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "presales.convert"):
+        raise HTTPException(status_code=403, detail="Permission denied: presales.convert required")
     
     presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
     if not presales_lead:

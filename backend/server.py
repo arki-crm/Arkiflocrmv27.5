@@ -25480,13 +25480,30 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
     entry_id = f"exec_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
     
-    # Process line items and calculate totals
+    # Process line items and calculate totals (including GST)
     processed_items = []
     gross_total = 0
+    total_cgst = 0
+    total_sgst = 0
+    total_igst = 0
     
     for idx, item in enumerate(entry.items):
         line_total = item.quantity * item.rate
         gross_total += line_total
+        
+        # Calculate GST for this line item
+        cgst_percent = item.cgst_percent or 0
+        sgst_percent = item.sgst_percent or 0
+        igst_percent = item.igst_percent or 0
+        
+        cgst_amount = (line_total * cgst_percent / 100) if cgst_percent else 0
+        sgst_amount = (line_total * sgst_percent / 100) if sgst_percent else 0
+        igst_amount = (line_total * igst_percent / 100) if igst_percent else 0
+        
+        total_cgst += cgst_amount
+        total_sgst += sgst_amount
+        total_igst += igst_amount
+        
         processed_items.append({
             "item_id": f"item_{idx + 1}",
             "category": item.category,
@@ -25496,7 +25513,16 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
             "quantity": item.quantity,
             "unit": item.unit,
             "rate": item.rate,
-            "line_total": line_total
+            "line_total": line_total,
+            # GST fields
+            "hsn_code": item.hsn_code,
+            "cgst_percent": cgst_percent if cgst_percent else None,
+            "sgst_percent": sgst_percent if sgst_percent else None,
+            "igst_percent": igst_percent if igst_percent else None,
+            "cgst_amount": cgst_amount if cgst_amount else None,
+            "sgst_amount": sgst_amount if sgst_amount else None,
+            "igst_amount": igst_amount if igst_amount else None,
+            "line_total_with_gst": line_total + cgst_amount + sgst_amount + igst_amount
         })
     
     # Calculate discount amount based on type
@@ -25510,8 +25536,14 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
         elif discount_type == "percentage":
             discount_amount = (gross_total * min(discount_value, 100)) / 100
     
-    # Net payable = Gross - Discount
-    net_payable = gross_total - discount_amount
+    # Net taxable = Gross - Discount
+    net_taxable = gross_total - discount_amount
+    
+    # Total GST
+    total_gst = total_cgst + total_sgst + total_igst
+    
+    # Grand total = Net taxable + GST (this is what we pay vendor)
+    grand_total = net_taxable + total_gst
     
     # Validate purchase_type
     if entry.purchase_type not in ["cash", "credit"]:

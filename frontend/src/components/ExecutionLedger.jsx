@@ -299,6 +299,31 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
     }, 0);
   };
 
+  // Calculate GST totals from all line items
+  const calculateGSTTotals = () => {
+    let totalCGST = 0;
+    let totalSGST = 0;
+    let totalIGST = 0;
+    
+    form.items.forEach(item => {
+      const lineTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+      const cgstPercent = parseFloat(item.cgst_percent) || 0;
+      const sgstPercent = parseFloat(item.sgst_percent) || 0;
+      const igstPercent = parseFloat(item.igst_percent) || 0;
+      
+      totalCGST += (lineTotal * cgstPercent / 100);
+      totalSGST += (lineTotal * sgstPercent / 100);
+      totalIGST += (lineTotal * igstPercent / 100);
+    });
+    
+    return {
+      totalCGST,
+      totalSGST,
+      totalIGST,
+      totalGST: totalCGST + totalSGST + totalIGST
+    };
+  };
+
   // Calculate discount amount based on type
   const calculateDiscountAmount = () => {
     const grossTotal = calculateTotal();

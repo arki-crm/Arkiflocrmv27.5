@@ -1850,6 +1850,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "warranty.view", "warranty.update", "service.view", "service.view_all", "service.create", "service.update",
         "academy.view", "academy.manage",
         "admin.manage_users", "admin.assign_permissions", "admin.view_reports", "admin.system_settings",
+        # Hold/Activate/Deactivate permissions - Admin gets all
+        "projects.hold", "projects.activate", "projects.deactivate",
+        "leads.hold", "leads.activate", "leads.deactivate",
         # Finance permissions - Admin gets all (new granular)
         "finance.cashbook.view", "finance.cashbook.create", "finance.cashbook.edit", "finance.cashbook.delete",
         "finance.cashbook.verify", "finance.daily_closing.view", "finance.daily_closing.create", "finance.daily_closing.lock",

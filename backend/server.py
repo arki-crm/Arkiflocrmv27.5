@@ -9839,18 +9839,19 @@ async def update_meeting(meeting_id: str, meeting_data: MeetingUpdate, request: 
 
 @api_router.delete("/meetings/{meeting_id}")
 async def delete_meeting(meeting_id: str, request: Request):
-    """Delete a meeting"""
+    """Delete a meeting (requires meetings.delete or ownership)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
     meeting = await db.meetings.find_one({"id": meeting_id}, {"_id": 0})
     
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     
-    # Role-based access check - only creator or Admin/Manager can delete
-    if user.role not in ["Admin", "Manager"]:
-        if meeting.get("scheduled_by") != user.user_id:
-            raise HTTPException(status_code=403, detail="Only the meeting creator can delete this meeting")
+    # Permission check - creator can delete their own, or need meetings.delete permission
+    is_creator = meeting.get("scheduled_by") == user.user_id
+    if not is_creator and not has_permission(user_doc, "meetings.delete"):
+        raise HTTPException(status_code=403, detail="Permission denied: meetings.delete required or must be meeting creator")
     
     await db.meetings.delete_one({"id": meeting_id})
     

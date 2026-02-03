@@ -218,6 +218,16 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
         ...commonItems
       ];
 
+    // 7b. OPERATION LEAD - Ground-level execution: delivery, installation, snag
+    case 'OperationLead':
+      return [
+        { path: '/production-ops', label: 'Operations Dashboard', icon: LayoutDashboard },
+        ...commonItems,
+        { path: '/projects', label: 'Projects', icon: FolderKanban },
+        { path: '/service-requests', label: 'Service Requests', icon: Wrench },
+        { path: '/academy', label: 'Academy', icon: GraduationCap }
+      ];
+
     // 8. ACCOUNTANT - Finance access (all accountant roles)
     case 'Accountant':
     case 'JuniorAccountant':

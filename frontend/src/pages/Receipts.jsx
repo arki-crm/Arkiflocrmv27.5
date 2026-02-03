@@ -325,18 +325,31 @@ const Receipts = () => {
                 </Select>
               </div>
             </div>
-            <div>
-              <Label>Account *</Label>
-              <Select value={newReceipt.account_id} onValueChange={(v) => setNewReceipt(prev => ({ ...prev, account_id: v }))}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select account" />
-                </SelectTrigger>
-                <SelectContent>
-                  {accounts.map(a => (
-                    <SelectItem key={a.account_id} value={a.account_id}>{a.account_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Receipt Date *</Label>
+                <Input
+                  type="date"
+                  value={newReceipt.payment_date}
+                  onChange={(e) => setNewReceipt(prev => ({ ...prev, payment_date: e.target.value }))}
+                  className="mt-1"
+                  data-testid="receipt-date-input"
+                />
+                <p className="text-xs text-slate-500 mt-1">Date for Cashbook & Daily Closing</p>
+              </div>
+              <div>
+                <Label>Account *</Label>
+                <Select value={newReceipt.account_id} onValueChange={(v) => setNewReceipt(prev => ({ ...prev, account_id: v }))}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map(a => (
+                      <SelectItem key={a.account_id} value={a.account_id}>{a.account_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <Label>Payment Stage</Label>

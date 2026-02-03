@@ -1310,6 +1310,93 @@ const ProjectDetails = () => {
         <WarrantyServiceTab projectId={id} pid={project?.pid} />
       )}
 
+      {/* Settings Tab */}
+      {activeTab === 'settings' && ['Admin', 'Founder', 'ProjectManager'].includes(user?.role) && (
+        <div className="space-y-6" data-testid="settings-tab">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5 text-slate-600" />
+                Project Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* GST Settings Section */}
+              <div className="border rounded-lg p-4 bg-slate-50">
+                <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+                  <IndianRupee className="h-4 w-4 text-blue-600" />
+                  GST Settings (Customer Invoices)
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="gst-toggle" className="text-sm font-medium">
+                        GST Applicable
+                      </Label>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Enable GST for customer tax invoices generated for this project
+                      </p>
+                    </div>
+                    <Switch
+                      id="gst-toggle"
+                      checked={gstApplicable}
+                      onCheckedChange={setGstApplicable}
+                      data-testid="gst-toggle"
+                    />
+                  </div>
+                  
+                  {gstApplicable && (
+                    <div>
+                      <Label htmlFor="gst-number" className="text-sm font-medium">
+                        GST Number (optional)
+                      </Label>
+                      <Input
+                        id="gst-number"
+                        value={gstNumber}
+                        onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
+                        placeholder="e.g., 22AAAAA0000A1Z5"
+                        className="mt-1.5 max-w-sm"
+                        maxLength={15}
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        Client&apos;s GST number for tax invoice generation
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Info Box */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                <strong>Note:</strong> The GST toggle affects <strong>customer tax invoices</strong> generated for this project. 
+                It does not affect <strong>purchase invoices</strong> (vendor bills), which have their own line-item GST handling.
+              </div>
+              
+              {/* Save Button */}
+              <div className="flex justify-end pt-2">
+                <Button 
+                  onClick={handleSaveGstSettings}
+                  disabled={savingSettings}
+                  data-testid="save-settings-btn"
+                >
+                  {savingSettings ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Save Settings
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Add Payment Modal */}
       <Dialog open={showAddPaymentModal} onOpenChange={setShowAddPaymentModal}>
         <DialogContent className="sm:max-w-md">

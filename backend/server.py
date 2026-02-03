@@ -14761,11 +14761,12 @@ async def get_academy_lesson(lesson_id: str, request: Request):
 
 @api_router.post("/academy/lessons")
 async def create_academy_lesson(data: AcademyLessonCreate, request: Request):
-    """Create a new lesson (Admin/Manager only)"""
+    """Create a new lesson (requires academy.manage)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
-        raise HTTPException(status_code=403, detail="Only Admin and Managers can create lessons")
+    if not has_permission(user_doc, "academy.manage"):
+        raise HTTPException(status_code=403, detail="Permission denied: academy.manage required")
     
     # Verify category exists
     category = await db.academy_categories.find_one({"category_id": data.category_id}, {"_id": 0})
@@ -14812,11 +14813,12 @@ async def create_academy_lesson(data: AcademyLessonCreate, request: Request):
 
 @api_router.put("/academy/lessons/{lesson_id}")
 async def update_academy_lesson(lesson_id: str, data: AcademyLessonUpdate, request: Request):
-    """Update a lesson (Admin/Manager only)"""
+    """Update a lesson (requires academy.manage)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
-        raise HTTPException(status_code=403, detail="Only Admin and Managers can update lessons")
+    if not has_permission(user_doc, "academy.manage"):
+        raise HTTPException(status_code=403, detail="Permission denied: academy.manage required")
     
     lesson = await db.academy_lessons.find_one({"lesson_id": lesson_id}, {"_id": 0})
     if not lesson:

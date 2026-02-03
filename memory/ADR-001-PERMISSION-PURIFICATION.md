@@ -14,9 +14,26 @@
 | Backend: User CRUD | 11 | ✅ Done |
 | Backend: Permission Management | 4 | ✅ Done |
 | Backend: User Listing (GET /api/users) | 1 | ✅ Done |
+| Backend: Finance Confirmations | 2 | ✅ Done |
+| Backend: Get Designers | 1 | ✅ Done |
+| Backend: Get Collaborators | 1 | ✅ Done |
+| Backend: Create Lead | 1 | ✅ Done |
+| Backend: List Projects (scoping) | 1 | ✅ Done |
 | Frontend: AuthContext.js | 1 (role shortcut) | ✅ Done |
 | Frontend: Users.jsx | 7 | ✅ Done |
 | Frontend: Sidebar.jsx | Permission-based additions | ✅ Done |
+
+### New Permissions Added
+- `finance.confirm_booking_payment` - Confirm booking payments to unlock lead conversion
+- `finance.confirm_milestone_payment` - Confirm milestone payments to unlock stage transitions
+
+### Remaining Role Checks (199 total)
+| Category | Count | Action |
+|----------|-------|--------|
+| Ownership checks (`Designer and not collaborator`) | 10 | **Keep** - Business logic |
+| PreSales scoping (`role == "PreSales"`) | 29 | **Keep** - Data scoping |
+| Access gates (`role not in [...]`) | 81 | **Migrate** - Future work |
+| Other | 79 | **Review** - Mixed |
 
 ### Validation Results ✅ (Feb 3, 2026)
 

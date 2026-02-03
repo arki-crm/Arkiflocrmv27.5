@@ -678,21 +678,28 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      {/* Show gross and discount if discount exists */}
-                      {entry.discount_amount > 0 ? (
+                      {/* Show grand total with GST breakdown */}
+                      {(entry.discount_amount > 0 || entry.total_gst > 0) ? (
                         <>
                           <p className="text-xs text-gray-400 line-through">{formatCurrency(entry.gross_total)}</p>
                           <p className="font-semibold text-lg flex items-center justify-end gap-1">
-                            {formatCurrency(entry.net_payable || entry.total_value)}
-                            <span className="text-xs font-normal text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                              -{entry.discount_type === 'percentage' 
-                                ? `${entry.discount_value}%` 
-                                : formatCurrency(entry.discount_amount)}
-                            </span>
+                            {formatCurrency(entry.grand_total || entry.total_value)}
+                            {entry.discount_amount > 0 && (
+                              <span className="text-xs font-normal text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                                -{entry.discount_type === 'percentage' 
+                                  ? `${entry.discount_value}%` 
+                                  : formatCurrency(entry.discount_amount)}
+                              </span>
+                            )}
+                            {entry.total_gst > 0 && (
+                              <span className="text-xs font-normal text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                                +GST
+                              </span>
+                            )}
                           </p>
                         </>
                       ) : (
-                        <p className="font-semibold text-lg">{formatCurrency(entry.total_value)}</p>
+                        <p className="font-semibold text-lg">{formatCurrency(entry.grand_total || entry.total_value)}</p>
                       )}
                       {paymentStatus !== 'unpaid' && (
                         <p className="text-xs text-gray-500">

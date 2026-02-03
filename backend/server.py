@@ -5794,7 +5794,16 @@ async def get_pending_milestone_confirmations(request: Request):
 # ============ LEADS ENDPOINTS ============
 
 def generate_lead_timeline(stage: str, created_date: str):
-    """Generate lead timeline based on current stage with TAT-based expected dates"""
+    """
+    Generate lead timeline based on current stage with TAT-based expected dates.
+    
+    Key logic:
+    - "Lead Allocated" is auto-completed on creation (TAT: 0 days)
+    - "BC Call Done" must be manually completed by designer (TAT: 24h / 1 day)
+    - "First BOQ Sent" must be manually completed (TAT: 48h / 2 days after BC Call)
+    - Milestones past their TAT deadline show as "delayed"
+    - Only "Lead Allocated" is auto-completed; all others require manual action
+    """
     base_date = datetime.fromisoformat(created_date.replace("Z", "+00:00"))
     if base_date.tzinfo is None:
         base_date = base_date.replace(tzinfo=timezone.utc)
@@ -5815,27 +5824,31 @@ def generate_lead_timeline(stage: str, created_date: str):
         if tat_days is not None:
             cumulative_days += tat_days
         else:
-            cumulative_days += 2  # Default fallback
+            cumulative_days += 2  # Default fallback for milestones without TAT
         
         expected_date = base_date + timedelta(days=cumulative_days)
         
-        # Determine status and completedDate
+        # Determine status and completedDate based on stage progression
         if milestone_stage_index < stage_index:
+            # Past stages - mark as completed
             status = "completed"
-            completed_date = expected_date.isoformat()  # Use expected as completed for past milestones
+            completed_date = expected_date.isoformat()
         elif milestone_stage_index == stage_index:
-            if idx == 0 or milestone_title == "Lead Created":
+            # Current stage
+            if milestone_title == "Lead Allocated":
+                # "Lead Allocated" is ALWAYS auto-completed on lead creation
                 status = "completed"
                 completed_date = base_date.isoformat()
             else:
-                # Check if delayed
+                # All other milestones in current stage require manual completion
+                # Check if delayed based on TAT
                 if expected_date < now:
                     status = "delayed"
                 else:
                     status = "pending"
                 completed_date = None
         else:
-            # Future milestone - check if delayed
+            # Future milestone - check if already past deadline (shouldn't happen normally)
             if expected_date < now:
                 status = "delayed"
             else:

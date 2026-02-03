@@ -13179,11 +13179,12 @@ async def get_sales_manager_dashboard(request: Request):
 
 @api_router.post("/sales-manager/reassign-lead/{lead_id}")
 async def reassign_lead(lead_id: str, request: Request):
-    """Reassign a lead to a different designer"""
+    """Reassign a lead to a different designer (requires leads.reassign)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in SALES_MANAGER_ROLES:
-        raise HTTPException(status_code=403, detail="Access denied. Sales Manager role required.")
+    if not has_permission(user_doc, "leads.reassign"):
+        raise HTTPException(status_code=403, detail="Permission denied: leads.reassign required")
     
     body = await request.json()
     new_assignee_id = body.get("assignee_id")

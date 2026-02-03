@@ -25701,12 +25701,30 @@ async def update_execution_entry(execution_id: str, update: ExecutionEntryUpdate
             if item.category not in EXECUTION_CATEGORIES:
                 raise HTTPException(status_code=400, detail=f"Invalid category '{item.category}'")
         
-        # Process and recalculate
+        # Process and recalculate with GST
         processed_items = []
         gross_total = 0
+        total_cgst = 0
+        total_sgst = 0
+        total_igst = 0
+        
         for idx, item in enumerate(update.items):
             line_total = item.quantity * item.rate
             gross_total += line_total
+            
+            # Calculate GST for this line item
+            cgst_percent = item.cgst_percent or 0
+            sgst_percent = item.sgst_percent or 0
+            igst_percent = item.igst_percent or 0
+            
+            cgst_amount = (line_total * cgst_percent / 100) if cgst_percent else 0
+            sgst_amount = (line_total * sgst_percent / 100) if sgst_percent else 0
+            igst_amount = (line_total * igst_percent / 100) if igst_percent else 0
+            
+            total_cgst += cgst_amount
+            total_sgst += sgst_amount
+            total_igst += igst_amount
+            
             processed_items.append({
                 "item_id": f"item_{idx + 1}",
                 "category": item.category,
@@ -25716,13 +25734,23 @@ async def update_execution_entry(execution_id: str, update: ExecutionEntryUpdate
                 "quantity": item.quantity,
                 "unit": item.unit,
                 "rate": item.rate,
-                "line_total": line_total
+                "line_total": line_total,
+                # GST fields
+                "hsn_code": item.hsn_code,
+                "cgst_percent": cgst_percent if cgst_percent else None,
+                "sgst_percent": sgst_percent if sgst_percent else None,
+                "igst_percent": igst_percent if igst_percent else None,
+                "cgst_amount": cgst_amount if cgst_amount else None,
+                "sgst_amount": sgst_amount if sgst_amount else None,
+                "igst_amount": igst_amount if igst_amount else None,
+                "line_total_with_gst": line_total + cgst_amount + sgst_amount + igst_amount
             })
+        
         update_dict["items"] = processed_items
         update_dict["item_count"] = len(processed_items)
         update_dict["gross_total"] = gross_total
         
-        # Recalculate discount and net_payable
+        # Recalculate discount
         discount_type = update.discount_type if update.discount_type is not None else entry.get("discount_type")
         discount_value = update.discount_value if update.discount_value is not None else entry.get("discount_value", 0)
         discount_amount = 0
@@ -25733,21 +25761,29 @@ async def update_execution_entry(execution_id: str, update: ExecutionEntryUpdate
             elif discount_type == "percentage":
                 discount_amount = (gross_total * min(discount_value, 100)) / 100
         
-        net_payable = gross_total - discount_amount
+        net_taxable = gross_total - discount_amount
+        total_gst = total_cgst + total_sgst + total_igst
+        grand_total = net_taxable + total_gst
         
         update_dict["discount_type"] = discount_type
         update_dict["discount_value"] = discount_value
         update_dict["discount_amount"] = discount_amount
-        update_dict["net_payable"] = net_payable
-        update_dict["total_value"] = net_payable  # backward compat
+        update_dict["net_taxable"] = net_taxable
+        update_dict["total_cgst"] = total_cgst
+        update_dict["total_sgst"] = total_sgst
+        update_dict["total_igst"] = total_igst
+        update_dict["total_gst"] = total_gst
+        update_dict["grand_total"] = grand_total
+        update_dict["net_payable"] = grand_total  # backward compat
+        update_dict["total_value"] = grand_total  # backward compat
         
-        old_total = entry.get("total_value", 0)
-        if old_total != net_payable:
-            changes.append(f"net_payable: ₹{old_total:,.0f} → ₹{net_payable:,.0f}")
+        old_total = entry.get("grand_total", entry.get("total_value", 0))
+        if old_total != grand_total:
+            changes.append(f"grand_total: ₹{old_total:,.0f} → ₹{grand_total:,.0f}")
         
         # Recalculate amount_remaining based on payments already made
         total_paid = entry.get("total_paid", 0)
-        new_remaining = max(0, net_payable - total_paid)
+        new_remaining = max(0, grand_total - total_paid)
         update_dict["amount_remaining"] = new_remaining
         update_dict["payment_status"] = "paid" if new_remaining <= 0 else ("partial" if total_paid > 0 else "unpaid")
     
@@ -25764,17 +25800,21 @@ async def update_execution_entry(execution_id: str, update: ExecutionEntryUpdate
             elif discount_type == "percentage":
                 discount_amount = (gross_total * min(discount_value, 100)) / 100
         
-        net_payable = gross_total - discount_amount
+        net_taxable = gross_total - discount_amount
+        total_gst = entry.get("total_gst", 0)
+        grand_total = net_taxable + total_gst
         
-        old_net = entry.get("net_payable", entry.get("total_value", 0))
-        if old_net != net_payable:
-            changes.append(f"net_payable: ₹{old_net:,.0f} → ₹{net_payable:,.0f}")
+        old_total = entry.get("grand_total", entry.get("total_value", 0))
+        if old_total != grand_total:
+            changes.append(f"grand_total: ₹{old_total:,.0f} → ₹{grand_total:,.0f}")
         
         update_dict["discount_type"] = discount_type
         update_dict["discount_value"] = discount_value
         update_dict["discount_amount"] = discount_amount
-        update_dict["net_payable"] = net_payable
-        update_dict["total_value"] = net_payable  # backward compat
+        update_dict["net_taxable"] = net_taxable
+        update_dict["grand_total"] = grand_total
+        update_dict["net_payable"] = grand_total  # backward compat
+        update_dict["total_value"] = grand_total  # backward compat
         
         # Recalculate amount_remaining based on payments already made
         total_paid = entry.get("total_paid", 0)

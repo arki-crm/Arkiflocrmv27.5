@@ -7299,6 +7299,11 @@ class ProjectFinancialsUpdate(BaseModel):
     custom_payment_schedule_enabled: Optional[bool] = None
     custom_payment_schedule: Optional[List[dict]] = None
 
+class ProjectSettingsUpdate(BaseModel):
+    """Update project settings (GST, etc.)"""
+    gst_applicable: Optional[bool] = None
+    gst_number: Optional[str] = None
+
 class PaymentCreate(BaseModel):
     amount: float
     mode: str  # Cash, Bank, UPI, Other

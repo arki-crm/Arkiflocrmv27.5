@@ -30,7 +30,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 const ROLES = ['Admin', 'PreSales', 'SalesManager', 'Designer', 'DesignManager', 'ProductionOpsManager'];
 
 const UserInvite = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -41,12 +41,12 @@ const UserInvite = () => {
   });
   const [errors, setErrors] = useState({});
 
-  // Redirect non-admin users
+  // Redirect users without admin.manage_users permission
   useEffect(() => {
-    if (user && user.role !== 'Admin') {
+    if (user && !hasPermission('admin.manage_users')) {
       navigate('/dashboard');
     }
-  }, [user, navigate]);
+  }, [user, navigate, hasPermission]);
 
   const validateForm = () => {
     const newErrors = {};

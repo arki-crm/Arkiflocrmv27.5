@@ -2669,8 +2669,9 @@ async def create_local_user(user_data: LocalUserCreate, request: Request):
 
 @api_router.put("/users/{user_id}/password")
 async def change_user_password(user_id: str, pwd_data: PasswordChange, request: Request):
-    """Change user password (self or Admin)"""
+    """Change user password (self or users with admin.manage_users permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
     # Find target user
     target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
@@ -2679,13 +2680,13 @@ async def change_user_password(user_id: str, pwd_data: PasswordChange, request: 
     
     # Permission check
     is_self = user.user_id == user_id
-    is_admin = user.role == "Admin"
+    has_manage_users = has_permission(user_doc, "admin.manage_users")
     
-    if not is_self and not is_admin:
+    if not is_self and not has_manage_users:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # If self-change, verify current password
-    if is_self and not is_admin:
+    # If self-change, verify current password (unless has manage_users permission)
+    if is_self and not has_manage_users:
         if not pwd_data.current_password:
             raise HTTPException(status_code=400, detail="Current password required")
         if not verify_password(pwd_data.current_password, target_user.get("local_password", "")):

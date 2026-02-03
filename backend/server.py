@@ -14999,11 +14999,12 @@ async def serve_academy_file(filename: str, request: Request):
 
 @api_router.delete("/academy/files/{filename}")
 async def delete_academy_file(filename: str, request: Request):
-    """Delete an Academy file (Admin/Manager only)"""
+    """Delete an Academy file (requires academy.manage)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
-        raise HTTPException(status_code=403, detail="Only Admin and Managers can delete files")
+    if not has_permission(user_doc, "academy.manage"):
+        raise HTTPException(status_code=403, detail="Permission denied: academy.manage required")
     
     # Validate filename
     if ".." in filename or "/" in filename or "\\" in filename:

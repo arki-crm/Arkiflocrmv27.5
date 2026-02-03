@@ -1983,7 +1983,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.project.view", "finance.project.vendor_mapping",
         "finance.view_project_finance", "finance.edit_vendor_mapping",
         # ProductionOpsManager can hold/activate/deactivate projects
-        "projects.hold", "projects.activate", "projects.deactivate"
+        "projects.hold", "projects.activate", "projects.deactivate",
+        # ProductionOpsManager can assign technicians
+        "service.assign_technician"
     ],
     "OperationLead": [
         # Ground-level execution role - assigned projects only

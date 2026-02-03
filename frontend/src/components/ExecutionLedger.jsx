@@ -117,7 +117,12 @@ const emptyLineItem = {
   brand: '',
   quantity: '',
   unit: 'pcs',
-  rate: ''
+  rate: '',
+  // GST fields (optional)
+  hsn_code: '',
+  cgst_percent: '',
+  sgst_percent: '',
+  igst_percent: ''
 };
 
 // Empty form template
@@ -235,7 +240,12 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
         brand: item.brand || '',
         quantity: item.quantity?.toString() || '',
         unit: item.unit || 'pcs',
-        rate: item.rate?.toString() || ''
+        rate: item.rate?.toString() || '',
+        // GST fields
+        hsn_code: item.hsn_code || '',
+        cgst_percent: item.cgst_percent?.toString() || '',
+        sgst_percent: item.sgst_percent?.toString() || '',
+        igst_percent: item.igst_percent?.toString() || ''
       })) || [{ ...emptyLineItem }],
       discount_type: entry.discount_type || '',
       discount_value: entry.discount_value?.toString() || '',

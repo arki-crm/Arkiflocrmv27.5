@@ -8762,8 +8762,9 @@ class EmailTemplateUpdate(BaseModel):
 async def get_email_templates(request: Request):
     """Get all email templates (requires admin.email_templates permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if not has_permission(user, "admin.email_templates"):
+    if not has_permission(user_doc, "admin.email_templates"):
         raise HTTPException(status_code=403, detail="You don't have permission to view email templates")
     
     # Get from database or return defaults
@@ -8781,8 +8782,9 @@ async def get_email_templates(request: Request):
 async def get_email_template(template_id: str, request: Request):
     """Get a single email template (requires admin.email_templates permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if not has_permission(user, "admin.email_templates"):
+    if not has_permission(user_doc, "admin.email_templates"):
         raise HTTPException(status_code=403, detail="You don't have permission to view email templates")
     
     template = await db.email_templates.find_one({"id": template_id}, {"_id": 0})
@@ -8800,8 +8802,9 @@ async def get_email_template(template_id: str, request: Request):
 async def update_email_template(template_id: str, update: EmailTemplateUpdate, request: Request):
     """Update an email template (requires admin.email_templates permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if not has_permission(user, "admin.email_templates"):
+    if not has_permission(user_doc, "admin.email_templates"):
         raise HTTPException(status_code=403, detail="You don't have permission to update email templates")
     
     # Build update dict
@@ -8841,8 +8844,9 @@ async def update_email_template(template_id: str, update: EmailTemplateUpdate, r
 async def reset_email_template(template_id: str, request: Request):
     """Reset an email template to default (requires admin.email_templates permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if not has_permission(user, "admin.email_templates"):
+    if not has_permission(user_doc, "admin.email_templates"):
         raise HTTPException(status_code=403, detail="You don't have permission to reset email templates")
     
     # Find default template

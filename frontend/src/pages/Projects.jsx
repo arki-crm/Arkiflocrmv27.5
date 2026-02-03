@@ -155,20 +155,59 @@ const Projects = () => {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('all');
-  const [timeFilter, setTimeFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [seeding, setSeeding] = useState(false);
+  const [designers, setDesigners] = useState([]);
+  
+  // Advanced filters - loaded from localStorage
+  const [advancedFilters, setAdvancedFilters] = useState(() => loadFiltersFromStorage('projects'));
+
+  // Fetch designers for filter dropdown
+  const fetchDesigners = async () => {
+    if (!['Admin', 'SalesManager', 'DesignManager', 'Manager'].includes(user?.role)) return;
+    try {
+      const response = await axios.get(`${API}/users/designers`, { withCredentials: true });
+      setDesigners(response.data || []);
+    } catch (error) {
+      console.warn('Failed to fetch designers:', error);
+    }
+  };
 
   // Fetch projects
   const fetchProjects = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
+      
+      // Stage filter
       if (activeFilter !== 'all') {
         params.append('stage', activeFilter);
       }
-      if (timeFilter !== 'all') {
-        params.append('time_filter', timeFilter);
+      
+      // Time filter
+      if (advancedFilters.timeFilter && advancedFilters.timeFilter !== 'all') {
+        params.append('time_filter', advancedFilters.timeFilter);
+        if (advancedFilters.timeFilter === 'custom') {
+          if (advancedFilters.startDate) params.append('start_date', advancedFilters.startDate);
+          if (advancedFilters.endDate) params.append('end_date', advancedFilters.endDate);
+        }
+      }
+      
+      // Designer filter
+      if (advancedFilters.designerId && advancedFilters.designerId !== 'all') {
+        params.append('designer_id', advancedFilters.designerId);
+      }
+      
+      // Hold status filter
+      if (advancedFilters.holdStatus && advancedFilters.holdStatus !== 'all') {
+        params.append('hold_status', advancedFilters.holdStatus);
+      }
+      
+      // Sorting
+      if (advancedFilters.sortBy) {
+        const [sortField, sortOrder] = advancedFilters.sortBy.split(':');
+        params.append('sort_by', sortField);
+        params.append('sort_order', sortOrder);
       }
       
       const response = await axios.get(`${API}/projects?${params.toString()}`, {
@@ -183,10 +222,21 @@ const Projects = () => {
     }
   };
 
+  // Save filters to localStorage when they change
+  const handleFiltersChange = (newFilters) => {
+    setAdvancedFilters(newFilters);
+    saveFiltersToStorage('projects', newFilters);
+  };
+
+  useEffect(() => {
+    fetchDesigners();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.role]);
+
   useEffect(() => {
     fetchProjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFilter, timeFilter]);
+  }, [activeFilter, advancedFilters]);
 
   // Client-side search filtering
   const filteredProjects = useMemo(() => {

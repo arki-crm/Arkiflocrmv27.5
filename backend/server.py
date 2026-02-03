@@ -3478,18 +3478,18 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
     
     # ============ PAYMENT GATE CHECK (Simple) ============
     # Works like booking payment confirmation
-    gate_check = check_payment_gate(project, new_stage, user.role)
+    gate_check = check_payment_gate(project, new_stage, user_doc)
     
     if gate_check.get("blocked"):
-        # Non-Admin/Founder users are blocked
+        # Users without override permission are blocked
         raise HTTPException(
             status_code=403,
             detail=gate_check.get("message", "Required payment not confirmed by Accounts")
         )
     
-    # Admin/Founder override - log it
+    # Override - log it
     if gate_check.get("can_override") and new_stage in PAYMENT_REQUIRED_STAGES:
-        override_note = f" ⚠️ [Payment gate bypassed by {user.role}]"
+        override_note = f" ⚠️ [Payment gate bypassed by {user.name}]"
         rollback_note += override_note
         
         # Log the override

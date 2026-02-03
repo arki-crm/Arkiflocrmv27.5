@@ -1717,7 +1717,7 @@ const ProjectFinanceDetail = () => {
         </CardContent>
       </Card>
 
-      {/* Execution Ledger Section */}
+      {/* Purchase Invoices Section */}
       <ExecutionLedger 
         projectId={projectId}
         userRole={user?.role}

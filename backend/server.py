@@ -14900,13 +14900,14 @@ async def seed_academy_categories(request: Request):
 async def upload_academy_file(request: Request, file: UploadFile = File(...)):
     """
     Upload a file (video, PDF, image) for Academy lessons.
-    Only Admin/Manager roles can upload.
+    Requires academy.manage permission.
     Files are stored locally and served to authenticated users only.
     """
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
-        raise HTTPException(status_code=403, detail="Only Admin and Managers can upload files")
+    if not has_permission(user_doc, "academy.manage"):
+        raise HTTPException(status_code=403, detail="Permission denied: academy.manage required")
     
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")

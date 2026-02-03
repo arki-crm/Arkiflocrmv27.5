@@ -3018,7 +3018,11 @@ async def list_projects(
     search: Optional[str] = None,
     time_filter: Optional[str] = None,  # this_month, last_month, this_quarter, custom, all
     start_date: Optional[str] = None,   # For custom date range (ISO format)
-    end_date: Optional[str] = None      # For custom date range (ISO format)
+    end_date: Optional[str] = None,     # For custom date range (ISO format)
+    designer_id: Optional[str] = None,  # Filter by designer/collaborator
+    hold_status: Optional[str] = None,  # Active, Hold, Deactivated
+    sort_by: Optional[str] = None,      # created_at, updated_at, project_value
+    sort_order: Optional[str] = "desc"  # asc, desc
 ):
     """List projects - Designer sees only assigned, Admin/Manager sees all"""
     user = await get_current_user(request)

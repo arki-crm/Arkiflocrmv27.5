@@ -4666,8 +4666,9 @@ async def upload_file(project_id: str, file_data: FileUpload, request: Request):
 async def delete_file(project_id: str, file_id: str, request: Request):
     """Delete a file (requires admin.delete_files permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if not has_permission(user, "admin.delete_files"):
+    if not has_permission(user_doc, "admin.delete_files"):
         raise HTTPException(status_code=403, detail="You don't have permission to delete files")
     
     result = await db.projects.update_one(

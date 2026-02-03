@@ -51,7 +51,7 @@ const FUNNEL_STAGES = [
 ];
 
 const SalesManagerDashboard = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -65,14 +65,14 @@ const SalesManagerDashboard = () => {
   const [reassigning, setReassigning] = useState(false);
 
   useEffect(() => {
-    // V1: Allow Admin, SalesManager, or users with senior_manager_view
-    if (user?.role && !['Admin', 'SalesManager'].includes(user.role) && !user?.senior_manager_view) {
+    // Sales managers and those with admin.view_reports can access
+    if (user && !hasPermission('admin.view_reports') && !hasPermission('leads.view_all') && !user?.senior_manager_view) {
       navigate('/dashboard');
       return;
     }
     fetchData();
     fetchDesigners();
-  }, [user, navigate]);
+  }, [user, navigate, hasPermission]);
 
   const fetchData = async () => {
     try {

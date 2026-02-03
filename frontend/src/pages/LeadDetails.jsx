@@ -653,6 +653,12 @@ const LeadDetails = () => {
   const [holdAction, setHoldAction] = useState(null); // 'Hold', 'Activate', 'Deactivate'
   const [holdReason, setHoldReason] = useState('');
   const [isUpdatingHoldStatus, setIsUpdatingHoldStatus] = useState(false);
+  
+  // Timeline Adjustment state
+  const [showTimelineAdjustmentModal, setShowTimelineAdjustmentModal] = useState(false);
+  const [showTimelineHistoryModal, setShowTimelineHistoryModal] = useState(false);
+  const [isAdjustingTimeline, setIsAdjustingTimeline] = useState(false);
+  const [timelineHistory, setTimelineHistory] = useState([]);
 
   // Fetch lead
   const fetchLead = async () => {

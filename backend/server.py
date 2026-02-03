@@ -1671,7 +1671,8 @@ AVAILABLE_PERMISSIONS = {
             {"id": "admin.email_templates", "name": "Email Templates", "description": "View and manage email templates"},
             {"id": "admin.view_logs", "name": "View System Logs", "description": "Access system logs and audit trails"},
             {"id": "admin.seed_data", "name": "Seed Test Data", "description": "Create test data for development"},
-            {"id": "service.assign_technician", "name": "Assign Technician", "description": "Assign technicians to service requests"}
+            {"id": "service.assign_technician", "name": "Assign Technician", "description": "Assign technicians to service requests"},
+            {"id": "timeline.adjust", "name": "Adjust Timeline", "description": "Adjust lead/project timelines and manage holds"}
         ]
     },
     # ============ FINANCE & ACCOUNTING PERMISSIONS (Granular) ============

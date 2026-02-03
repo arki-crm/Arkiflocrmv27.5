@@ -1622,6 +1622,27 @@ const ProjectDetails = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Timeline Adjustment Modal */}
+      <TimelineAdjustmentModal
+        open={showTimelineAdjustmentModal}
+        onClose={() => setShowTimelineAdjustmentModal(false)}
+        onSubmit={handleTimelineAdjustment}
+        entityType="project"
+        entityId={id}
+        entityName={project?.customer_name}
+        currentTimeline={project?.current_timeline}
+        isOnHold={project?.current_timeline?.on_hold || false}
+        loading={isAdjustingTimeline}
+      />
+      
+      {/* Timeline History Modal */}
+      <TimelineHistoryModal
+        open={showTimelineHistoryModal}
+        onClose={() => setShowTimelineHistoryModal(false)}
+        history={timelineHistory}
+        entityType="project"
+      />
     </div>
   );
 };

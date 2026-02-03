@@ -5264,7 +5264,10 @@ async def list_leads(
     search: Optional[str] = None,
     time_filter: Optional[str] = None,  # this_month, last_month, this_quarter, custom, all
     start_date: Optional[str] = None,   # For custom date range (ISO format)
-    end_date: Optional[str] = None      # For custom date range (ISO format)
+    end_date: Optional[str] = None,     # For custom date range (ISO format)
+    designer_id: Optional[str] = None,  # Filter by designer
+    sort_by: Optional[str] = None,      # created_at, updated_at, budget
+    sort_order: Optional[str] = "desc"  # asc, desc
 ):
     """List leads based on permission - shows only actual leads (not pre-sales)"""
     user = await get_current_user(request)

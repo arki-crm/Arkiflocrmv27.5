@@ -13254,11 +13254,12 @@ async def reassign_lead(lead_id: str, request: Request):
 
 @api_router.get("/sales-manager/lead-activity/{lead_id}")
 async def get_lead_sales_activity(lead_id: str, request: Request):
-    """Get all sales-related activity for a lead"""
+    """Get all sales-related activity for a lead (requires leads.view_all)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in SALES_MANAGER_ROLES:
-        raise HTTPException(status_code=403, detail="Access denied. Sales Manager role required.")
+    if not has_permission(user_doc, "leads.view_all"):
+        raise HTTPException(status_code=403, detail="Permission denied: leads.view_all required")
     
     lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
     if not lead:

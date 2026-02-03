@@ -651,7 +651,7 @@ const FilesPanel = ({ files, onUpload, onDelete, canEdit, uploading }) => {
 const PreSalesDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [lead, setLead] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

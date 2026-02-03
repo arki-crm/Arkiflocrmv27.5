@@ -701,7 +701,7 @@ export default function Liabilities() {
                   <SelectContent>
                     {accounts.map((account) => (
                       <SelectItem key={account.account_id} value={account.account_id}>
-                        {account.name} ({formatCurrency(account.current_balance)})
+                        {account.account_name || account.name} ({formatCurrency(account.current_balance)})
                       </SelectItem>
                     ))}
                   </SelectContent>

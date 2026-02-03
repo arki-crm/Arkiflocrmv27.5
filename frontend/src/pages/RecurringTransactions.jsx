@@ -742,7 +742,7 @@ export default function RecurringTransactions() {
                   <SelectContent>
                     {accounts.map((acc) => (
                       <SelectItem key={acc.account_id} value={acc.account_id}>
-                        {acc.name}
+                        {acc.account_name || acc.name} ({formatCurrency(acc.current_balance)})
                       </SelectItem>
                     ))}
                   </SelectContent>

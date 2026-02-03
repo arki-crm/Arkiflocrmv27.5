@@ -1379,7 +1379,7 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                   <SelectContent>
                     {accounts.map(acc => (
                       <SelectItem key={acc.account_id} value={acc.account_id}>
-                        {acc.name} ({formatCurrency(acc.current_balance)})
+                        {acc.account_name || acc.name} ({formatCurrency(acc.current_balance)})
                       </SelectItem>
                     ))}
                   </SelectContent>

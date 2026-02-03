@@ -4751,11 +4751,12 @@ async def get_project_collaborators(project_id: str, request: Request):
 
 @api_router.post("/projects/{project_id}/collaborators")
 async def add_collaborator(project_id: str, collab_data: CollaboratorAdd, request: Request):
-    """Add a collaborator (Admin or Manager roles)"""
+    """Add a collaborator (requires projects.manage_collaborators permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
-        raise HTTPException(status_code=403, detail="Manager access required")
+    if not has_permission(user_doc, "projects.manage_collaborators"):
+        raise HTTPException(status_code=403, detail="Permission denied: projects.manage_collaborators required")
     
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
     
@@ -4787,11 +4788,12 @@ async def add_collaborator(project_id: str, collab_data: CollaboratorAdd, reques
 
 @api_router.delete("/projects/{project_id}/collaborators/{user_id}")
 async def remove_collaborator(project_id: str, user_id: str, request: Request):
-    """Remove a collaborator (Admin or Manager)"""
+    """Remove a collaborator (requires projects.manage_collaborators permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
-        raise HTTPException(status_code=403, detail="Manager access required")
+    if not has_permission(user_doc, "projects.manage_collaborators"):
+        raise HTTPException(status_code=403, detail="Permission denied: projects.manage_collaborators required")
     
     result = await db.projects.update_one(
         {"project_id": project_id},

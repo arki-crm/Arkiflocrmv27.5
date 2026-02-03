@@ -19,21 +19,36 @@
 | Backend: Get Collaborators | 1 | ✅ Done |
 | Backend: Create Lead | 1 | ✅ Done |
 | Backend: List Projects (scoping) | 1 | ✅ Done |
+| Backend: Lead Conversion | 1 | ✅ Done |
+| Backend: Add/Remove Collaborator | 2 | ✅ Done |
+| Backend: Project Hold Status | 1 | ✅ Done |
+| Backend: Lead Hold Status | 1 | ✅ Done |
 | Frontend: AuthContext.js | 1 (role shortcut) | ✅ Done |
 | Frontend: Users.jsx | 7 | ✅ Done |
 | Frontend: Sidebar.jsx | Permission-based additions | ✅ Done |
 
-### New Permissions Added
-- `finance.confirm_booking_payment` - Confirm booking payments to unlock lead conversion
-- `finance.confirm_milestone_payment` - Confirm milestone payments to unlock stage transitions
+### New Permissions Added (This Session)
+**Projects:**
+- `projects.hold` - Place projects on hold
+- `projects.activate` - Activate held/deactivated projects
+- `projects.deactivate` - Deactivate projects permanently
 
-### Remaining Role Checks (199 total)
+**Leads:**
+- `leads.hold` - Place leads on hold
+- `leads.activate` - Activate held/deactivated leads
+- `leads.deactivate` - Deactivate leads permanently
+
+**Finance (Previous):**
+- `finance.confirm_booking_payment`
+- `finance.confirm_milestone_payment`
+
+### Remaining Role Checks (192 total, down from 199)
 | Category | Count | Action |
 |----------|-------|--------|
 | Ownership checks (`Designer and not collaborator`) | 10 | **Keep** - Business logic |
 | PreSales scoping (`role == "PreSales"`) | 29 | **Keep** - Data scoping |
-| Access gates (`role not in [...]`) | 81 | **Migrate** - Future work |
-| Other | 79 | **Review** - Mixed |
+| Access gates (`role not in [...]`) | 76 | **Migrate** - Future work (down from 81) |
+| Other | 77 | **Review** - Mixed |
 
 ### Validation Results ✅ (Feb 3, 2026)
 

@@ -16985,6 +16985,108 @@ async def get_daily_closing_history(request: Request, limit: int = 30):
     return closings
 
 
+@api_router.get("/finance/daily-closing/{date}/transactions")
+async def get_daily_transactions(request: Request, date: str):
+    """Get detailed transaction list for a specific date (Daybook view)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.daily_closing") and not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Parse date
+    try:
+        target_date = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    
+    target_date_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    target_date_end = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    # Get all transactions for this date
+    transactions = await db.accounting_transactions.find(
+        {"created_at": {"$gte": target_date_start, "$lte": target_date_end}},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(1000)
+    
+    # Enrich with account names, categories, project/vendor info
+    accounts = {a["account_id"]: a for a in await db.accounting_accounts.find({}, {"_id": 0}).to_list(100)}
+    categories = {c["category_id"]: c for c in await db.accounting_categories.find({}, {"_id": 0}).to_list(100)}
+    
+    enriched = []
+    total_inflow = 0
+    total_outflow = 0
+    
+    for txn in transactions:
+        account = accounts.get(txn.get("account_id"), {})
+        category = categories.get(txn.get("category_id"), {})
+        
+        # Determine vendor/project name
+        counterparty = None
+        counterparty_type = None
+        
+        if txn.get("project_id"):
+            project = await db.projects.find_one(
+                {"project_id": txn["project_id"]},
+                {"_id": 0, "pid": 1, "project_name": 1, "client_name": 1}
+            )
+            if project:
+                counterparty = f"{project.get('pid', '')} - {project.get('client_name', project.get('project_name', ''))}"
+                counterparty_type = "project"
+        
+        if txn.get("vendor_id") and not counterparty:
+            vendor = await db.vendors.find_one(
+                {"vendor_id": txn["vendor_id"]},
+                {"_id": 0, "name": 1}
+            )
+            if vendor:
+                counterparty = vendor.get("name", "Unknown Vendor")
+                counterparty_type = "vendor"
+        
+        # Calculate inflow/outflow
+        amount = txn.get("amount", 0)
+        if txn.get("transaction_type") == "inflow":
+            total_inflow += amount
+            inflow = amount
+            outflow = 0
+        else:
+            total_outflow += amount
+            inflow = 0
+            outflow = amount
+        
+        enriched.append({
+            "transaction_id": txn.get("transaction_id"),
+            "time": txn.get("created_at"),
+            "account_id": txn.get("account_id"),
+            "account_name": account.get("account_name", "Unknown"),
+            "account_type": account.get("account_type"),
+            "reference": txn.get("reference") or txn.get("remarks") or "-",
+            "category_id": txn.get("category_id"),
+            "category_name": category.get("name", "Uncategorized"),
+            "purpose": txn.get("purpose") or category.get("name", ""),
+            "counterparty": counterparty,
+            "counterparty_type": counterparty_type,
+            "project_id": txn.get("project_id"),
+            "vendor_id": txn.get("vendor_id"),
+            "transaction_type": txn.get("transaction_type"),
+            "inflow": inflow,
+            "outflow": outflow,
+            "mode": txn.get("mode", "-"),
+            "recorded_by": txn.get("created_by_name", "System")
+        })
+    
+    return {
+        "date": date,
+        "transactions": enriched,
+        "summary": {
+            "count": len(enriched),
+            "total_inflow": total_inflow,
+            "total_outflow": total_outflow,
+            "net": total_inflow - total_outflow
+        }
+    }
+
+
 # ============ FOUNDER DASHBOARD ============
 
 @api_router.get("/finance/founder-dashboard")

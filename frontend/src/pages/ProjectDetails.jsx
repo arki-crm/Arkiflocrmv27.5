@@ -273,6 +273,26 @@ const ProjectDetails = () => {
     }
   };
 
+  // Save GST settings
+  const handleSaveGstSettings = async () => {
+    try {
+      setSavingSettings(true);
+      await axios.put(`${API}/projects/${id}/settings`, {
+        gst_applicable: gstApplicable,
+        gst_number: gstNumber || null
+      }, { withCredentials: true });
+      
+      toast.success('Settings saved successfully');
+      // Update local project state
+      setProject(prev => ({ ...prev, gst_applicable: gstApplicable, gst_number: gstNumber }));
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+      toast.error(err.response?.data?.detail || 'Failed to save settings');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   // Add payment
   const handleAddPayment = async () => {
     const amount = parseFloat(newPayment.amount);

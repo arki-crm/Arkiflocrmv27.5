@@ -795,6 +795,16 @@ const ProjectDetails = () => {
               Warranty & Service
             </TabsTrigger>
           )}
+          {['Admin', 'Founder', 'ProjectManager'].includes(user?.role) && (
+            <TabsTrigger 
+              value="settings" 
+              className="data-[state=active]:bg-white"
+              data-testid="tab-settings"
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              Settings
+            </TabsTrigger>
+          )}
         </TabsList>
       </Tabs>
 

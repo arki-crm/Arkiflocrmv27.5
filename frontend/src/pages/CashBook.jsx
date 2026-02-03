@@ -501,7 +501,7 @@ const CashBook = () => {
                               value={acc.account_id}
                               disabled={acc.account_id === transferForm.to_account_id}
                             >
-                              {acc.name} (₹{(acc.current_balance || 0).toLocaleString('en-IN')})
+                              {acc.account_name || acc.name} (₹{(acc.current_balance || 0).toLocaleString('en-IN')})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -525,7 +525,7 @@ const CashBook = () => {
                               value={acc.account_id}
                               disabled={acc.account_id === transferForm.from_account_id}
                             >
-                              {acc.name} (₹{(acc.current_balance || 0).toLocaleString('en-IN')})
+                              {acc.account_name || acc.name} (₹{(acc.current_balance || 0).toLocaleString('en-IN')})
                             </SelectItem>
                           ))}
                         </SelectContent>

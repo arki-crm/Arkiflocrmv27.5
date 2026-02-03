@@ -756,45 +756,83 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                           <TableHead>Unit</TableHead>
                           <TableHead className="text-right">Rate</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>HSN</TableHead>
+                          <TableHead className="text-right">GST</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {(entry.items || []).map((item, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell>
-                              <Badge className={`${CATEGORY_COLORS[item.category] || 'bg-gray-100'} text-xs`}>
-                                {item.category}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="font-medium">{item.material_name}</TableCell>
-                            <TableCell className="text-gray-500">{item.specification || '-'}</TableCell>
-                            <TableCell className="text-gray-500">{item.brand || '-'}</TableCell>
-                            <TableCell className="text-right">{item.quantity}</TableCell>
-                            <TableCell>{item.unit}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(item.rate)}</TableCell>
-                            <TableCell className="text-right font-medium">{formatCurrency(item.line_total)}</TableCell>
-                          </TableRow>
-                        ))}
+                        {(entry.items || []).map((item, idx) => {
+                          const itemGst = (item.cgst_amount || 0) + (item.sgst_amount || 0) + (item.igst_amount || 0);
+                          const hasGst = itemGst > 0;
+                          return (
+                            <TableRow key={idx}>
+                              <TableCell>
+                                <Badge className={`${CATEGORY_COLORS[item.category] || 'bg-gray-100'} text-xs`}>
+                                  {item.category}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-medium">{item.material_name}</TableCell>
+                              <TableCell className="text-gray-500">{item.specification || '-'}</TableCell>
+                              <TableCell className="text-gray-500">{item.brand || '-'}</TableCell>
+                              <TableCell className="text-right">{item.quantity}</TableCell>
+                              <TableCell>{item.unit}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(item.rate)}</TableCell>
+                              <TableCell className="text-right font-medium">{formatCurrency(item.line_total)}</TableCell>
+                              <TableCell className="text-gray-500 text-xs">{item.hsn_code || '-'}</TableCell>
+                              <TableCell className="text-right text-xs">
+                                {hasGst ? (
+                                  <div className="space-y-0.5">
+                                    {item.cgst_amount > 0 && <p className="text-blue-600">C:{item.cgst_percent}%</p>}
+                                    {item.sgst_amount > 0 && <p className="text-blue-600">S:{item.sgst_percent}%</p>}
+                                    {item.igst_amount > 0 && <p className="text-purple-600">I:{item.igst_percent}%</p>}
+                                    <p className="font-medium text-green-700">{formatCurrency(itemGst)}</p>
+                                  </div>
+                                ) : '-'}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                     
-                    {/* Discount Summary in expanded view */}
-                    {entry.discount_amount > 0 && (
-                      <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Gross Total:</span>
-                          <span className="font-medium">{formatCurrency(entry.gross_total)}</span>
+                    {/* Invoice Summary with GST breakdown */}
+                    <div className="mt-3 p-3 bg-slate-100 rounded-lg border">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500">Gross Total</p>
+                          <p className="font-semibold">{formatCurrency(entry.gross_total)}</p>
                         </div>
-                        <div className="flex justify-between text-sm text-amber-700">
-                          <span>Vendor Discount ({entry.discount_type === 'percentage' ? `${entry.discount_value}%` : 'Flat'}):</span>
-                          <span className="font-medium">−{formatCurrency(entry.discount_amount)}</span>
+                        {entry.discount_amount > 0 && (
+                          <div>
+                            <p className="text-gray-500">Discount ({entry.discount_type === 'percentage' ? `${entry.discount_value}%` : 'Flat'})</p>
+                            <p className="font-semibold text-amber-600">−{formatCurrency(entry.discount_amount)}</p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-gray-500">Net Taxable</p>
+                          <p className="font-semibold">{formatCurrency(entry.net_taxable || entry.gross_total - (entry.discount_amount || 0))}</p>
                         </div>
-                        <div className="flex justify-between text-sm font-semibold pt-1 mt-1 border-t border-amber-300">
-                          <span>Net Payable:</span>
-                          <span className="text-emerald-700">{formatCurrency(entry.net_payable || entry.total_value)}</span>
+                        {entry.total_gst > 0 && (
+                          <div>
+                            <p className="text-gray-500">Total GST</p>
+                            <p className="font-semibold text-green-600">
+                              +{formatCurrency(entry.total_gst)}
+                              <span className="text-xs text-gray-400 ml-1">
+                                ({entry.total_cgst > 0 && `C:${formatCurrency(entry.total_cgst)}`}
+                                {entry.total_sgst > 0 && ` S:${formatCurrency(entry.total_sgst)}`}
+                                {entry.total_igst > 0 && ` I:${formatCurrency(entry.total_igst)}`})
+                              </span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex justify-end pt-2 mt-2 border-t">
+                        <div>
+                          <span className="text-gray-600 mr-3">Grand Total (Payable):</span>
+                          <span className="text-xl font-bold text-emerald-700">{formatCurrency(entry.grand_total || entry.total_value)}</span>
                         </div>
                       </div>
-                    )}
+                    </div>
                     
                     {/* Payment History */}
                     {hasPayments && (
@@ -820,7 +858,7 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                           ))}
                         </div>
                       </div>
-                    )}
+                    )}}
                     
                     {entry.remarks && (
                       <p className="text-sm text-gray-500 mt-3 pt-3 border-t">

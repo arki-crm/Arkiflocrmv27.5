@@ -5345,6 +5345,10 @@ async def list_leads(
         if date_filter:
             query["created_at"] = date_filter
     
+    # Designer filter
+    if designer_id and designer_id != "all":
+        query["designer_id"] = designer_id
+    
     leads = await db.leads.find(query, {"_id": 0}).to_list(1000)
     
     # Apply search filter
@@ -5385,8 +5389,14 @@ async def list_leads(
         
         result.append(lead_data)
     
-    # Sort by updated_at descending
-    result.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+    # Sorting logic
+    sort_field = sort_by if sort_by in ["created_at", "updated_at", "budget"] else "updated_at"
+    reverse_order = sort_order != "asc"
+    
+    if sort_field == "budget":
+        result.sort(key=lambda x: float(x.get("budget", 0) or 0), reverse=reverse_order)
+    else:
+        result.sort(key=lambda x: x.get(sort_field, ""), reverse=reverse_order)
     
     return result
 

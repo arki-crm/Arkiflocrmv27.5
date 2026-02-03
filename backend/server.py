@@ -11728,6 +11728,7 @@ async def update_design_stage(
 ):
     """Move design project to next stage - triggers auto-task creation"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
     design_project = await db.design_projects.find_one(
         {"id": design_project_id},
@@ -11737,12 +11738,12 @@ async def update_design_stage(
     if not design_project:
         raise HTTPException(status_code=404, detail="Design project not found")
     
-    # Check permissions
-    if user.role in ["Designer", "HybridDesigner"]:
-        if design_project.get("designer_id") != user.user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
-    elif user.role not in ["Admin", "Manager", "DesignManager", "ProductionManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Check permissions - assigned designer can update, or anyone with milestones.update.design permission
+    is_assigned_designer = design_project.get("designer_id") == user.user_id
+    has_design_update = has_permission(user_doc, "milestones.update.design")
+    
+    if not is_assigned_designer and not has_design_update:
+        raise HTTPException(status_code=403, detail="Access denied - requires milestones.update.design permission or be assigned designer")
     
     new_stage = stage_update.stage
     if new_stage not in DESIGN_WORKFLOW_STAGES:

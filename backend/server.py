@@ -15756,8 +15756,8 @@ async def create_self_transfer(transfer: SelfTransferCreate, request: Request):
         user_id=user.user_id,
         user_name=user.name,
         new_value={
-            "from_account": from_account.get("name"),
-            "to_account": to_account.get("name"),
+            "from_account": from_account.get("account_name"),
+            "to_account": to_account.get("account_name"),
             "amount": transfer.amount
         },
         details=f"Internal transfer of ₹{transfer.amount:,.0f} from {from_account.get('account_name')} to {to_account.get('account_name')}"

@@ -1570,6 +1570,7 @@ AVAILABLE_PERMISSIONS = {
             {"id": "leads.create", "name": "Create Leads", "description": "Create new leads directly"},
             {"id": "leads.update", "name": "Update Leads", "description": "Update lead stages and details"},
             {"id": "leads.convert", "name": "Convert Leads", "description": "Convert leads to projects"},
+            {"id": "leads.reassign", "name": "Reassign Leads", "description": "Reassign leads to different designers"},
             {"id": "leads.hold", "name": "Hold Leads", "description": "Place leads on hold"},
             {"id": "leads.activate", "name": "Activate Leads", "description": "Activate held/deactivated leads"},
             {"id": "leads.deactivate", "name": "Deactivate Leads", "description": "Deactivate leads permanently"}

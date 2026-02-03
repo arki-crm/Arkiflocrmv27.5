@@ -407,10 +407,21 @@ const DailyClosing = () => {
 
           {/* Account-wise Breakdown */}
           <Card className="border-slate-200">
-            <CardHeader className="border-b border-slate-200">
+            <CardHeader className="border-b border-slate-200 flex flex-row items-center justify-between">
               <CardTitle className="text-lg font-semibold">
                 Account-wise Summary — {formatDate(selectedDate)}
               </CardTitle>
+              {data?.accounts?.some(acc => acc.transaction_count > 0) && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => fetchDetailedTransactions(selectedDate)}
+                  data-testid="view-daybook-btn"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  View Daybook
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="p-0">
               {data?.accounts?.length === 0 ? (
@@ -450,9 +461,19 @@ const DailyClosing = () => {
                             {formatCurrency(acc.closing_balance)}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <Badge variant="outline" className="text-xs">
-                              {acc.transaction_count}
-                            </Badge>
+                            {acc.transaction_count > 0 ? (
+                              <Badge 
+                                variant="outline" 
+                                className="text-xs cursor-pointer hover:bg-blue-50 hover:border-blue-300"
+                                onClick={() => fetchDetailedTransactions(selectedDate)}
+                              >
+                                {acc.transaction_count}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs text-slate-400">
+                                0
+                              </Badge>
+                            )}
                           </td>
                         </tr>
                       ))}

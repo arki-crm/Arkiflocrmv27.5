@@ -4373,12 +4373,12 @@ async def update_percentage_substage(project_id: str, request: Request):
     pid = project.get("pid", "N/A")
     old_percentage = percentage_substages.get(substage_id, 0)
     
-    # Validate forward-only for percentage (cannot decrease)
+    # Validate forward-only for percentage (requires admin.milestone_rollback to decrease)
     if percentage < old_percentage:
-        if user.role != "Admin":
+        if not has_permission(user, "admin.milestone_rollback"):
             raise HTTPException(
                 status_code=400, 
-                detail=f"Cannot decrease progress from {old_percentage}% to {percentage}%. Progress is forward-only."
+                detail=f"Cannot decrease progress from {old_percentage}% to {percentage}%. Progress is forward-only. Requires milestone rollback permission."
             )
     
     # Update percentage

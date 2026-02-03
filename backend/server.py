@@ -14108,10 +14108,10 @@ async def create_service_request_from_google_form(data: ServiceRequestFromGoogle
 
 @api_router.put("/service-requests/{request_id}/assign")
 async def assign_technician(request_id: str, data: ServiceRequestAssignTechnician, request: Request):
-    """Assign a technician to a service request"""
+    """Assign a technician to a service request (requires service.assign_technician permission)"""
     user = await get_current_user(request)
     
-    if user.role not in ["Admin", "SalesManager", "ProductionOpsManager"]:
+    if not has_permission(user, "service.assign_technician"):
         raise HTTPException(status_code=403, detail="You don't have permission to assign technicians")
     
     sr = await db.service_requests.find_one({"service_request_id": request_id}, {"_id": 0})

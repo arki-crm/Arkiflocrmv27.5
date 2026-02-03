@@ -642,7 +642,7 @@ PAYMENT_CONFIRMATION_ROLES = [
 ]
 
 
-def check_payment_gate(project: dict, target_stage: str, user_role: str) -> dict:
+def check_payment_gate(project: dict, target_stage: str, user_doc: dict) -> dict:
     """
     Simple payment gate check - works like booking confirmation.
     Returns: {"blocked": bool, "message": str, "can_override": bool}
@@ -651,8 +651,8 @@ def check_payment_gate(project: dict, target_stage: str, user_role: str) -> dict
     if target_stage not in PAYMENT_REQUIRED_STAGES:
         return {"blocked": False}
     
-    # Admin/Founder can always override
-    if user_role in ["Admin", "Founder"]:
+    # Users with admin.stage_rollback permission can always override
+    if has_permission(user_doc, "admin.stage_rollback"):
         return {"blocked": False, "can_override": True}
     
     # Check if payment for this stage is confirmed

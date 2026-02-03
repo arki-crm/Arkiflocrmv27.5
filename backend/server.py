@@ -13417,11 +13417,11 @@ async def auto_add_stage_collaborators(project_id: str, new_stage: str, activity
 
 @api_router.post("/design-workflow/seed")
 async def seed_design_workflow_data(request: Request):
-    """Seed design workflow data for testing"""
+    """Seed design workflow data for testing (requires admin.seed_data permission)"""
     user = await get_current_user(request)
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user, "admin.seed_data"):
+        raise HTTPException(status_code=403, detail="You don't have permission to seed test data")
     
     now = datetime.now(timezone.utc)
     

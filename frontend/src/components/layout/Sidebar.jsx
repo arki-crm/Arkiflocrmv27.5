@@ -276,7 +276,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
 };
 
 const Sidebar = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_STATE_KEY);

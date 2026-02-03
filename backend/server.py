@@ -10198,11 +10198,12 @@ async def get_revenue_report(request: Request):
 
 @api_router.get("/reports/projects")
 async def get_projects_report(request: Request):
-    """Project Health Report - Admin/Manager only"""
+    """Project Health Report (requires admin.view_reports)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.view_reports"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.view_reports required")
     
     now = datetime.now(timezone.utc)
     

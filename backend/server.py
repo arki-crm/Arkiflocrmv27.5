@@ -5527,15 +5527,20 @@ async def get_lead(lead_id: str, request: Request):
 async def create_lead(lead_data: LeadCreate, request: Request):
     """Create a new lead directly (for walk-ins, referrals, legacy data)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "SalesManager", "PreSales"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Permission-based: need leads.create
+    if not has_permission(user_doc, "leads.create"):
+        raise HTTPException(status_code=403, detail="Permission denied: leads.create required")
     
     now = datetime.now(timezone.utc)
     lead_id = f"lead_{uuid.uuid4().hex[:8]}"
     
     # Generate PID for direct leads
     pid = await generate_pid()
+    
+    # If user doesn't have leads.view_all, auto-assign to self
+    has_view_all = has_permission(user_doc, "leads.view_all")
     
     new_lead = {
         "lead_id": lead_id,
@@ -5552,7 +5557,7 @@ async def create_lead(lead_data: LeadCreate, request: Request):
         # Lead Status
         "status": lead_data.status or "In Progress",
         "stage": "BC Call Done",
-        "assigned_to": user.user_id if user.role == "PreSales" else lead_data.assigned_to,
+        "assigned_to": user.user_id if not has_view_all else lead_data.assigned_to,
         "designer_id": None,
         "is_converted": False,
         "project_id": None,

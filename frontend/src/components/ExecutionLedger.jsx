@@ -800,7 +800,7 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingEntry ? 'Edit Invoice Entry' : 'Add Invoice Entry'}
+              {editingEntry ? 'Edit Purchase Invoice' : 'Add Purchase Invoice'}
             </DialogTitle>
           </DialogHeader>
           

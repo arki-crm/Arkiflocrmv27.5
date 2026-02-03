@@ -10465,9 +10465,11 @@ async def list_presales_leads(
     These are leads that have NOT been promoted to the sales pipeline yet.
     """
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "SalesManager", "PreSales"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Permission check: need presales.view
+    if not has_permission(user_doc, "presales.view"):
+        raise HTTPException(status_code=403, detail="Permission denied: presales.view required")
     
     # Query ONLY presales leads (not converted to regular leads)
     query = {
@@ -10475,8 +10477,8 @@ async def list_presales_leads(
         "is_converted": False
     }
     
-    # PreSales role sees only their assigned leads
-    if user.role == "PreSales":
+    # Users without presales.view_all see only their assigned leads
+    if not has_permission(user_doc, "presales.view_all"):
         query["assigned_to"] = user.user_id
     
     # Status filter

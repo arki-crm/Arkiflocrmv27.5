@@ -9,10 +9,24 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Timeline Adjustment Feature COMPLETE ✅
+## Current Status: Lead Timeline Business Logic Fix COMPLETE ✅
 **As of February 2026**
 
-New feature implemented: Timeline Adjustment for Leads and Projects, allowing users to manage delays without losing the original plan.
+**Bug Fixed:** Leads no longer auto-complete "BC Call Done" on creation/conversion. New flow:
+1. **Lead starts at "Lead Allocated"** (auto-completed immediately)
+2. **BC Call Done** - Designer must manually complete (24h TAT / shows as delayed after)
+3. **First BOQ Sent** - Designer must manually complete (48h TAT after BC Call)
+
+**TAT (Time-to-Action) Rules:**
+- Lead Allocated: 0 days (immediate, auto-completed)
+- BC Call Done: 1 day (24 hours after allocation)
+- First BOQ Sent: 2 days (48 hours after BC Call)
+- Site Meeting: 2 days after BOQ
+- Revised BOQ Shared: 2 days after Site Meeting
+
+---
+
+## ✅ Timeline Adjustment Feature - COMPLETED Feb 2026
 
 **What's Implemented:**
 - **Adjust Timeline Modal** - Accessible via button on Lead/Project detail pages
@@ -35,7 +49,40 @@ Major architectural refactoring completed. Permissions are now the single source
 
 ---
 
-## ✅ Timeline Adjustment Feature - COMPLETED Feb 2026
+## ✅ Lead Timeline/Milestone Business Logic Fix - COMPLETED Feb 2026
+
+### Problem Fixed:
+Previously, when a Pre-Sales was converted to Lead (or Lead created directly), the system auto-marked "BC Call Done" as completed, breaking SLA/delay tracking.
+
+### Correct Behavior Now:
+- [x] **New starting stage: "Lead Allocated"** - Auto-completed on lead creation
+- [x] **BC Call Done is PENDING** - Designer must manually mark complete (24h TAT)
+- [x] **First BOQ Sent** - 48h TAT after BC Call completion
+- [x] **Delay tracking works correctly** - Milestones show "delayed" after TAT expires
+- [x] **Pre-Sales conversion** - Also starts at "Lead Allocated"
+- [x] **Import/Seed data** - Defaults to "Lead Allocated" stage
+
+### Lead Stage Flow (7 stages):
+```
+Lead Allocated → BC Call Done → BOQ Shared → Site Meeting → Revised BOQ Shared → Waiting for Booking → Booking Completed
+```
+
+### TAT Configuration:
+| Milestone | TAT (days) | Description |
+|-----------|------------|-------------|
+| Lead Allocated | 0 | Immediate, auto-completed on creation |
+| BC Call Done | 1 | 24 hours to complete |
+| First BOQ Sent | 2 | 48 hours after BC Call |
+| Site Meeting | 2 | 2 days after BOQ |
+| Revised BOQ Shared | 2 | 2 days after Site Meeting |
+
+### Test Files:
+- `/app/backend/tests/test_lead_timeline_milestone.py` - Comprehensive milestone logic tests
+- `/app/backend/tests/test_timeline_adjustment.py` - Timeline adjustment API tests
+
+---
+
+## ✅ Timeline Adjustment Feature - Additional Details
 
 ### Features Implemented:
 - [x] **Adjust Timeline Button** - Visible on Lead and Project detail pages (permission-gated)

@@ -16994,18 +16994,15 @@ async def get_daily_transactions(request: Request, date: str):
     if not has_permission(user_doc, "finance.daily_closing") and not has_permission(user_doc, "finance.view_cashbook"):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Parse date
+    # Validate date format
     try:
-        target_date = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     
-    target_date_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    target_date_end = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
-    
-    # Get all transactions for this date
+    # Get all transactions for this date using transaction_date field
     transactions = await db.accounting_transactions.find(
-        {"created_at": {"$gte": target_date_start, "$lte": target_date_end}},
+        {"transaction_date": date},
         {"_id": 0}
     ).sort("created_at", 1).to_list(1000)
     

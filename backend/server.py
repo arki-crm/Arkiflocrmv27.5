@@ -10736,20 +10736,19 @@ async def update_presales_status(presales_id: str, request: Request):
 
 @api_router.put("/presales/{presales_id}/customer-details")
 async def update_presales_customer_details(presales_id: str, request: Request):
-    """Update pre-sales customer details"""
+    """Update pre-sales customer details (requires presales.update or ownership)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     body = await request.json()
     
     presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
     if not presales_lead:
         raise HTTPException(status_code=404, detail="Pre-sales lead not found")
     
-    # Permission check
-    if user.role == "PreSales":
-        if presales_lead.get("assigned_to") != user.user_id and presales_lead.get("created_by") != user.user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
-    elif user.role not in ["Admin", "SalesManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Permission check - owners can update their own, or need presales.update
+    is_owner = presales_lead.get("assigned_to") == user.user_id or presales_lead.get("created_by") == user.user_id
+    if not is_owner and not has_permission(user_doc, "presales.update"):
+        raise HTTPException(status_code=403, detail="Permission denied: presales.update required")
     
     now = datetime.now(timezone.utc)
     update_dict = {"updated_at": now.isoformat()}

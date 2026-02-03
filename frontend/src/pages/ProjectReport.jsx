@@ -31,19 +31,19 @@ const STAGE_COLORS = {
 };
 
 const ProjectReport = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (user?.role && !['Admin', 'Manager'].includes(user.role)) {
+    if (user && !hasPermission('admin.view_reports')) {
       navigate('/reports');
       return;
     }
     fetchData();
-  }, [user, navigate]);
+  }, [user, navigate, hasPermission]);
 
   const fetchData = async () => {
     try {

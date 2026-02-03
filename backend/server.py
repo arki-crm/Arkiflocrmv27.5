@@ -13428,8 +13428,9 @@ async def auto_add_stage_collaborators(project_id: str, new_stage: str, activity
 async def seed_design_workflow_data(request: Request):
     """Seed design workflow data for testing (requires admin.seed_data permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if not has_permission(user, "admin.seed_data"):
+    if not has_permission(user_doc, "admin.seed_data"):
         raise HTTPException(status_code=403, detail="You don't have permission to seed test data")
     
     now = datetime.now(timezone.utc)

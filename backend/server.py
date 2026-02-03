@@ -25440,9 +25440,10 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    # Permission: Admin, ProjectManager, Founder can add
-    if user_doc.get("role") not in ["Admin", "Founder", "ProjectManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Permission: Admin, Founder, ProjectManager, and Finance roles can add
+    allowed_roles = ["Admin", "Founder", "ProjectManager", "SeniorAccountant", "JuniorAccountant", "FinanceManager"]
+    if user_doc.get("role") not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Access denied - requires finance or project management role")
     
     # Validate project exists
     project = await db.projects.find_one({"project_id": entry.project_id})

@@ -25381,7 +25381,12 @@ class ExecutionLineItem(BaseModel):
     quantity: float
     unit: str = "pcs"  # pcs, sqft, kg, meter, etc.
     rate: float
-    # line_total is auto-calculated: quantity * rate
+    # GST fields (optional, per line item)
+    hsn_code: Optional[str] = None  # HSN/SAC code
+    cgst_percent: Optional[float] = None  # CGST percentage
+    sgst_percent: Optional[float] = None  # SGST percentage
+    igst_percent: Optional[float] = None  # IGST percentage (for inter-state)
+    # line_total, gst_amounts are auto-calculated
 
 
 class ExecutionEntryCreate(BaseModel):

@@ -6906,11 +6906,12 @@ async def seed_leads(request: Request):
 
 @api_router.post("/projects/seed")
 async def seed_projects(request: Request):
-    """Seed sample projects for testing (Admin/Manager only)"""
+    """Seed sample projects for testing (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     # Get all users to use as collaborators
     users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "role": 1}).to_list(100)

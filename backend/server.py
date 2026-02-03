@@ -1553,10 +1553,11 @@ AVAILABLE_PERMISSIONS = {
     "presales": {
         "name": "Pre-Sales",
         "permissions": [
-            {"id": "presales.view", "name": "View Pre-Sales", "description": "View pre-sales leads list and details"},
-            {"id": "presales.create", "name": "Create Pre-Sales", "description": "Create new pre-sales leads"},
-            {"id": "presales.update", "name": "Update Pre-Sales", "description": "Update pre-sales lead status"},
-            {"id": "presales.convert", "name": "Convert Pre-Sales", "description": "Convert pre-sales to leads"}
+            {"id": "presales.view", "name": "View Pre-Sales", "description": "View pre-sales leads (assigned only)"},
+            {"id": "presales.view_all", "name": "View All Pre-Sales", "description": "View all pre-sales leads in the system"},
+            {"id": "presales.create", "name": "Create Pre-Sales", "description": "Create new pre-sales entries"},
+            {"id": "presales.update", "name": "Update Pre-Sales", "description": "Update pre-sales details and stages"},
+            {"id": "presales.convert", "name": "Convert Pre-Sales", "description": "Promote pre-sales to leads"}
         ]
     },
     # Leads Permissions

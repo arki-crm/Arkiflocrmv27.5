@@ -2948,7 +2948,8 @@ async def create_role(role_data: RoleCreate, request: Request):
     await log_system_action("role_created", user, {"role_id": role_data.id, "permissions_count": len(role_data.default_permissions)})
     
     # Return without _id
-    del new_role["_id"] if "_id" in new_role else None
+    if "_id" in new_role:
+        del new_role["_id"]
     return {"message": f"Role '{role_data.name}' created successfully", "role": new_role}
 
 

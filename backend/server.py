@@ -10357,7 +10357,15 @@ async def get_leads_report(request: Request):
 # ============ PRE-SALES LIST API (CRITICAL) ============
 
 @api_router.get("/presales")
-async def list_presales_leads(request: Request, status: Optional[str] = None):
+async def list_presales_leads(
+    request: Request, 
+    status: Optional[str] = None,
+    time_filter: Optional[str] = None,  # this_month, last_month, this_quarter, custom, all
+    start_date: Optional[str] = None,   # For custom date range
+    end_date: Optional[str] = None,     # For custom date range
+    sort_by: Optional[str] = None,      # created_at, updated_at, budget
+    sort_order: Optional[str] = "desc"  # asc, desc
+):
     """
     List pre-sales leads ONLY (lead_type='presales').
     These are leads that have NOT been promoted to the sales pipeline yet.
@@ -10380,6 +10388,32 @@ async def list_presales_leads(request: Request, status: Optional[str] = None):
     # Status filter
     if status and status != "all":
         query["status"] = status
+    
+    # Time-based filter
+    if time_filter and time_filter != "all":
+        now = datetime.now(timezone.utc)
+        date_filter = None
+        
+        if time_filter == "this_month":
+            first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            date_filter = {"$gte": first_of_month.isoformat()}
+        elif time_filter == "last_month":
+            first_of_this_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            last_month = first_of_this_month - timedelta(days=1)
+            first_of_last_month = last_month.replace(day=1)
+            date_filter = {"$gte": first_of_last_month.isoformat(), "$lt": first_of_this_month.isoformat()}
+        elif time_filter == "this_quarter":
+            quarter = (now.month - 1) // 3
+            first_month_of_quarter = quarter * 3 + 1
+            first_of_quarter = now.replace(month=first_month_of_quarter, day=1, hour=0, minute=0, second=0, microsecond=0)
+            date_filter = {"$gte": first_of_quarter.isoformat()}
+        elif time_filter == "custom" and start_date:
+            date_filter = {"$gte": start_date}
+            if end_date:
+                date_filter["$lte"] = end_date
+        
+        if date_filter:
+            query["created_at"] = date_filter
     
     # Fetch presales leads
     presales_leads = await db.leads.find(query, {"_id": 0}).to_list(1000)
@@ -10428,8 +10462,14 @@ async def list_presales_leads(request: Request, status: Optional[str] = None):
             "created_at": created_at
         })
     
-    # Sort by created_at descending (newest first)
-    result.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    # Sorting logic
+    sort_field = sort_by if sort_by in ["created_at", "updated_at", "budget"] else "created_at"
+    reverse_order = sort_order != "asc"
+    
+    if sort_field == "budget":
+        result.sort(key=lambda x: float(x.get("budget", 0) or 0), reverse=reverse_order)
+    else:
+        result.sort(key=lambda x: x.get(sort_field, ""), reverse=reverse_order)
     
     return result
 

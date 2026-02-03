@@ -544,36 +544,52 @@ const DailyClosing = () => {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="divide-y divide-slate-200">
-                  {history.map((closing) => (
+                  {history.map((closingItem) => (
                     <div 
-                      key={closing.date}
+                      key={closingItem.date}
                       className={cn(
-                        "p-4 flex items-center justify-between hover:bg-slate-50 cursor-pointer",
-                        closing.date === selectedDate && "bg-blue-50"
+                        "p-4 flex items-center justify-between hover:bg-slate-50",
+                        closingItem.date === selectedDate && "bg-blue-50"
                       )}
-                      onClick={() => setSelectedDate(closing.date)}
                     >
-                      <div className="flex items-center gap-3">
+                      <div 
+                        className="flex items-center gap-3 cursor-pointer flex-1"
+                        onClick={() => setSelectedDate(closingItem.date)}
+                      >
                         <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
                           <Lock className="w-4 h-4 text-green-600" />
                         </div>
                         <div>
-                          <p className="font-medium text-slate-900">{closing.date}</p>
+                          <p className="font-medium text-slate-900">{closingItem.date}</p>
                           <p className="text-xs text-slate-500">
-                            Closed by {closing.closed_by_name}
+                            Closed by {closingItem.closed_by_name}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm text-slate-600">
-                          {closing.transaction_count} transactions
-                        </p>
-                        <p className={cn(
-                          "text-sm font-medium",
-                          closing.net_change >= 0 ? "text-green-600" : "text-red-600"
-                        )}>
-                          {closing.net_change >= 0 ? '+' : ''}{formatCurrency(closing.net_change)}
-                        </p>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <button 
+                            className="text-sm text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                            onClick={(e) => { e.stopPropagation(); fetchDetailedTransactions(closingItem.date); }}
+                            data-testid={`view-daybook-${closingItem.date}`}
+                          >
+                            {closingItem.transaction_count} transactions
+                          </button>
+                          <p className={cn(
+                            "text-sm font-medium",
+                            closingItem.net_change >= 0 ? "text-green-600" : "text-red-600"
+                          )}>
+                            {closingItem.net_change >= 0 ? '+' : ''}{formatCurrency(closingItem.net_change)}
+                          </p>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={(e) => { e.stopPropagation(); fetchDetailedTransactions(closingItem.date); }}
+                          title="View Daybook"
+                        >
+                          <Eye className="w-4 h-4 text-slate-500" />
+                        </Button>
                       </div>
                     </div>
                   ))}

@@ -12247,11 +12247,12 @@ async def complete_design_meeting(meeting_id: str, request: Request):
 
 @api_router.get("/validation-pipeline")
 async def get_validation_pipeline(request: Request):
-    """Get validation pipeline for Production Manager"""
+    """Get validation pipeline for Production Manager (requires milestones.update.production)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "ProductionManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "milestones.update.production"):
+        raise HTTPException(status_code=403, detail="Permission denied: milestones.update.production required")
     
     # Get design projects in validation stage
     validation_projects = await db.design_projects.find(

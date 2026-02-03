@@ -320,6 +320,11 @@ const Sidebar = () => {
     }
   }
   
+  // Role Management - show if user has admin.assign_permissions
+  if (hasPermission('admin.assign_permissions')) {
+    permissionBasedItems.push({ path: '/roles', label: 'Roles', icon: Shield });
+  }
+  
   // Settings - show if user has admin.system_settings
   if (hasPermission('admin.system_settings')) {
     const hasSettingsItem = roleBasedItems.some(item => item.path === '/settings');

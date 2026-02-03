@@ -3046,14 +3046,15 @@ async def list_projects(
     sort_by: Optional[str] = None,      # created_at, updated_at, project_value
     sort_order: Optional[str] = "desc"  # asc, desc
 ):
-    """List projects - Designer sees only assigned, Admin/Manager sees all"""
+    """List projects - Users with projects.view_all see all, others see only assigned"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
     # Build query
     query = {}
     
-    # Role-based filtering: Designer/OperationLead only sees assigned projects
-    if user.role in ["Designer", "OperationLead"]:
+    # Permission-based filtering: users without projects.view_all see only their projects
+    if not has_permission(user_doc, "projects.view_all"):
         query["collaborators"] = user.user_id
     
     # Stage filter

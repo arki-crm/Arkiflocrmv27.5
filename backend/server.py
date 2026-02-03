@@ -7624,11 +7624,12 @@ async def get_project_financials(project_id: str, request: Request):
 
 @api_router.put("/projects/{project_id}/financials")
 async def update_project_financials(project_id: str, data: ProjectFinancialsUpdate, request: Request):
-    """Update project financial details (Admin/Manager only)"""
+    """Update project financial details (requires finance.project.allocate_funds)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    if not has_permission(user_doc, "finance.project.allocate_funds"):
+        raise HTTPException(status_code=403, detail="Permission denied: finance.project.allocate_funds required")
     
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
     if not project:

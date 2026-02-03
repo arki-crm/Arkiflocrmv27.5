@@ -15768,8 +15768,8 @@ async def create_self_transfer(transfer: SelfTransferCreate, request: Request):
         "transfer_id": transfer_id,
         "outflow_transaction_id": outflow_txn_id,
         "inflow_transaction_id": inflow_txn_id,
-        "from_account": from_account.get("name"),
-        "to_account": to_account.get("name"),
+        "from_account": from_account.get("account_name"),
+        "to_account": to_account.get("account_name"),
         "amount": transfer.amount,
         "message": f"Successfully transferred ₹{transfer.amount:,.0f} from {from_account.get('account_name')} to {to_account.get('account_name')}"
     }

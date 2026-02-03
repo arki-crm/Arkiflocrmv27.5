@@ -10579,11 +10579,12 @@ async def list_presales_leads(
 
 @api_router.post("/presales/create")
 async def create_presales_lead(request: Request):
-    """Create a new pre-sales lead"""
+    """Create a new pre-sales lead (requires presales.create)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "SalesManager", "PreSales"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "presales.create"):
+        raise HTTPException(status_code=403, detail="Permission denied: presales.create required")
     
     body = await request.json()
     

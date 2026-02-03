@@ -2455,11 +2455,12 @@ async def get_user_by_id(user_id: str, request: Request):
 
 @api_router.post("/users/invite")
 async def invite_user(invite_data: UserInvite, request: Request):
-    """Invite a new user (Admin only)"""
+    """Invite a new user (requires admin.manage_users permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.manage_users"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.manage_users required")
     
     # Validate role
     if invite_data.role not in VALID_ROLES:
@@ -2524,11 +2525,12 @@ class PasswordReset(BaseModel):
 
 @api_router.post("/users/create-local")
 async def create_local_user(user_data: LocalUserCreate, request: Request):
-    """Create a new user with local password (Admin only) - for testing"""
+    """Create a new user with local password (requires admin.manage_users permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.manage_users"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.manage_users required")
     
     # Validate role
     if user_data.role not in VALID_ROLES:
@@ -2620,11 +2622,12 @@ async def change_user_password(user_id: str, pwd_data: PasswordChange, request: 
 
 @api_router.post("/auth/reset-password")
 async def admin_reset_password(reset_data: PasswordReset, request: Request):
-    """Admin resets user password"""
+    """Reset user password (requires admin.manage_users permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.manage_users"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.manage_users required")
     
     # Find user by email
     target_user = await db.users.find_one({"email": reset_data.email}, {"_id": 0})
@@ -2684,11 +2687,12 @@ async def get_role_default_permissions(role_id: str, request: Request):
 
 @api_router.get("/permissions/available")
 async def get_available_permissions(request: Request):
-    """Get all available permissions grouped by category"""
+    """Get all available permissions grouped by category (requires admin.assign_permissions)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin"]:
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.assign_permissions"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.assign_permissions required")
     
     return {
         "permission_groups": AVAILABLE_PERMISSIONS,
@@ -2701,10 +2705,11 @@ async def get_available_permissions(request: Request):
 async def get_user_permissions_endpoint(user_id: str, request: Request):
     """Get a user's current permissions"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    # Users can view their own permissions, Admin can view anyone's
-    if user.user_id != user_id and user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Users can view their own permissions, or need admin.assign_permissions to view others
+    if user.user_id != user_id and not has_permission(user_doc, "admin.assign_permissions"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.assign_permissions required")
     
     target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     if not target_user:
@@ -2729,11 +2734,12 @@ class PermissionsUpdate(BaseModel):
 
 @api_router.put("/users/{user_id}/permissions")
 async def update_user_permissions(user_id: str, perm_data: PermissionsUpdate, request: Request):
-    """Update a user's permissions (Admin only)"""
+    """Update a user's permissions (requires admin.assign_permissions)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required to modify permissions")
+    if not has_permission(user_doc, "admin.assign_permissions"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.assign_permissions required")
     
     target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     if not target_user:
@@ -2774,11 +2780,12 @@ async def update_user_permissions(user_id: str, perm_data: PermissionsUpdate, re
 
 @api_router.post("/users/{user_id}/permissions/reset-to-role")
 async def reset_user_permissions_to_role(user_id: str, request: Request):
-    """Reset a user's permissions to their role defaults"""
+    """Reset a user's permissions to their role defaults (requires admin.assign_permissions)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.assign_permissions"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.assign_permissions required")
     
     target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     if not target_user:

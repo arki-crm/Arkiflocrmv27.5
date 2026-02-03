@@ -7031,6 +7031,235 @@ async def update_lead_hold_status(lead_id: str, status_update: HoldStatusUpdate,
         "history_entry": history_entry
     }
 
+
+# ============ LEAD TIMELINE ADJUSTMENT ============
+
+@api_router.post("/leads/{lead_id}/adjust-timeline")
+async def adjust_lead_timeline(lead_id: str, adjustment: TimelineAdjustmentRequest, request: Request):
+    """Adjust lead timeline - shift dates, set new completion, or mark on hold"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "timeline.adjust"):
+        raise HTTPException(status_code=403, detail="Permission denied: timeline.adjust required")
+    
+    # Validate adjustment reason
+    if adjustment.reason not in TIMELINE_ADJUSTMENT_REASONS:
+        raise HTTPException(status_code=400, detail=f"Invalid reason. Must be one of: {TIMELINE_ADJUSTMENT_REASONS}")
+    
+    # Validate remarks
+    if not adjustment.remarks or len(adjustment.remarks.strip()) < 10:
+        raise HTTPException(status_code=400, detail="Remarks are mandatory and must be at least 10 characters")
+    
+    # Validate adjustment type
+    valid_types = ["shift_forward", "new_completion_date", "on_hold", "resume"]
+    if adjustment.adjustment_type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"Invalid adjustment_type. Must be one of: {valid_types}")
+    
+    # Validate type-specific fields
+    if adjustment.adjustment_type == "shift_forward" and (not adjustment.shift_days or adjustment.shift_days < 1):
+        raise HTTPException(status_code=400, detail="shift_days must be provided and positive for shift_forward type")
+    
+    if adjustment.adjustment_type == "new_completion_date" and not adjustment.new_completion_date:
+        raise HTTPException(status_code=400, detail="new_completion_date must be provided for new_completion_date type")
+    
+    # Get the lead
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Initialize timeline structures if not present
+    current_timeline = lead.get("current_timeline", {})
+    baseline_timeline = lead.get("baseline_timeline")
+    timeline_adjustments = lead.get("timeline_adjustments", [])
+    
+    # If no baseline, create it from current state (first timeline generation)
+    if not baseline_timeline:
+        baseline_timeline = {
+            "created_at": lead.get("created_at", now.isoformat()),
+            "expected_completion": lead.get("expected_completion_date"),
+            "stage_deadlines": lead.get("stage_deadlines", {})
+        }
+    
+    # Get completed stages (these stay locked)
+    completed_stages = lead.get("completed_stages", [])
+    current_stage = lead.get("stage", "BC Call Done")
+    
+    # Build adjustment record
+    adjustment_record = {
+        "id": f"adj_{uuid.uuid4().hex[:8]}",
+        "date": now.isoformat(),
+        "reason": adjustment.reason,
+        "remarks": adjustment.remarks.strip(),
+        "effective_date": adjustment.effective_date,
+        "adjustment_type": adjustment.adjustment_type,
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "previous_completion": current_timeline.get("expected_completion") or lead.get("expected_completion_date"),
+        "affected_stages": []
+    }
+    
+    # Process based on adjustment type
+    if adjustment.adjustment_type == "on_hold":
+        # Mark timeline as on hold
+        current_timeline["on_hold"] = True
+        current_timeline["hold_since"] = now.isoformat()
+        adjustment_record["new_completion"] = None
+        adjustment_record["shift_days"] = None
+        
+    elif adjustment.adjustment_type == "resume":
+        # Resume from hold - auto-shift by hold duration
+        if not current_timeline.get("on_hold"):
+            raise HTTPException(status_code=400, detail="Lead is not on hold")
+        
+        hold_since = datetime.fromisoformat(current_timeline.get("hold_since", now.isoformat()).replace('Z', '+00:00'))
+        hold_duration = (now - hold_since).days
+        if hold_duration < 1:
+            hold_duration = 1
+        
+        adjustment_record["shift_days"] = hold_duration
+        
+        # Shift all future stage deadlines
+        stage_deadlines = current_timeline.get("stage_deadlines", {}) or lead.get("stage_deadlines", {})
+        new_deadlines = {}
+        for stage, deadline in stage_deadlines.items():
+            if stage in completed_stages:
+                new_deadlines[stage] = deadline  # Keep completed stages unchanged
+            else:
+                if deadline:
+                    old_date = datetime.fromisoformat(deadline.replace('Z', '+00:00')) if 'T' in deadline else datetime.strptime(deadline, "%Y-%m-%d")
+                    new_date = old_date + timedelta(days=hold_duration)
+                    new_deadlines[stage] = new_date.strftime("%Y-%m-%d")
+                    adjustment_record["affected_stages"].append(stage)
+                else:
+                    new_deadlines[stage] = deadline
+        
+        # Update completion date
+        old_completion = current_timeline.get("expected_completion") or lead.get("expected_completion_date")
+        if old_completion:
+            old_comp_date = datetime.fromisoformat(old_completion.replace('Z', '+00:00')) if 'T' in old_completion else datetime.strptime(old_completion, "%Y-%m-%d")
+            new_completion = old_comp_date + timedelta(days=hold_duration)
+            current_timeline["expected_completion"] = new_completion.strftime("%Y-%m-%d")
+            adjustment_record["new_completion"] = new_completion.strftime("%Y-%m-%d")
+        
+        current_timeline["stage_deadlines"] = new_deadlines
+        current_timeline["on_hold"] = False
+        current_timeline["hold_since"] = None
+        
+    elif adjustment.adjustment_type == "shift_forward":
+        shift_days = adjustment.shift_days
+        adjustment_record["shift_days"] = shift_days
+        
+        # Shift all future stage deadlines
+        stage_deadlines = current_timeline.get("stage_deadlines", {}) or lead.get("stage_deadlines", {})
+        new_deadlines = {}
+        for stage, deadline in stage_deadlines.items():
+            if stage in completed_stages:
+                new_deadlines[stage] = deadline  # Keep completed stages unchanged
+            else:
+                if deadline:
+                    old_date = datetime.fromisoformat(deadline.replace('Z', '+00:00')) if 'T' in deadline else datetime.strptime(deadline, "%Y-%m-%d")
+                    new_date = old_date + timedelta(days=shift_days)
+                    new_deadlines[stage] = new_date.strftime("%Y-%m-%d")
+                    adjustment_record["affected_stages"].append(stage)
+                else:
+                    new_deadlines[stage] = deadline
+        
+        # Update completion date
+        old_completion = current_timeline.get("expected_completion") or lead.get("expected_completion_date")
+        if old_completion:
+            old_comp_date = datetime.fromisoformat(old_completion.replace('Z', '+00:00')) if 'T' in old_completion else datetime.strptime(old_completion, "%Y-%m-%d")
+            new_completion = old_comp_date + timedelta(days=shift_days)
+            current_timeline["expected_completion"] = new_completion.strftime("%Y-%m-%d")
+            adjustment_record["new_completion"] = new_completion.strftime("%Y-%m-%d")
+        
+        current_timeline["stage_deadlines"] = new_deadlines
+        
+    elif adjustment.adjustment_type == "new_completion_date":
+        new_comp_date = datetime.strptime(adjustment.new_completion_date, "%Y-%m-%d")
+        old_completion = current_timeline.get("expected_completion") or lead.get("expected_completion_date")
+        
+        if old_completion:
+            old_comp_date = datetime.fromisoformat(old_completion.replace('Z', '+00:00')) if 'T' in old_completion else datetime.strptime(old_completion, "%Y-%m-%d")
+            # Calculate the shift needed
+            shift_days = (new_comp_date - old_comp_date).days
+            adjustment_record["shift_days"] = shift_days
+        else:
+            shift_days = 0
+        
+        adjustment_record["new_completion"] = adjustment.new_completion_date
+        current_timeline["expected_completion"] = adjustment.new_completion_date
+        
+        # Proportionally adjust future stage deadlines if shift_days != 0
+        if shift_days != 0:
+            stage_deadlines = current_timeline.get("stage_deadlines", {}) or lead.get("stage_deadlines", {})
+            new_deadlines = {}
+            for stage, deadline in stage_deadlines.items():
+                if stage in completed_stages:
+                    new_deadlines[stage] = deadline
+                else:
+                    if deadline:
+                        old_date = datetime.fromisoformat(deadline.replace('Z', '+00:00')) if 'T' in deadline else datetime.strptime(deadline, "%Y-%m-%d")
+                        new_date = old_date + timedelta(days=shift_days)
+                        new_deadlines[stage] = new_date.strftime("%Y-%m-%d")
+                        adjustment_record["affected_stages"].append(stage)
+                    else:
+                        new_deadlines[stage] = deadline
+            current_timeline["stage_deadlines"] = new_deadlines
+    
+    # Update tracking fields
+    current_timeline["last_adjusted_at"] = now.isoformat()
+    current_timeline["adjustment_count"] = len(timeline_adjustments) + 1
+    
+    # Add adjustment to history
+    timeline_adjustments.append(adjustment_record)
+    
+    # Update the lead
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {"$set": {
+            "baseline_timeline": baseline_timeline,
+            "current_timeline": current_timeline,
+            "timeline_adjustments": timeline_adjustments,
+            "updated_at": now.isoformat()
+        }}
+    )
+    
+    # Log the action
+    await log_system_action("lead_timeline_adjusted", user, {
+        "lead_id": lead_id,
+        "adjustment_type": adjustment.adjustment_type,
+        "reason": adjustment.reason
+    })
+    
+    return {
+        "message": "Timeline adjusted successfully",
+        "lead_id": lead_id,
+        "adjustment": adjustment_record,
+        "current_timeline": current_timeline
+    }
+
+
+@api_router.get("/leads/{lead_id}/timeline-history")
+async def get_lead_timeline_history(lead_id: str, request: Request):
+    """Get timeline adjustment history for a lead"""
+    user = await get_current_user(request)
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    return {
+        "lead_id": lead_id,
+        "baseline_timeline": lead.get("baseline_timeline"),
+        "current_timeline": lead.get("current_timeline"),
+        "timeline_adjustments": lead.get("timeline_adjustments", []),
+        "is_on_hold": lead.get("current_timeline", {}).get("on_hold", False)
+    }
+
+
 @api_router.post("/leads/seed")
 async def seed_leads(request: Request):
     """Seed sample leads for testing (requires admin.system_settings)"""

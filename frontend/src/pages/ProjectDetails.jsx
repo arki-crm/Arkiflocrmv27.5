@@ -51,11 +51,13 @@ import {
   Power,
   ChevronDown,
   Shield,
-  Wrench
+  Wrench,
+  Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { Textarea } from '../components/ui/textarea';
+import { Switch } from '../components/ui/switch';
 import CustomerDetailsSection from '../components/CustomerDetailsSection';
 
 // Import extracted components

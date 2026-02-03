@@ -106,7 +106,7 @@ const UserAvatar = ({ user, size = 'lg', showEditOverlay = false, onClick }) => 
 };
 
 const UserEdit = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -136,20 +136,20 @@ const UserEdit = () => {
   const [newPassword, setNewPassword] = useState('');
   const [resettingPassword, setResettingPassword] = useState(false);
 
-  // Check permissions
-  const isAdmin = user?.role === 'Admin';
-  const isManager = ['Manager', 'SalesManager', 'DesignManager', 'ProductionOpsManager'].includes(user?.role);
+  // Check permissions - use permission-based checks
+  const canManageUsers = hasPermission('admin.manage_users');
+  const canAssignPermissions = hasPermission('admin.assign_permissions');
 
   useEffect(() => {
-    if (user && !['Admin', 'Manager', 'SalesManager', 'DesignManager', 'ProductionOpsManager'].includes(user.role)) {
+    if (user && !canManageUsers && !canAssignPermissions) {
       navigate('/dashboard');
       return;
     }
     fetchUser();
-    if (isAdmin) {
+    if (canAssignPermissions) {
       fetchAvailablePermissions();
     }
-  }, [user, id, navigate]);
+  }, [user, id, navigate, canManageUsers, canAssignPermissions]);
 
   const fetchUser = async () => {
     try {

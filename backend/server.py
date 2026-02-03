@@ -7353,7 +7353,7 @@ async def adjust_lead_timeline(lead_id: str, adjustment: TimelineAdjustmentReque
     
     # Get completed stages (these stay locked)
     completed_stages = lead.get("completed_stages", [])
-    current_stage = lead.get("stage", "BC Call Done")
+    current_stage = lead.get("stage", "Lead Allocated")
     
     # Build adjustment record
     adjustment_record = {

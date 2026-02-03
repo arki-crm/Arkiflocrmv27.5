@@ -10882,19 +10882,18 @@ async def upload_presales_files(presales_id: str, request: Request):
 
 @api_router.delete("/presales/{presales_id}/files/{file_id}")
 async def delete_presales_file(presales_id: str, file_id: str, request: Request):
-    """Delete file from pre-sales lead"""
+    """Delete file from pre-sales lead (requires presales.update or ownership)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
     presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
     if not presales_lead:
         raise HTTPException(status_code=404, detail="Pre-sales lead not found")
     
-    # Permission check
-    if user.role == "PreSales":
-        if presales_lead.get("assigned_to") != user.user_id and presales_lead.get("created_by") != user.user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
-    elif user.role not in ["Admin", "SalesManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Permission check - owners can delete, or need presales.update
+    is_owner = presales_lead.get("assigned_to") == user.user_id or presales_lead.get("created_by") == user.user_id
+    if not is_owner and not has_permission(user_doc, "presales.update"):
+        raise HTTPException(status_code=403, detail="Permission denied: presales.update required")
     
     now = datetime.now(timezone.utc)
     

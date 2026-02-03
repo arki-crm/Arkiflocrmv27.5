@@ -3621,9 +3621,11 @@ async def regenerate_project_timeline(project_id: str, regen_data: TimelineRegen
     Original delays remain visible in activity log.
     """
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "ProductionOpsManager", "DesignManager"]:
-        raise HTTPException(status_code=403, detail="Only managers can regenerate timeline")
+    # Permission check: need projects.update
+    if not has_permission(user_doc, "projects.update"):
+        raise HTTPException(status_code=403, detail="Permission denied: projects.update required")
     
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
     if not project:

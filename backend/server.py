@@ -3064,6 +3064,14 @@ async def list_projects(
         if date_filter:
             query["created_at"] = date_filter
     
+    # Designer/Collaborator filter
+    if designer_id and designer_id != "all":
+        query["collaborators"] = designer_id
+    
+    # Hold status filter
+    if hold_status and hold_status != "all":
+        query["hold_status"] = hold_status
+    
     # Fetch projects
     projects = await db.projects.find(query, {"_id": 0}).to_list(1000)
     
@@ -3075,6 +3083,7 @@ async def list_projects(
             if search_lower in p.get("project_name", "").lower() 
             or search_lower in p.get("client_name", "").lower()
             or search_lower in p.get("client_phone", "").replace(" ", "")
+            or search_lower in (p.get("pid") or "").lower()
         ]
     
     # Get collaborator details for each project
@@ -3087,7 +3096,7 @@ async def list_projects(
     if all_user_ids:
         users_list = await db.users.find(
             {"user_id": {"$in": list(all_user_ids)}},
-            {"_id": 0, "user_id": 1, "name": 1, "picture": 1}
+            {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "role": 1}
         ).to_list(1000)
         users_map = {u["user_id"]: u for u in users_list}
     
@@ -3098,7 +3107,8 @@ async def list_projects(
             {
                 "user_id": uid,
                 "name": users_map.get(uid, {}).get("name", "Unknown"),
-                "picture": users_map.get(uid, {}).get("picture")
+                "picture": users_map.get(uid, {}).get("picture"),
+                "role": users_map.get(uid, {}).get("role")
             }
             for uid in p.get("collaborators", [])
             if uid in users_map
@@ -3120,14 +3130,21 @@ async def list_projects(
             "client_phone": p["client_phone"],
             "stage": p["stage"],
             "hold_status": p.get("hold_status", "Active"),
+            "project_value": p.get("project_value", 0),
             "collaborators": collaborator_details,
             "summary": p.get("summary", ""),
             "updated_at": updated_at,
             "created_at": created_at
         })
     
-    # Sort by updated_at descending
-    result.sort(key=lambda x: x["updated_at"], reverse=True)
+    # Sorting logic
+    sort_field = sort_by if sort_by in ["created_at", "updated_at", "project_value"] else "updated_at"
+    reverse_order = sort_order != "asc"
+    
+    if sort_field == "project_value":
+        result.sort(key=lambda x: float(x.get("project_value", 0) or 0), reverse=reverse_order)
+    else:
+        result.sort(key=lambda x: x.get(sort_field, ""), reverse=reverse_order)
     
     return result
 

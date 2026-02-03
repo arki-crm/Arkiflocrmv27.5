@@ -8959,17 +8959,20 @@ async def list_tasks(
 
 @api_router.get("/tasks/{task_id}")
 async def get_task(task_id: str, request: Request):
-    """Get single task by ID"""
+    """Get single task by ID (requires tasks.view or ownership)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    # Role-based access check
-    if user.role in ["Designer", "PreSales"] and task.get("assigned_to") != user.user_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Permission check - owners can view, or need tasks.view_all
+    is_assignee = task.get("assigned_to") == user.user_id
+    is_assigner = task.get("assigned_by") == user.user_id
+    if not is_assignee and not is_assigner and not has_permission(user_doc, "tasks.view_all"):
+        raise HTTPException(status_code=403, detail="Permission denied")
     
     # Get assignee details
     if task.get("assigned_to"):

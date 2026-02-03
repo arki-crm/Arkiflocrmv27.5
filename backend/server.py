@@ -1911,7 +1911,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "projects.view", "projects.view_all",
         "warranty.view", "service.view", "service.view_all", "service.create",
         "academy.view", "academy.manage",
-        "admin.view_reports"
+        "admin.view_reports",
+        # SalesManager can hold/activate/deactivate leads
+        "leads.hold", "leads.activate", "leads.deactivate"
     ],
     "Designer": [
         "leads.view", "leads.update",

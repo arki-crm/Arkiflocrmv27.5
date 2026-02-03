@@ -8451,11 +8451,12 @@ async def get_system_logs(request: Request, limit: int = 100, offset: int = 0):
 # Get all settings at once (for frontend initialization)
 @api_router.get("/settings/all")
 async def get_all_settings(request: Request):
-    """Get all settings at once"""
+    """Get all settings at once (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     company = await get_settings("company", {"name": "Arkiflo", "address": "", "phone": "", "gst": "", "website": "", "support_email": ""})
     branding = await get_settings("branding", {"logo_url": "", "primary_color": "#2563EB", "secondary_color": "#64748B", "theme": "light", "favicon_url": "", "sidebar_default_collapsed": False})
@@ -8467,7 +8468,7 @@ async def get_all_settings(request: Request):
         "branding": branding,
         "lead_tat": lead_tat,
         "project_tat": project_tat,
-        "can_edit": user.role == "Admin"
+        "can_edit": has_permission(user_doc, "admin.system_settings")
     }
 
 

@@ -339,9 +339,16 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
     return 0;
   };
 
-  // Net payable = Gross - Discount
-  const calculateNetPayable = () => {
+  // Net taxable = Gross - Discount (before GST)
+  const calculateNetTaxable = () => {
     return calculateTotal() - calculateDiscountAmount();
+  };
+
+  // Grand Total = Net Taxable + GST (final vendor payable)
+  const calculateGrandTotal = () => {
+    const netTaxable = calculateNetTaxable();
+    const { totalGST } = calculateGSTTotals();
+    return netTaxable + totalGST;
   };
 
   const handleSubmit = async () => {

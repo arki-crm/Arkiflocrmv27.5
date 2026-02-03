@@ -1577,6 +1577,109 @@ Net Payable = Gross Total - Discount Amount
 
 ---
 
+## ✅ GST Handling for Purchase Invoices - COMPLETED Feb 3, 2026
+
+Line-item based GST calculations for vendor invoices (Purchase Invoices), along with a Project-Level GST Toggle for customer tax invoices.
+
+### P0: Line-Item GST for Purchase Invoices
+
+Vendor invoices often have items with different HSN codes and tax rates. The system now supports GST calculations on a per-line-item basis.
+
+**New Fields per Line Item:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `hsn_code` | string | HSN/SAC code (optional) |
+| `cgst_percent` | float | CGST percentage (optional) |
+| `sgst_percent` | float | SGST percentage (optional) |
+| `igst_percent` | float | IGST percentage - for inter-state (optional) |
+| `cgst_amount` | float | Calculated CGST amount |
+| `sgst_amount` | float | Calculated SGST amount |
+| `igst_amount` | float | Calculated IGST amount |
+| `line_total_with_gst` | float | Line amount + GST |
+
+**New Invoice-Level Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `net_taxable` | float | Gross Total - Discount |
+| `total_cgst` | float | Sum of all line CGST amounts |
+| `total_sgst` | float | Sum of all line SGST amounts |
+| `total_igst` | float | Sum of all line IGST amounts |
+| `total_gst` | float | total_cgst + total_sgst + total_igst |
+| `grand_total` | float | Net Taxable + Total GST |
+
+**Calculation Flow:**
+```
+For each line item:
+  Line Total = Qty × Rate
+  CGST Amount = Line Total × CGST% / 100
+  SGST Amount = Line Total × SGST% / 100  
+  IGST Amount = Line Total × IGST% / 100
+
+Invoice Level:
+  Gross Total = Σ Line Totals
+  Discount Amount = (based on discount_type)
+  Net Taxable = Gross Total - Discount
+  Total GST = Σ (CGST + SGST + IGST for all lines)
+  Grand Total = Net Taxable + Total GST
+```
+
+**Financial Flow:**
+| Operation | Uses Value |
+|-----------|------------|
+| Liability Creation | Grand Total |
+| Cashbook Payment | Grand Total |
+| Amount Remaining | Grand Total - Paid |
+
+**API Endpoints:**
+- `POST /api/finance/execution-ledger` - Updated to handle GST fields
+- `PUT /api/finance/execution-ledger/{id}` - Updated to recalculate GST on edit
+
+### P1: Project-Level GST Toggle
+
+A simple YES/NO toggle in Project Settings that controls customer tax invoice generation (not purchase invoices).
+
+**New Fields in `projects` collection:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `gst_applicable` | bool | Enable GST for customer invoices |
+| `gst_number` | string | Client's GST number (15 char format) |
+
+**API Endpoint:**
+- `PUT /api/projects/{project_id}/settings` - Update GST settings
+
+**UI Location:**
+- ProjectDetails.jsx → Settings tab (visible to Admin/Founder/ProjectManager only)
+- Toggle: "GST Applicable" with YES/NO switch
+- Input: "GST Number" (conditionally visible when toggle is ON)
+- Validation: GST number format (22AAAAA0000A1Z5)
+
+### Frontend Changes
+
+**ExecutionLedger.jsx (Purchase Invoice Form):**
+- Two-row layout per line item
+- Row 1: Category, Material, Spec/Brand, Qty, Unit, Rate, Total, Delete
+- Row 2 (GST): HSN Code, CGST%, SGST%, IGST%, GST amounts display
+- Summary: Gross Total, Discount, Net Taxable, GST breakdown, Grand Total
+
+**Expanded Invoice View:**
+- Table includes HSN and GST columns
+- Invoice summary card shows GST breakdown (CGST/SGST/IGST amounts)
+- Grand Total prominently displayed
+
+**ProjectDetails.jsx (Settings Tab):**
+- New "Settings" tab for Admin/Founder/ProjectManager
+- GST Settings card with toggle and GST Number input
+- Info box explaining the toggle affects customer invoices only
+
+### Testing Status:
+- ✅ Backend: All 13 API tests passed
+- ✅ GST calculations: Verified correct for create, update, with/without discount
+- ✅ Frontend: UI components render correctly
+- ✅ Settings: Toggle and GST Number save/load working
+- ✅ Validation: Invalid GST number format rejected with 400 error
+
+---
+
 ## 🔜 Upcoming Tasks
 
 ### P1: Quotation Builder Module

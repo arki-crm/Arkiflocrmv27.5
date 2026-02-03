@@ -6432,7 +6432,7 @@ async def update_lead_stage(lead_id: str, stage_update: LeadStageUpdate, request
         if not is_assigned and not is_collaborator:
             raise HTTPException(status_code=403, detail="Access denied - not assigned to this lead")
     
-    old_stage = lead.get("stage", "BC Call Done")
+    old_stage = lead.get("stage", "Lead Allocated")
     new_stage = stage_update.stage
     
     if old_stage == new_stage:

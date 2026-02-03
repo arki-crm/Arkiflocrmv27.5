@@ -75,7 +75,8 @@ const Receipts = () => {
     payment_mode: '',
     account_id: '',
     stage_name: '',
-    notes: ''
+    notes: '',
+    payment_date: new Date().toISOString().split('T')[0]  // Default to today, editable
   });
 
   const fetchData = async () => {

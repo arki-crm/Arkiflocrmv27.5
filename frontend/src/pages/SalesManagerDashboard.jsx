@@ -40,8 +40,9 @@ import { cn } from '../lib/utils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-// V1 Sales Stages (6 stages - simplified)
+// V1 Sales Stages (7 stages - includes Lead Allocated as starting stage)
 const FUNNEL_STAGES = [
+  { key: "Lead Allocated", label: "Allocated", color: "slate" },
   { key: "BC Call Done", label: "BC Call", color: "blue" },
   { key: "Quotation Shared", label: "Quotation", color: "purple" },
   { key: "Revised Quotation", label: "Revised", color: "purple" },

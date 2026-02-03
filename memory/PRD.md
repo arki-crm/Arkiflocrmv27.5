@@ -2335,3 +2335,46 @@ FROM node:18-alpine AS builder
 FROM node:18-bullseye-slim AS builder
 RUN apt-get update && apt-get install -y python3 make g++ git
 ```
+
+---
+
+## ✅ Leads Status Filter - COMPLETED Feb 3, 2026
+
+Added a status filter dropdown (Active, Hold, Deactivated) to the Leads page, matching the filtering capabilities of the Projects page.
+
+### Features Implemented:
+- [x] **Status Dropdown Filter** - All Status, Active, On Hold, Deactivated options
+- [x] **Backend Filter Support** - `hold_status` query parameter on GET /api/leads
+- [x] **Active Status Logic** - Shows leads with `hold_status='Active'` or null (default active)
+- [x] **localStorage Persistence** - Filter selection persists across page reloads
+- [x] **Clear Filters Button** - Resets status filter to "All Status"
+- [x] **Visual Badge Display** - Hold/Deactivated badges shown on lead rows
+
+### Files Modified:
+- `/app/backend/server.py` - Added `hold_status` parameter to `GET /api/leads` endpoint
+- `/app/frontend/src/pages/Leads.jsx` - Added `showHoldStatus={true}` to AdvancedFilters component and `hold_status` API parameter
+
+### API Changes:
+- `GET /api/leads?hold_status=Active|Hold|Deactivated` - Filter leads by activity status
+
+### Testing:
+- Backend: 11/11 tests passed
+- Frontend: 6/6 features verified
+- Test file: `/app/backend/tests/test_leads_hold_status_filter.py`
+
+---
+
+## Next Priority Tasks
+
+### P1 - Quotation Builder Module
+- Lightweight, canvas-based tool for creating tentative quotations
+- PDF export capability
+
+### P2 - Backend Refactoring
+- Decompose monolithic `/app/backend/server.py` (~11,000 lines) into modular structure
+- Separate routes, models, and services
+
+### Future Tasks
+- Finance Overview Dashboard
+- Intern/Trainee Role
+- Authentication Rules Refinement

@@ -67,7 +67,7 @@ Major architectural refactoring completed. Permissions are now the single source
 ## Test Credentials
 
 **Local Admin Login:**
-- **URL**: https://authrefine.preview.emergentagent.com/login
+- **URL**: https://project-adjuster.preview.emergentagent.com/login
 - **Email**: thaha.pakayil@gmail.com
 - **Password**: password123
 - **Access**: Full Admin permissions

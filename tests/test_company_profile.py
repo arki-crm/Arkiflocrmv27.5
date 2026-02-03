@@ -12,7 +12,7 @@ import requests
 import os
 import json
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://authrefine.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://project-adjuster.preview.emergentagent.com')
 
 # Test data for company profile
 TEST_COMPANY_DATA = {

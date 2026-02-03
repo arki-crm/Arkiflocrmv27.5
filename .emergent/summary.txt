@@ -1,81 +1,86 @@
 <analysis>**original_problem_statement:**
-The user's initial request was to add a status filter to the Leads page. After completing this, the user raised a much larger architectural concern about recurring issues related to user roles and permissions. The core problem is that the system uses a mix of hardcoded role-name checks and a permission system, creating two conflicting sources of truth.
-
-The user has approved a large-scale refactoring effort to make permissions the single source of truth for access control.
+The user has requested a Timeline Adjustment feature for both Leads and Projects to manage delays without losing the original plan.
 
 PRODUCT REQUIREMENTS:
--   **P0 - Permission System Purification**: Systematically eliminate all hardcoded, role-name-based access checks from the backend and frontend. All access control logic must rely exclusively on the existing permission system.
--   **Leads Status Filter**: The Leads list must have a dropdown to filter by status (e.g., Active, Hold, Deactivated). (This was completed).
+-   Do NOT delete or overwrite the original baseline timeline.
+-   An explicit Adjust Timeline action must be triggered via a modal.
+-   The modal must capture:
+    -   Reason (Mandatory Dropdown: Customer Hold, Customer Delay, etc.)
+    -   Effective date.
+    -   Adjustment option (Shift remaining, Set new completion date, or Mark as On Hold).
+    -   Remarks (Mandatory).
+-   Completed milestones are locked; only future milestones are recalculated.
+-   A historical record (audit trail) of each adjustment must be saved.
+-   After adjustment, the new dates become the active timeline, and delay status should reset.
+-   The user has made specific decisions on implementation:
+    -   **Baseline Capture**: Set when the timeline is first generated (for Leads) or at conversion (for Projects).
+    -   **On Hold**: Pauses all delay calculations and shows an ON HOLD badge.
+    -   **Resume from Hold**: Automatically shifts all future dates by the duration of the hold.
 
 **User's preferred language**: English
 
 **what currently exists?**
-A full-stack finance and project management application. The initial task to add a status filter to the Leads page was completed and tested.
+The application is a full-stack finance and project management tool. In this session, the agent completed a massive architectural refactoring, eliminating hardcoded role-based access checks from both the backend () and the frontend, replacing them with a unified permission system.
 
-The main body of work in this session was a major architectural refactoring to remove hardcoded role-name checks () and replace them with permission-based checks (). A full audit identified ~315 such checks across the codebase. A significant portion of the backend  has been migrated, focusing on the highest-risk areas first. A new Architectural Decision Record (ADR) was created to track the plan and progress.
+Following this, the agent built and tested a complete Role Management UI, allowing admins to perform full CRUD operations on custom roles and their permissions.
+
+The agent has just begun work on the Timeline Adjustment feature, having set up the required backend permissions, data models (Pydantic), and API endpoints.
 
 **Last working item**:
-    - Last item agent was working: Continuing the large-scale backend refactoring of  to eliminate hardcoded role-name checks. The agent was systematically working through the remaining access gates (endpoints guarded by role checks) and had just finished migrating a batch related to the design studio, expense approvals, and warranty flows.
+    - Last item agent was working: Implementing the frontend for the Timeline Adjustment feature. The agent had just created the backend endpoints and a placeholder frontend component () and was about to integrate it into the  page.
     - Status: IN PROGRESS
-    - Agent Testing Done: Y
-    - Which testing method agent to use? backend testing agent. The agent should continue to use custom python scripts with  to test the migrated endpoints with different user roles (Admin, CustomOps, Intern) to ensure permissions are correctly enforced. The frontend is blocked on backend purification and should be tested with  after significant backend modules are completed.
+    - Agent Testing Done: Y (for backend endpoints via curl)
+    - Which testing method agent to use? frontend testing agent. The agent needs to build the UI for the , integrate it into the  and  pages, and then run a full E2E test to verify the functionality.
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  - Issue 1:  (P0) Complete the Permission System Purification refactor.
+  - Issue 1:  (P0) Complete the Lead / Project Timeline Adjustment feature.
 
   Issues Detail:
   - Issue 1: 
-     - Attempted fixes: A significant portion of the backend has been refactored. The agent has been migrating endpoints in batches (User Management, Sidebar, Projects, Leads, Finance, Settings, etc.), testing each batch with custom scripts.
+     - Attempted fixes: The backend API endpoints (, ), Pydantic models, and necessary permissions () have been created and successfully tested via curl. A placeholder file for the frontend modal has been created.
      - Next debug checklist: 
-        1. **Continue Backend Refactoring ():**
-           - Identify the remaining true access gates from the list of ~25 remaining.
-           - Ignore data-scoping logic (e.g., ), as this is business logic, not an access gate.
-           - Migrate the remaining access gates in logical batches (e.g., all remaining finance, all remaining design studio).
-           - For each new permission created, add it to  and assign it to the relevant roles in .
-        2. **Update ADR**: Keep  updated with progress after each batch.
-        3. **Test**: After each batch, run  tests with the established test users (Admin, CustomOps with specific perms, Intern with no perms) to validate correctness.
-     - Why fix this issue and what will be achieved with the fix? To eliminate the root cause of recurring permission issues, making the system scalable and allowing for the future creation of custom roles without requiring code changes. This will make permissions the single source of truth for access control.
+        1.  **UI Implementation**: Build the UI for  based on the user's requirements (reason dropdown, date pickers, radio buttons for adjustment type, remarks text area).
+        2.  **Button Integration**: Add an Adjust Timeline button to  and . This button should only be visible to users with the  permission.
+        3.  **Modal Wiring**: Make the button open the , passing the correct  or .
+        4.  **API Call**: Implement the  logic in the modal to call the correct backend endpoint with the form data.
+        5.  **UI Feedback**: On successful API call, close the modal, show a success toast, and refresh the lead/project data to reflect the new timeline.
+     - Why fix this issue and what will be achieved with the fix? This will provide a critical business feature for managing project delays gracefully, maintaining a clear audit trail of changes, and ensuring delay reports are accurate.
      - Status:  IN PROGRESS
-     - Is recurring issue? Y
-     - Should Test frontend/backend/both after fix? backend
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? both
      - Blocked on other issue: None
 
 **In progress Task List**:
-  - Task 1:  (P0) Permission System Purification
+  - Task 1:  (P0) Implement Frontend for Timeline Adjustment Feature
 
  Task Detail:
   - Task 1: 
-     - Where to resume: Continue migrating the remaining ~25 true access gates in . The agent has already filtered out data-scoping logic and should focus on the remaining  checks that block access to endpoints.
-     - What will be achieved with this? A backend where access control is based purely on permissions, not hardcoded role names.
+     - Where to resume: The file  is created but empty. The agent needs to implement the React component's UI and logic. Then, add a button to  and  to trigger this modal.
+     - What will be achieved with this? A complete, user-facing feature for adjusting lead and project timelines as per the detailed requirements.
      - Status:  IN PROGRESS
-     - Should Test frontend/backend/both after fix? backend
+     - Should Test frontend/backend/both after fix? both
      - Blocked on something: None
 
 **Upcoming and Future Tasks**
 Upcoming Tasks:
--   (P0) **Frontend Purification**: Once the backend is stable, migrate all frontend components (starting with high-traffic pages like , , etc.) to use the  hook instead of  checks.
--   (P1) **Data Scoping Refactor**: After access gates are fixed, refactor the data-scoping logic (e.g., designers seeing only their projects) to also be permission-based (e.g., checking for  vs. ).
+-   (P1) **Data Scoping Refactor**: After the user approved deferring this, refactor the ~105 remaining role-based checks (which are for data-scoping/business logic) in  to use a permission-based system (e.g., , ).
 
 Future Tasks:
 -   (P1) **Quotation Builder Module**: A lightweight, canvas-based tool for creating tentative quotations.
--   (P2) **Role Management UI**: After the purification is complete, build an admin interface to create/edit/delete custom roles and their default permissions.
 -   (P2) **Backend Refactoring**: Decompose the monolithic  into a more maintainable structure (e.g., routes, models, services).
 -   **Finance Overview Dashboard**: Create a high-level dashboard summarizing key financial metrics.
 -   **Authentication Rules Refinement**: Further tighten security and access control.
 
 **Completed work in this session**
-- **Leads Status Filter**: Successfully implemented and tested the status filter (Active, Hold, Deactivated) on the Leads page.
-- **Permission System Audit**: Performed a codebase-wide audit, identifying ~315 hardcoded role checks, and created  to track the migration.
-- **Backend User Management Migration**: Refactored all user management endpoints (, , etc.) in  to use  and .
-- **Frontend User Management Migration**: Refactored  and the  to be fully permission-based.
-- **Sidebar Migration (P0)**: Refactored  to display navigation items based on permissions, not roles. Verified with the testing agent.
-- **Backend High-Risk Module Migration**: Migrated critical access-control and data-scoping logic in  for Projects, Leads/Presales, and Finance write actions to be permission-based.
-- **Backend Access Gate Migration**: Systematically converted ~100 hardcoded role checks, including ~56 true access gates, to permission-based logic across dozens of endpoints.
+- **Backend Permission Purification (COMPLETE)**: Migrated all true access gates in  from role-based checks to a permission-based system.
+- **Frontend Permission Purification (COMPLETE)**: Migrated all components that had access-control-related role checks to use the  hook.
+- **Role Management UI (COMPLETE)**: Implemented full CRUD functionality for custom roles, including backend endpoints and a complete frontend interface. Validated with the testing agent.
+- **Timeline Adjustment Backend (COMPLETE)**: Created API endpoints, permissions, and data models for the new timeline adjustment feature.
 
 **Earlier issues found/mentioned but not fixed**
-   - Issue 1: The backend remains a single monolithic file (). The current refactoring is happening within this file but does not break it apart. This is a future task.
-   - Issue 2: Numerous frontend components still rely on hardcoded role checks for UI visibility. This is the next major phase after the backend purification is complete.
+   - Issue 1: The backend  file is still a monolith. This is a future refactoring task.
+   - Issue 2: Data-scoping logic in the backend still relies on role names. The user explicitly chose to defer migrating this in favor of new feature development.
 
 **Known issue recurrence from previous fork**
   - None.
@@ -84,64 +89,59 @@ Future Tasks:
 
 
 **Key Technical Concepts**
--   **Permission-Based Access Control (PBAC)**: The core of this session's work. Migrating from checking role names () to checking granular permissions ().
--   **Architectural Decision Record (ADR)**: A new document () was created to formalize the plan, progress, and rationale for the permission system refactoring.
--   **Systematic Refactoring**: The agent is following a structured, batch-based approach to migrate a large, complex codebase, focusing on high-risk modules first and testing incrementally.
+-   **Permission-Based Access Control (PBAC)**: The application's access control is now fully based on granular permissions, not hardcoded role names.
+-   **Custom Role Management**: The system now supports user-created roles with custom permission sets, stored in a new  collection in MongoDB.
+-   **Timeline Adjustment Logic**: A new concept of maintaining a  while allowing an  to be adjusted. All adjustments are logged in a  array within the lead/project document.
 
 **key DB schema**
--   ****: This collection is central. The  field is being demoted to a simple label, while the  and  fields are becoming the single source of truth for access control.
--   ****, ****: No schema changes, but the API endpoints governing access to them are being heavily modified.
+  - ****: (NEW)  - Stores custom roles created by admins.
+  - ****: The  field now points to a  which can be a default role or a custom role from the  collection.
+  - ** / **: Will be modified to include a  array to store the audit trail of timeline changes and a  field.
 
 **changes in tech stack**
   - None.
 
 **All files of reference**
 -    (Heavily modified)
--    (New and frequently updated)
--    (Modified)
--    (Modified)
--    (Modified)
--    (Modified)
--   
+-    (Updated)
+-    (Updated)
+-    (New)
+-    (New, but empty)
+-    (Modified to add new route)
+-    (Modified to add new link)
+-   All frontend pages in  were modified to remove role-based access checks.
 
 **Areas that need refactoring**:
--   : Still a monolith. The current work is a prerequisite for breaking it down.
--   Most frontend files in  and  still contain hardcoded role checks and need to be migrated to use the  hook.
+-   : Still a monolith that is a candidate for being broken down into smaller, more focused modules (routes, services, models).
 
 **key api endpoints**
--   : All user management endpoints are now permission-based.
--   , , : Many endpoints migrated; work is ongoing.
--   : Returns  which is crucial for the frontend.
--   : Most settings endpoints now require the  permission.
+-    (GET, POST)
+-    (GET, PUT, DELETE)
+-    (POST) (New)
+-    (POST) (New)
 
 **Critical Info for New Agent**
--   **DO NOT STOP**: The user has explicitly instructed to continue the backend refactoring without interruption unless a blocker is hit.
--   **Your immediate task is to continue the backend permission purification in **. Follow the plan in .
--   Focus only on migrating true access gates (). Do not change data-scoping logic ().
--   After each batch of migrations, update the ADR and run tests using python scripts to validate the changes with the test users.
--   Do not work on the frontend purification or the UI for role creation yet. The user wants the backend to be fully stabilized first.
+-   Your primary task is to build the frontend for the **Timeline Adjustment** feature. The backend is already implemented and tested.
+-   Start by building the UI in .
+-   Add a button to  and  that opens this modal. The button should only be visible to users with the  permission.
+-   The user has provided very specific requirements and decisions for this feature. Please review the  and the  carefully before coding.
 
 **documents and test reports created in this job**
 -   
--   
--   
 
 **Last 10 User Messages and any pending HUMAN messages** 
--   (LATEST) User: continue your and do not stop until its very necessary to take my recommendation (Status: ACKNOWLEDGED, IN PROGRESS)
--   (User): please proceed P1 (referring to the phased plan). (Status: ACKNOWLEDGED, IN PROGRESS)
--   (User): Good progress. ... proceed with backend purification only for high-risk modules first... (Status: ACKNOWLEDGED, IN PROGRESS)
--   (User): Good progress. Validation result is clear and satisfactory. Let’s proceed in this exact order: 1. P0: Migrate Sidebar.jsx... (Status: COMPLETED)
--   (User): Let’s pause and test before migrating further. I want to validate the permission-first approach... (Status: COMPLETED)
--   (User): please proceed with your approach (Status: ACKNOWLEDGED, IN PROGRESS)
--   (User): I agree with your analysis and phased approach. Let’s prioritize Phases 1–3... (Status: ACKNOWLEDGED, IN PROGRESS)
--   (User): Provided detailed architectural questions about the role/permission system, confirming the agent's suspicion about hardcoded roles being the root cause. (Status: COMPLETED)
--   (User): Requested clarity on role management limitations and a recommended long-term approach. (Status: COMPLETED)
--   (User): please proceed (after agent's initial plan to fix the Leads filter). (Status: COMPLETED)
+ -  (LATEST) User: Provided detailed decisions and acceptance criteria for the Timeline Adjustment feature, including baseline capture timing, On Hold behavior, and how to resume from hold. (Status: ACKNOWLEDGED, IN PROGRESS)
+ -  User: Requested the Lead / Project Timeline Adjustment feature with detailed requirements. (Status: ACKNOWLEDGED, IN PROGRESS)
+ -  User: please proceed with Developing the Role Management UI. (Status: COMPLETED)
+ -  User: Proceed with frontend purification. (Status: COMPLETED)
+ -  User: Asked for clarification on why ~105 role checks remained in the backend after purification. (Status: RESOLVED)
+ -  Agent: Explained that remaining checks are for data-scoping (business logic), not access control, and recommended keeping them for now. (Status: RESOLVED)
+ -  User: Continue Backend Purification. (Status: COMPLETED)
 
 **Project Health Check:**
--   **Broken**: The fundamental access control model is partially broken, which is why the refactoring is in progress. The application is functional for existing roles but fails for new or custom ones.
+-   **Broken**: No core functionality is broken.
 -   **Mocked**: None.
--   **Technical Debt**: High. The primary debt is the ~125 remaining hardcoded role checks in  and ~130 more in the frontend. The monolithic nature of  is also significant.
+-   **Technical Debt**: Medium. The access control model has been significantly improved, reducing major technical debt. The primary remaining debt is the monolithic nature of  and the deferred task of refactoring data-scoping logic.
 
 **3rd Party Integrations**
 -   Direct Google Auth
@@ -151,16 +151,16 @@ Future Tasks:
 -   Nginx
 
 **Testing status**
-  - Testing agent used after significant changes: YES (to validate the Sidebar migration).
+  - Testing agent used after significant changes: YES, for the Role Management UI feature.
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: None, but extensive ad-hoc testing scripts using  and  were created and used to validate every batch of backend changes.
-  - Known regressions: None identified, as testing has been performed after each migration batch. The risk of regression is high, which is why the phased approach is critical.
+  - Test files created: None.
+  - Known regressions: None.
 
 **Credentials to test flow:**
 -   **Admin**:  /  (has all permissions)
--   **Custom Ops User**:  /  (Role: , has custom  permission)
--   **Intern User**:  /  (Role: , has minimal default permissions)
+-   **Custom Ops User**:  /  (Role: )
+-   **Intern User**:  /  (Role: , has minimal permissions)
 -   **Finance User**:  /  (Role: )
 
 **What agent forgot to execute**
--   Nothing was forgotten. The agent correctly pivoted from a small feature request to a major, user-directed architectural refactoring and has been executing it systematically according to the agreed-upon plan.</analysis>
+-   Nothing. The agent successfully completed two major tasks (permission purification, role management UI) and is correctly following user instructions to implement the next feature.</analysis>

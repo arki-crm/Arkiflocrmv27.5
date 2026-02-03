@@ -305,7 +305,31 @@ const Sidebar = () => {
   }, [location.pathname]);
 
   // Get role-specific navigation items with senior manager view permission
-  const navItems = getRoleNavItems(user?.role, user?.senior_manager_view);
+  const roleBasedItems = getRoleNavItems(user?.role, user?.senior_manager_view);
+  
+  // Permission-based navigation additions
+  // These items are added based on permissions, regardless of role
+  const permissionBasedItems = [];
+  
+  // Users management - show if user has admin.manage_users OR admin.assign_permissions
+  if (hasPermission('admin.manage_users') || hasPermission('admin.assign_permissions')) {
+    // Check if Users item already exists in role-based items
+    const hasUsersItem = roleBasedItems.some(item => item.path === '/users');
+    if (!hasUsersItem) {
+      permissionBasedItems.push({ path: '/users', label: 'Users', icon: UserCog });
+    }
+  }
+  
+  // Settings - show if user has admin.system_settings
+  if (hasPermission('admin.system_settings')) {
+    const hasSettingsItem = roleBasedItems.some(item => item.path === '/settings');
+    if (!hasSettingsItem) {
+      permissionBasedItems.push({ path: '/settings', label: 'Settings', icon: Settings });
+    }
+  }
+  
+  // Combine role-based and permission-based items
+  const navItems = [...roleBasedItems, ...permissionBasedItems];
 
   const toggleMenu = (path) => {
     setExpandedMenus(prev => ({

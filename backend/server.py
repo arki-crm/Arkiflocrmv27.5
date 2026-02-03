@@ -120,6 +120,19 @@ class LocalLoginRequest(BaseModel):
 class RoleUpdateRequest(BaseModel):
     role: str
 
+# ============ ROLE MANAGEMENT MODELS ============
+
+class RoleCreate(BaseModel):
+    id: str  # Role ID (e.g., "CustomManager")
+    name: str  # Display name
+    description: Optional[str] = None
+    default_permissions: List[str] = []
+
+class RoleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    default_permissions: Optional[List[str]] = None
+
 # ============ LOCAL AUTH HELPERS ============
 
 def hash_password(password: str) -> str:

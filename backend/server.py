@@ -8756,11 +8756,11 @@ class EmailTemplateUpdate(BaseModel):
 
 @api_router.get("/settings/email-templates")
 async def get_email_templates(request: Request):
-    """Get all email templates (Admin only)"""
+    """Get all email templates (requires admin.email_templates permission)"""
     user = await get_current_user(request)
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user, "admin.email_templates"):
+        raise HTTPException(status_code=403, detail="You don't have permission to view email templates")
     
     # Get from database or return defaults
     templates = await db.email_templates.find({}, {"_id": 0}).to_list(100)
@@ -8775,11 +8775,11 @@ async def get_email_templates(request: Request):
 
 @api_router.get("/settings/email-templates/{template_id}")
 async def get_email_template(template_id: str, request: Request):
-    """Get a single email template (Admin only)"""
+    """Get a single email template (requires admin.email_templates permission)"""
     user = await get_current_user(request)
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user, "admin.email_templates"):
+        raise HTTPException(status_code=403, detail="You don't have permission to view email templates")
     
     template = await db.email_templates.find_one({"id": template_id}, {"_id": 0})
     
@@ -8794,11 +8794,11 @@ async def get_email_template(template_id: str, request: Request):
 
 @api_router.put("/settings/email-templates/{template_id}")
 async def update_email_template(template_id: str, update: EmailTemplateUpdate, request: Request):
-    """Update an email template (Admin only)"""
+    """Update an email template (requires admin.email_templates permission)"""
     user = await get_current_user(request)
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user, "admin.email_templates"):
+        raise HTTPException(status_code=403, detail="You don't have permission to update email templates")
     
     # Build update dict
     update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
@@ -8835,11 +8835,11 @@ async def update_email_template(template_id: str, update: EmailTemplateUpdate, r
 
 @api_router.post("/settings/email-templates/{template_id}/reset")
 async def reset_email_template(template_id: str, request: Request):
-    """Reset an email template to default (Admin only)"""
+    """Reset an email template to default (requires admin.email_templates permission)"""
     user = await get_current_user(request)
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user, "admin.email_templates"):
+        raise HTTPException(status_code=403, detail="You don't have permission to reset email templates")
     
     # Find default template
     default = None

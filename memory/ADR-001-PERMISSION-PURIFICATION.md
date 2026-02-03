@@ -6,6 +6,29 @@
 
 ---
 
+## Progress Tracker
+
+### Completed ✅
+| Component | Role Checks Removed | Status |
+|-----------|---------------------|--------|
+| Backend: User CRUD | 11 | ✅ Done |
+| Backend: Permission Management | 4 | ✅ Done |
+| Frontend: AuthContext.js | 1 (role shortcut) | ✅ Done |
+| Frontend: Users.jsx | 7 | ✅ Done |
+
+### Remaining (By Priority)
+| Component | Role Checks | Priority |
+|-----------|-------------|----------|
+| Backend: Other endpoints | ~165 | P0 |
+| Frontend: ProjectDetails.jsx | 23 | P0 |
+| Frontend: Dashboard.jsx | 12 | P0 |
+| Frontend: PreSales.jsx | 9 | P1 |
+| Frontend: Leads.jsx | 9 | P1 |
+| Frontend: Projects.jsx | 8 | P1 |
+| Frontend: Other files | ~57 | P2 |
+
+---
+
 ## Context
 
 The system currently has **two sources of truth** for access control:

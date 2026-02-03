@@ -138,12 +138,12 @@ const Users = () => {
     phone: ''
   });
 
-  // Redirect non-admin/manager users
+  // Redirect users without user management permissions
   useEffect(() => {
-    if (user && !['Admin', 'Manager'].includes(user.role)) {
+    if (user && !hasPermission('admin.manage_users') && !hasPermission('admin.assign_permissions')) {
       navigate('/dashboard');
     }
-  }, [user, navigate]);
+  }, [user, navigate, hasPermission]);
 
   // Fetch available roles on mount
   useEffect(() => {

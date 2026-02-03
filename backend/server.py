@@ -1951,7 +1951,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "academy.view", "academy.manage",
         "admin.view_reports",
         # SalesManager can hold/activate/deactivate leads
-        "leads.hold", "leads.activate", "leads.deactivate"
+        "leads.hold", "leads.activate", "leads.deactivate",
+        # SalesManager can assign technicians
+        "service.assign_technician"
     ],
     "Designer": [
         "leads.view", "leads.update",

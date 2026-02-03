@@ -154,6 +154,9 @@ const ProjectDetails = () => {
       setCollaborators(response.data.collaborators || []);
       setCompletedSubStages(response.data.completed_substages || []);
       setPercentageSubStages(response.data.percentage_substages || {});
+      // Load GST settings
+      setGstApplicable(response.data.gst_applicable || false);
+      setGstNumber(response.data.gst_number || '');
       
       // Fetch user milestone permissions from substages endpoint
       try {

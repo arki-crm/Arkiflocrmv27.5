@@ -52,7 +52,9 @@ import {
   ChevronDown,
   Shield,
   Wrench,
-  Settings
+  Settings,
+  Clock,
+  History
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -78,6 +80,7 @@ import {
 } from '../components/project';
 import MeetingModal from '../components/MeetingModal';
 import MeetingCard from '../components/MeetingCard';
+import TimelineAdjustmentModal, { TimelineHistoryModal } from '../components/TimelineAdjustmentModal';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 

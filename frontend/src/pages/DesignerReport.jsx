@@ -23,19 +23,20 @@ import { cn } from '../lib/utils';
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const DesignerReport = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (user?.role && !['Admin', 'Manager', 'Designer'].includes(user.role)) {
+    // Designers can view their own report, others need admin.view_reports
+    if (user && !hasPermission('admin.view_reports') && !hasPermission('milestones.update.design')) {
       navigate('/reports');
       return;
     }
     fetchData();
-  }, [user, navigate]);
+  }, [user, navigate, hasPermission]);
 
   const fetchData = async () => {
     try {

@@ -14888,11 +14888,12 @@ async def update_academy_lesson(lesson_id: str, data: AcademyLessonUpdate, reque
 
 @api_router.delete("/academy/lessons/{lesson_id}")
 async def delete_academy_lesson(lesson_id: str, request: Request):
-    """Delete a lesson (Admin/Manager only)"""
+    """Delete a lesson (requires academy.manage permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
-        raise HTTPException(status_code=403, detail="Only Admin and Managers can delete lessons")
+    if not has_permission(user_doc, "academy.manage"):
+        raise HTTPException(status_code=403, detail="You don't have permission to delete lessons")
     
     lesson = await db.academy_lessons.find_one({"lesson_id": lesson_id}, {"_id": 0})
     if not lesson:

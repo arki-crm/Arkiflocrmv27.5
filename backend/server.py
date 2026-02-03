@@ -3337,11 +3337,10 @@ async def add_comment(project_id: str, comment: CommentCreate, request: Request)
 @api_router.put("/projects/{project_id}/customer-details")
 async def update_project_customer_details(project_id: str, request: Request):
     """
-    Update customer details on a project.
-    - Only Admin/SalesManager can edit customer details on projects
-    - Designers and others can only view
+    Update customer details on a project (requires projects.update permission).
     """
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     body = await request.json()
     
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
@@ -3349,9 +3348,9 @@ async def update_project_customer_details(project_id: str, request: Request):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Only Admin and SalesManager can edit project customer details
-    if user.role not in ["Admin", "SalesManager"]:
-        raise HTTPException(status_code=403, detail="Only Admin or Sales Manager can edit customer details on projects")
+    # Permission check: need projects.update
+    if not has_permission(user_doc, "projects.update"):
+        raise HTTPException(status_code=403, detail="Permission denied: projects.update required")
     
     # Build update dict
     now = datetime.now(timezone.utc)

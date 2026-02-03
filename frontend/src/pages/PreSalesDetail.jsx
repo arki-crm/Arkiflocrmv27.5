@@ -801,13 +801,14 @@ const PreSalesDetail = () => {
   // Permission checks
   const canEdit = () => {
     if (!user || !lead) return false;
-    if (user.role === 'Admin' || user.role === 'SalesManager') return true;
-    if (user.role === 'PreSales') return lead.created_by === user.user_id || lead.assigned_to === user.user_id;
-    return false;
+    // Users with presales.update permission can edit
+    if (hasPermission('presales.update')) return true;
+    // Creator or assigned user can also edit their own
+    return lead.created_by === user.user_id || lead.assigned_to === user.user_id;
   };
 
   const canConvert = () => {
-    return user?.role === 'Admin' || user?.role === 'SalesManager' || user?.role === 'PreSales';
+    return hasPermission('presales.convert');
   };
 
   if (loading) {

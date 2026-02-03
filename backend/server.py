@@ -1884,6 +1884,10 @@ DEFAULT_ROLE_PERMISSIONS = {
         "warranty.view", "warranty.update", "service.view", "service.view_all", "service.create", "service.update",
         "academy.view", "academy.manage",
         "admin.manage_users", "admin.assign_permissions", "admin.view_reports", "admin.system_settings",
+        # New admin permissions for purified access control
+        "admin.stage_rollback", "admin.milestone_rollback", "admin.delete_files",
+        "admin.email_templates", "admin.view_logs", "admin.seed_data",
+        "service.assign_technician",
         # Hold/Activate/Deactivate permissions - Admin gets all
         "projects.hold", "projects.activate", "projects.deactivate",
         "leads.hold", "leads.activate", "leads.deactivate",

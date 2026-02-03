@@ -1712,6 +1712,39 @@ Changed all account dropdowns to use fallback pattern: `acc.account_name || acc.
 
 ---
 
+## ✅ Daybook Detailed View - COMPLETED Feb 3, 2026
+
+A read-only detailed view showing transaction-level rows for any date, accessible from the Daybook page.
+
+### Features
+| Feature | Description |
+|---------|-------------|
+| **Transaction Table** | Time, Account, Reference, Category/Purpose, Project/Vendor, Mode, Inflow, Outflow |
+| **Summary Bar** | Total transactions, Total Inflow, Total Outflow, Net change |
+| **Account Filter** | Dropdown to filter by specific account |
+| **Type Filter** | Filter by Inflow Only / Outflow Only |
+| **Search** | Search by reference, category, vendor name |
+| **CSV Export** | Download filtered transactions as CSV file |
+| **Print** | Print-friendly view with proper formatting |
+
+### Access Points
+1. Click **"View Daybook"** button in Account-wise Summary header
+2. Click transaction count badge in account row
+3. Click **Eye icon** or transaction count in Recent Closings section
+
+### API Endpoint
+- `GET /api/finance/daily-closing/{date}/transactions`
+- Returns enriched transactions with account names, category names, project/vendor info
+- Response includes summary: count, total_inflow, total_outflow, net
+
+### Testing Status
+- ✅ Backend: 8/8 tests passed
+- ✅ Frontend: 10/10 features verified
+- ✅ Read-only view confirmed - no edit functionality
+- ✅ CSV export and Print work with filtered data
+
+---
+
 ## 🔜 Upcoming Tasks
 
 ### P1: Quotation Builder Module

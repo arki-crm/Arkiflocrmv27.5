@@ -133,6 +133,26 @@ class RoleUpdate(BaseModel):
     description: Optional[str] = None
     default_permissions: Optional[List[str]] = None
 
+# ============ TIMELINE ADJUSTMENT MODELS ============
+
+TIMELINE_ADJUSTMENT_REASONS = [
+    "Customer Hold",
+    "Customer Delay", 
+    "Internal Delay",
+    "Payment Delay",
+    "Vendor Delay",
+    "Scope Change",
+    "Other"
+]
+
+class TimelineAdjustmentRequest(BaseModel):
+    reason: str  # Must be one of TIMELINE_ADJUSTMENT_REASONS
+    remarks: str  # Mandatory
+    effective_date: str  # ISO date string
+    adjustment_type: str  # "shift_forward", "new_completion_date", "on_hold", "resume"
+    shift_days: Optional[int] = None  # Required if adjustment_type is "shift_forward"
+    new_completion_date: Optional[str] = None  # Required if adjustment_type is "new_completion_date"
+
 # ============ LOCAL AUTH HELPERS ============
 
 def hash_password(password: str) -> str:

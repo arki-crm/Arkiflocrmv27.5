@@ -12601,11 +12601,11 @@ async def get_design_manager_dashboard(request: Request):
 
 @api_router.get("/ceo/dashboard")
 async def get_ceo_dashboard(request: Request):
-    """Private CEO dashboard with performance scores and analytics"""
+    """Private CEO dashboard with performance scores and analytics (requires admin.view_reports permission)"""
     user = await get_current_user(request)
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user, "admin.view_reports"):
+        raise HTTPException(status_code=403, detail="You don't have permission to view CEO dashboard")
     
     now = datetime.now(timezone.utc)
     

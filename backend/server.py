@@ -25561,16 +25561,24 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
         "purchase_type": entry.purchase_type,
         "items": processed_items,
         "item_count": len(processed_items),
-        # Value fields - gross is sum of line items, net is payable after discount
-        "gross_total": gross_total,  # Sum of line items (immutable)
+        # Value fields - gross is sum of line items (before GST)
+        "gross_total": gross_total,  # Sum of line items taxable value
         "discount_type": discount_type,  # "flat" or "percentage"
         "discount_value": discount_value,  # Original discount input value
         "discount_amount": discount_amount,  # Calculated discount amount
-        "net_payable": net_payable,  # Gross - Discount (this is what gets paid)
-        "total_value": net_payable,  # For backward compatibility, equals net_payable
-        # Payment tracking fields - based on net_payable
+        "net_taxable": net_taxable,  # Gross - Discount (taxable amount)
+        # GST totals
+        "total_cgst": total_cgst,
+        "total_sgst": total_sgst,
+        "total_igst": total_igst,
+        "total_gst": total_gst,
+        # Grand total = net_taxable + GST (vendor payable)
+        "grand_total": grand_total,
+        "net_payable": grand_total,  # For backward compatibility
+        "total_value": grand_total,  # For backward compatibility
+        # Payment tracking fields - based on grand_total (including GST)
         "total_paid": 0,
-        "amount_remaining": net_payable,
+        "amount_remaining": grand_total,
         "payment_status": "unpaid",  # unpaid, partial, paid
         "payments": [],  # Array of payment records
         # Legacy link fields (kept for backward compatibility, but now managed via payments)

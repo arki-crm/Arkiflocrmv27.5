@@ -14766,11 +14766,12 @@ async def update_academy_category(category_id: str, request: Request):
 
 @api_router.delete("/academy/categories/{category_id}")
 async def delete_academy_category(category_id: str, request: Request):
-    """Delete an academy category and all its lessons (Admin only)"""
+    """Delete an academy category and all its lessons (requires academy.manage permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Only Admin can delete categories")
+    if not has_permission(user_doc, "academy.manage"):
+        raise HTTPException(status_code=403, detail="You don't have permission to delete categories")
     
     category = await db.academy_categories.find_one({"category_id": category_id}, {"_id": 0})
     if not category:

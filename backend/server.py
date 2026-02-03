@@ -2430,13 +2430,12 @@ async def get_available_users(request: Request):
     if not user_doc:
         raise HTTPException(status_code=403, detail="User not found")
     
-    # Allow if Admin OR has projects.manage_collaborators permission
-    # Also allow specific manager roles for backward compatibility
-    allowed_roles = ["Admin", "SalesManager", "DesignManager", "ProductionOpsManager"]
+    # Permission-based access: need projects.manage_collaborators OR leads.convert (for assigning designers)
     has_manage_collaborators = has_permission(user_doc, "projects.manage_collaborators")
+    has_lead_convert = has_permission(user_doc, "leads.convert")
     
-    if user.role not in allowed_roles and not has_manage_collaborators:
-        raise HTTPException(status_code=403, detail="Access denied - cannot manage collaborators")
+    if not has_manage_collaborators and not has_lead_convert:
+        raise HTTPException(status_code=403, detail="Permission denied: projects.manage_collaborators or leads.convert required")
     
     users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "picture": 1}).to_list(1000)
     return users
@@ -2445,9 +2444,18 @@ async def get_available_users(request: Request):
 async def get_designers(request: Request):
     """Get list of all designers (for assigning to leads)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "SalesManager", "DesignManager", "ProductionOpsManager", "PreSales"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Permission-based: need leads.create, leads.update, or presales.convert to assign designers
+    has_access = (
+        has_permission(user_doc, "leads.create") or
+        has_permission(user_doc, "leads.update") or
+        has_permission(user_doc, "presales.convert") or
+        has_permission(user_doc, "projects.manage_collaborators")
+    )
+    
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Permission denied")
     
     designers = await db.users.find(
         {"role": "Designer"}, 

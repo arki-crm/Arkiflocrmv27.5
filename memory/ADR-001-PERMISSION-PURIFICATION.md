@@ -13,8 +13,10 @@
 |-----------|---------------------|--------|
 | Backend: User CRUD | 11 | ✅ Done |
 | Backend: Permission Management | 4 | ✅ Done |
+| Backend: User Listing (GET /api/users) | 1 | ✅ Done |
 | Frontend: AuthContext.js | 1 (role shortcut) | ✅ Done |
 | Frontend: Users.jsx | 7 | ✅ Done |
+| Frontend: Sidebar.jsx | Permission-based additions | ✅ Done |
 
 ### Validation Results ✅ (Feb 3, 2026)
 

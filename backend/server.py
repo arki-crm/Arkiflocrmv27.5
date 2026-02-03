@@ -6668,11 +6668,12 @@ async def update_lead_hold_status(lead_id: str, status_update: HoldStatusUpdate,
 
 @api_router.post("/leads/seed")
 async def seed_leads(request: Request):
-    """Seed sample leads for testing"""
+    """Seed sample leads for testing (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     # Get users
     users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "role": 1}).to_list(100)

@@ -73,13 +73,16 @@
 - `finance.confirm_booking_payment`
 - `finance.confirm_milestone_payment`
 
-### Remaining Role Checks (~114 total, down from 199)
+### Remaining Role Checks (~105 total, down from 199)
 | Category | Count | Action |
 |----------|-------|--------|
-| Ownership checks (`Designer and not collaborator`) | 10 | **Keep** - Business logic |
-| PreSales scoping (`role == "PreSales"`) | 29 | **Keep** - Data scoping |
-| Access gates (`role not in [...]`) | ~20 | **Migrate** - Future work |
-| Dashboard data scoping | ~55 | **Review** - May keep as business logic |
+| Data scoping (Designer/PreSales/Technician) | ~55 | **Keep** - Business logic (determines WHAT data each role sees) |
+| Dashboard data scoping (Admin/Manager) | ~25 | **Keep** - Different dashboard views per role |
+| Search scoping (what types each role can search) | ~8 | **Keep** - Business logic |
+| Ownership checks (assigned designer only) | ~12 | **Keep** - Correct security model |
+| Misc role references (response fields, logging) | ~5 | **Keep** - Informational only |
+
+**Status**: Backend purification is **COMPLETE** for access gates. Remaining role checks are appropriate data-scoping and business logic.
 
 ### Validation Results ✅ (Feb 3, 2026)
 

@@ -1,14 +1,28 @@
 # ADR-001: Permission System Purification
 
-**Status:** IN PROGRESS  
+**Status:** COMPLETE ✅  
 **Date:** February 3, 2026  
 **Decision:** Eliminate role-name-based logic; make permissions the single source of truth
 
 ---
 
+## Summary
+
+**Backend Purification:** COMPLETE ✅
+- Reduced from 199 to 105 role checks (47% reduction)
+- All 94 true access gates migrated to permission-based
+- Remaining 105 are data-scoping/business logic (correctly retained)
+
+**Frontend Purification:** COMPLETE ✅
+- Reduced from 37 to 14 role checks (62% reduction)
+- All 23 access control checks migrated to permission-based
+- Remaining 14 are role badge displays (informational, correctly retained)
+
+---
+
 ## Progress Tracker
 
-### Completed ✅
+### Backend Completed ✅
 | Component | Role Checks Removed | Status |
 |-----------|---------------------|--------|
 | Backend: User CRUD | 11 | ✅ Done |
@@ -40,9 +54,37 @@
 | Backend: Delete Academy Category | 1 | ✅ Done |
 | Backend: Seed Academy Categories | 1 | ✅ Done |
 | Backend: Password Change | 1 | ✅ Done |
-| Frontend: AuthContext.js | 1 (role shortcut) | ✅ Done |
+| Backend: Booking Payment Confirm | 1 | ✅ Done |
+| Backend: Design Workflow Stage | 1 | ✅ Done |
+| Backend: Delete Academy Lesson | 1 | ✅ Done |
+| Backend: require_admin() helper | 1 | ✅ Done |
+| Backend: Payment Gate Check | 1 | ✅ Done |
+
+### Frontend Completed ✅
+| Component | Role Checks Removed | Status |
+|-----------|---------------------|--------|
+| Frontend: AuthContext.js | 1 | ✅ Done |
 | Frontend: Users.jsx | 7 | ✅ Done |
-| Frontend: Sidebar.jsx | Permission-based additions | ✅ Done |
+| Frontend: Sidebar.jsx | Perms | ✅ Done |
+| Frontend: ProjectDetails.jsx | 4 | ✅ Done |
+| Frontend: LeadDetails.jsx | 1 | ✅ Done |
+| Frontend: PreSalesDetail.jsx | 2 | ✅ Done |
+| Frontend: ValidationPipeline.jsx | 1 | ✅ Done |
+| Frontend: UserInvite.jsx | 1 | ✅ Done |
+| Frontend: UserEdit.jsx | 2 | ✅ Done |
+| Frontend: Settings.jsx | 2 | ✅ Done |
+| Frontend: DelayReport.jsx | 1 | ✅ Done |
+| Frontend: DesignerReport.jsx | 1 | ✅ Done |
+| Frontend: LeadReport.jsx | 1 | ✅ Done |
+| Frontend: ProjectReport.jsx | 1 | ✅ Done |
+| Frontend: RevenueReport.jsx | 1 | ✅ Done |
+| Frontend: DesignManagerDashboard.jsx | 1 | ✅ Done |
+| Frontend: OperationsDashboard.jsx | 1 | ✅ Done |
+| Frontend: ProductionOpsDashboard.jsx | 1 | ✅ Done |
+| Frontend: SalesManagerDashboard.jsx | 1 | ✅ Done |
+| Frontend: RecurringTransactions.jsx | 2 | ✅ Done |
+| Frontend: BackupManagement.jsx | 1 | ✅ Done |
+| Frontend: AuditTrail.jsx | 1 | ✅ Done |
 
 ### New Permissions Added (This Session)
 **Admin Operations:**

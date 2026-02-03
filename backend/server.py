@@ -11022,18 +11022,21 @@ async def convert_presales_to_lead(presales_id: str, request: Request):
 
 @api_router.get("/reports/designers")
 async def get_designers_report(request: Request):
-    """Designer Performance Report - Designer sees own, Admin/Manager sees all"""
+    """Designer Performance Report - Users see own, users with admin.view_reports see all"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "Designer"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Users with admin.view_reports can see all designers, others only see their own
+    can_view_all = has_permission(user_doc, "admin.view_reports")
     
     now = datetime.now(timezone.utc)
     
-    # Get all designers
-    designers_query = {"role": "Designer"}
-    if user.role == "Designer":
-        designers_query["user_id"] = user.user_id
+    # Get designers based on permissions
+    if can_view_all:
+        designers_query = {"role": "Designer"}
+    else:
+        # User can only see their own data
+        designers_query = {"user_id": user.user_id, "role": "Designer"}
     
     designers = await db.users.find(designers_query, {"_id": 0}).to_list(100)
     

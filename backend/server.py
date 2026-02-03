@@ -13582,28 +13582,27 @@ async def update_warranty(warranty_id: str, request: Request):
     if not user_doc:
         raise HTTPException(status_code=403, detail="User not found")
     
-    # Permission check: Admin, ProductionOpsManager, SalesManager, OR collaborator with warranty.update
-    allowed_roles = ["Admin", "SalesManager", "ProductionOpsManager"]
+    # Permission check: need warranty.update permission OR be a collaborator with warranty.update
     is_collaborator = user.user_id in warranty.get("collaborators", [])
     has_warranty_update = has_permission(user_doc, "warranty.update")
     
-    if user.role not in allowed_roles and not (is_collaborator and has_warranty_update):
-        raise HTTPException(status_code=403, detail="You don't have permission to update warranties")
+    if not has_warranty_update and not is_collaborator:
+        raise HTTPException(status_code=403, detail="Permission denied: warranty.update required")
     
     body = await request.json()
     
     now = datetime.now(timezone.utc)
     update_fields = {"updated_at": now.isoformat()}
     
-    # Standard fields - all managers can update
+    # Standard fields - users with warranty.update can update
     allowed_fields = ["warranty_book_url", "vendor_warranty_files", "materials_list", "modules_list", "notes"]
     for field in allowed_fields:
         if field in body:
             update_fields[field] = body[field]
     
-    # Admin-only fields - warranty dates and period
+    # Admin-only fields - warranty dates and period (requires admin.system_settings)
     admin_fields = ["warranty_start_date", "warranty_end_date", "warranty_period_years"]
-    if user.role == "Admin":
+    if has_permission(user_doc, "admin.system_settings"):
         for field in admin_fields:
             if field in body:
                 update_fields[field] = body[field]

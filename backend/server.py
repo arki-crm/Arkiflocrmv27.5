@@ -4446,6 +4446,7 @@ async def update_percentage_substage(project_id: str, request: Request):
 async def update_project_hold_status(project_id: str, status_update: HoldStatusUpdate, request: Request):
     """Update project hold status (Hold/Activate/Deactivate)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
     # Permission check
     action = status_update.action
@@ -4454,14 +4455,16 @@ async def update_project_hold_status(project_id: str, status_update: HoldStatusU
     if action not in allowed_actions:
         raise HTTPException(status_code=400, detail=f"Invalid action. Must be one of: {allowed_actions}")
     
-    # Role-based permissions:
-    # - Admin, Manager can Hold/Activate/Deactivate
-    # - Designer can only Hold
-    if user.role not in ["Admin", "Manager", "DesignManager", "ProductionManager", "Designer"]:
-        raise HTTPException(status_code=403, detail="You don't have permission to change project status")
+    # Permission-based access control
+    permission_map = {
+        "Hold": "projects.hold",
+        "Activate": "projects.activate",
+        "Deactivate": "projects.deactivate"
+    }
+    required_perm = permission_map.get(action)
     
-    if user.role == "Designer" and action != "Hold":
-        raise HTTPException(status_code=403, detail="Designers can only place projects on Hold")
+    if not has_permission(user_doc, required_perm):
+        raise HTTPException(status_code=403, detail=f"Permission denied: {required_perm} required")
     
     # Validate reason
     reason = status_update.reason.strip()

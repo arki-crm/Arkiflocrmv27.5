@@ -12900,12 +12900,12 @@ async def get_production_ops_dashboard(request: Request):
     """
     user = await get_current_user(request)
     
-    # Allow Admin, ProductionOpsManager, or users with senior_manager_view
+    # Check permissions - need milestones.update.production or admin.view_reports or senior_manager_view
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
     has_senior_view = user_doc.get("senior_manager_view", False) if user_doc else False
     
-    if user.role not in ["Admin", "ProductionOpsManager"] and not has_senior_view:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "milestones.update.production") and not has_permission(user_doc, "admin.view_reports") and not has_senior_view:
+        raise HTTPException(status_code=403, detail="Permission denied")
     
     now = datetime.now(timezone.utc)
     

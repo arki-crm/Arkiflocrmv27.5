@@ -36,6 +36,10 @@
 | Backend: CEO Dashboard | 1 | ✅ Done |
 | Backend: Seed Design Workflow | 1 | ✅ Done |
 | Backend: Assign Technician | 1 | ✅ Done |
+| Backend: Update Note | 1 | ✅ Done |
+| Backend: Delete Academy Category | 1 | ✅ Done |
+| Backend: Seed Academy Categories | 1 | ✅ Done |
+| Backend: Password Change | 1 | ✅ Done |
 | Frontend: AuthContext.js | 1 (role shortcut) | ✅ Done |
 | Frontend: Users.jsx | 7 | ✅ Done |
 | Frontend: Sidebar.jsx | Permission-based additions | ✅ Done |

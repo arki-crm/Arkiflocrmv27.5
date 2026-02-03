@@ -2812,34 +2812,22 @@ async def reset_user_permissions_to_role(user_id: str, request: Request):
 
 @api_router.put("/users/{user_id}")
 async def update_user(user_id: str, update_data: UserUpdate, request: Request):
-    """Update user details (Admin and Manager with restrictions)"""
+    """Update user details (requires admin.manage_users permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.manage_users"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.manage_users required")
     
     target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Manager restrictions
-    if user.role == "Manager":
-        # Cannot edit Admin users
-        if target_user.get("role") == "Admin":
-            raise HTTPException(status_code=403, detail="Managers cannot edit Admin users")
-        
-        # Cannot edit other Managers
-        if target_user.get("role") == "Manager" and target_user.get("user_id") != user.user_id:
-            raise HTTPException(status_code=403, detail="Managers cannot edit other Managers")
-        
-        # Cannot change status
-        if update_data.status is not None:
-            raise HTTPException(status_code=403, detail="Managers cannot change user status")
-        
-        # Can only assign Designer, PreSales, or Trainee roles
-        if update_data.role and update_data.role not in ["Designer", "PreSales", "Trainee"]:
-            raise HTTPException(status_code=403, detail="Managers can only assign Designer, PreSales, or Trainee roles")
+    # Cannot edit users with admin.manage_users permission unless you're editing yourself
+    target_user_doc = await db.users.find_one({"user_id": user_id})
+    if has_permission(target_user_doc, "admin.manage_users") and user.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot edit users with admin permissions")
     
     # Validate role if provided
     if update_data.role and update_data.role not in VALID_ROLES:
@@ -2874,10 +2862,10 @@ async def update_user(user_id: str, update_data: UserUpdate, request: Request):
     if update_data.picture is not None:
         update_dict["picture"] = update_data.picture
     
-    # Only Admin can set senior_manager_view permission
+    # Only users with admin.system_settings can set senior_manager_view permission
     if update_data.senior_manager_view is not None:
-        if user.role != "Admin":
-            raise HTTPException(status_code=403, detail="Only Admin can set Senior Manager View permission")
+        if not has_permission(user_doc, "admin.system_settings"):
+            raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required for senior_manager_view")
         update_dict["senior_manager_view"] = update_data.senior_manager_view
     
     await db.users.update_one(
@@ -2891,11 +2879,12 @@ async def update_user(user_id: str, update_data: UserUpdate, request: Request):
 
 @api_router.put("/users/{user_id}/status")
 async def toggle_user_status(user_id: str, request: Request):
-    """Toggle user status Active/Inactive (Admin only)"""
+    """Toggle user status Active/Inactive (requires admin.manage_users permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.manage_users"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.manage_users required")
     
     target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     
@@ -2918,11 +2907,12 @@ async def toggle_user_status(user_id: str, request: Request):
 
 @api_router.delete("/users/{user_id}")
 async def delete_user(user_id: str, request: Request):
-    """Delete a user (Admin only)"""
+    """Delete a user (requires admin.manage_users permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.manage_users"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.manage_users required")
     
     # Cannot delete yourself
     if user_id == user.user_id:

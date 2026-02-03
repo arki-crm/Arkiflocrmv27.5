@@ -1022,18 +1022,18 @@ const EmailTemplates = () => {
 
 // ============ MAIN SETTINGS COMPONENT ============
 const Settings = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('company');
 
-  // Redirect non-admin/manager users
+  // Redirect users without system settings permission
   useEffect(() => {
-    if (user && !['Admin', 'Manager'].includes(user.role)) {
+    if (user && !hasPermission('admin.system_settings')) {
       navigate('/dashboard');
     }
-  }, [user, navigate]);
+  }, [user, navigate, hasPermission]);
 
-  const canEdit = user?.role === 'Admin';
+  const canEdit = hasPermission('admin.system_settings');
 
   return (
     <div className="space-y-6" data-testid="settings-page">

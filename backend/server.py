@@ -4979,17 +4979,17 @@ async def get_pending_milestone_confirmations(request: Request):
     if not user_doc:
         raise HTTPException(status_code=403, detail="User not found")
     
-    # Check if user has finance permissions (Accounts team)
+    # Check if user has finance permissions (permission-based only)
     has_finance_access = (
-        user.role in PAYMENT_CONFIRMATION_ROLES + ["Admin", "Founder"] or
         has_permission(user_doc, "finance.receipts.create") or
-        has_permission(user_doc, "finance.cashbook.create")
+        has_permission(user_doc, "finance.cashbook.create") or
+        has_permission(user_doc, "finance.confirm_milestone_payment")
     )
     
     if not has_finance_access:
         raise HTTPException(
             status_code=403, 
-            detail="Access denied - Only Accounts team can view milestone confirmations"
+            detail="Permission denied: finance.confirm_milestone_payment required"
         )
     
     # Get projects where:
@@ -5868,17 +5868,17 @@ async def get_pending_booking_confirmations(request: Request):
     if not user_doc:
         raise HTTPException(status_code=403, detail="User not found")
     
-    # Check if user has finance permissions (Accounts team)
+    # Check if user has finance permissions (permission-based only)
     has_finance_access = (
-        user.role in ["Accountant", "SeniorAccountant", "JuniorAccountant", "FinanceManager", "CharteredAccountant", "Admin"] or
         has_permission(user_doc, "finance.receipts.create") or
-        has_permission(user_doc, "finance.cashbook.create")
+        has_permission(user_doc, "finance.cashbook.create") or
+        has_permission(user_doc, "finance.confirm_booking_payment")
     )
     
     if not has_finance_access:
         raise HTTPException(
             status_code=403, 
-            detail="Access denied - Only Accounts team can view booking confirmations"
+            detail="Permission denied: finance.confirm_booking_payment required"
         )
     
     # Get leads in "Waiting for Booking" stage (not yet confirmed)

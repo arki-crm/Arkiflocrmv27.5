@@ -9,7 +9,7 @@ import { Database, Plus, RotateCcw, Calendar, User, AlertTriangle, CheckCircle, 
 const API = process.env.REACT_APP_BACKEND_URL;
 
 export default function BackupManagement() {
-  const { token, user } = useAuth();
+  const { token, user, hasPermission } = useAuth();
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);

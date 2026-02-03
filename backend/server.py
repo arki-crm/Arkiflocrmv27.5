@@ -27652,7 +27652,7 @@ async def create_import_record(data_type: str, row_data: dict, user, now: dateti
             "category_id": row_data.get("category_id", "imported"),
             "category_name": category_name,
             "account_id": account.get("account_id", "imported_account"),
-            "account_name": account.get("name", "Imported Account"),
+            "account_name": account.get("account_name", "Imported Account"),
             "project_id": row_data.get("project_id"),
             "description": row_data.get("description", ""),
             "reference_number": row_data.get("reference_number", ""),

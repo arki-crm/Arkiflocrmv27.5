@@ -8470,8 +8470,9 @@ async def get_milestones_settings(request: Request):
 async def update_milestones_settings(milestones: dict, request: Request):
     """Update milestones configuration (requires admin.system_settings permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if not has_permission(user, "admin.system_settings"):
+    if not has_permission(user_doc, "admin.system_settings"):
         raise HTTPException(status_code=403, detail="You don't have permission to modify milestones settings")
     
     await save_settings("milestones", milestones, user)
@@ -8484,8 +8485,9 @@ async def update_milestones_settings(milestones: dict, request: Request):
 async def get_system_logs(request: Request, limit: int = 100, offset: int = 0):
     """Get system logs (requires admin.view_logs permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if not has_permission(user, "admin.view_logs"):
+    if not has_permission(user_doc, "admin.view_logs"):
         raise HTTPException(status_code=403, detail="You don't have permission to view system logs")
     
     logs = await db.system_logs.find({}, {"_id": 0}).sort("timestamp", -1).skip(offset).limit(limit).to_list(limit)

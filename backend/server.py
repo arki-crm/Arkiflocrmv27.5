@@ -4743,8 +4743,9 @@ async def create_note(project_id: str, note_data: NoteCreate, request: Request):
 
 @api_router.put("/projects/{project_id}/notes/{note_id}")
 async def update_note(project_id: str, note_id: str, note_data: NoteUpdate, request: Request):
-    """Update a note (creator or Admin only)"""
+    """Update a note (creator or users with projects.update permission)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
     if user.role == "PreSales":
         raise HTTPException(status_code=403, detail="Access denied")

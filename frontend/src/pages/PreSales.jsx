@@ -109,6 +109,9 @@ const PreSales = () => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [seeding, setSeeding] = useState(false);
+  
+  // Advanced filters - loaded from localStorage
+  const [advancedFilters, setAdvancedFilters] = useState(() => loadFiltersFromStorage('presales'));
 
   // Redirect if Designer
   useEffect(() => {
@@ -123,8 +126,26 @@ const PreSales = () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
+      
+      // Status filter
       if (activeFilter !== 'all') {
         params.append('status', activeFilter);
+      }
+      
+      // Time filter
+      if (advancedFilters.timeFilter && advancedFilters.timeFilter !== 'all') {
+        params.append('time_filter', advancedFilters.timeFilter);
+        if (advancedFilters.timeFilter === 'custom') {
+          if (advancedFilters.startDate) params.append('start_date', advancedFilters.startDate);
+          if (advancedFilters.endDate) params.append('end_date', advancedFilters.endDate);
+        }
+      }
+      
+      // Sorting
+      if (advancedFilters.sortBy) {
+        const [sortField, sortOrder] = advancedFilters.sortBy.split(':');
+        params.append('sort_by', sortField);
+        params.append('sort_order', sortOrder);
       }
       
       // Use /api/presales endpoint for pre-sales leads only
@@ -140,12 +161,18 @@ const PreSales = () => {
     }
   };
 
+  // Save filters to localStorage when they change
+  const handleFiltersChange = (newFilters) => {
+    setAdvancedFilters(newFilters);
+    saveFiltersToStorage('presales', newFilters);
+  };
+
   useEffect(() => {
     if (user?.role !== 'Designer') {
       fetchLeads();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFilter]);
+  }, [activeFilter, advancedFilters]);
 
   // Client-side search
   const filteredLeads = useMemo(() => {

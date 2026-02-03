@@ -113,7 +113,7 @@ const UserAvatar = ({ user, size = 'md' }) => {
 };
 
 const Users = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -280,23 +280,29 @@ const Users = () => {
     return u.name?.toLowerCase().includes(query) || u.email?.toLowerCase().includes(query);
   });
 
-  // Check if current user can edit target user
+  // Check if current user can edit target user (requires admin.manage_users)
   const canEdit = (targetUser) => {
-    if (user?.role === 'Admin') return true;
-    if (user?.role === 'Manager') {
-      return ['Designer', 'PreSales', 'Trainee'].includes(targetUser.role);
-    }
-    return false;
+    if (!hasPermission('admin.manage_users')) return false;
+    // Cannot edit users who also have admin.manage_users (unless editing self)
+    if (targetUser.user_id === user?.user_id) return true;
+    // Check if target has admin permissions - simplified check via effective_permissions
+    const targetHasAdminPerms = (targetUser.effective_permissions || []).includes('admin.manage_users');
+    return !targetHasAdminPerms;
   };
 
-  // Check if current user can delete target user
+  // Check if current user can delete target user (requires admin.manage_users)
   const canDelete = (targetUser) => {
-    return user?.role === 'Admin' && targetUser.user_id !== user.user_id;
+    return hasPermission('admin.manage_users') && targetUser.user_id !== user?.user_id;
   };
 
-  // Check if current user can toggle status
+  // Check if current user can toggle status (requires admin.manage_users)
   const canToggleStatus = (targetUser) => {
-    return user?.role === 'Admin' && targetUser.user_id !== user.user_id;
+    return hasPermission('admin.manage_users') && targetUser.user_id !== user?.user_id;
+  };
+
+  // Check if current user can manage permissions (requires admin.assign_permissions)
+  const canManagePermissions = () => {
+    return hasPermission('admin.assign_permissions');
   };
 
   if (loading && users.length === 0) {
@@ -322,7 +328,7 @@ const Users = () => {
             Manage team members, roles, and permissions
           </p>
         </div>
-        {user?.role === 'Admin' && (
+        {hasPermission('admin.manage_users') && (
           <div className="flex gap-2">
             <Button 
               onClick={() => setCreateDialogOpen(true)}
@@ -499,7 +505,7 @@ const Users = () => {
                                   Edit User
                                 </DropdownMenuItem>
                               )}
-                              {user?.role === 'Admin' && (
+                              {canManagePermissions() && (
                                 <DropdownMenuItem onClick={() => navigate(`/users/${u.user_id}?tab=permissions`)}>
                                   <Key className="w-4 h-4 mr-2" />
                                   Manage Permissions

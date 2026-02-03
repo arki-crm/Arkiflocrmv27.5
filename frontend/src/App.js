@@ -121,6 +121,7 @@ const AppRouter = () => {
         <Route path="/users" element={<Users />} />
         <Route path="/users/invite" element={<UserInvite />} />
         <Route path="/users/:id" element={<UserEdit />} />
+        <Route path="/roles" element={<RoleManagement />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/calendar" element={<Calendar />} />

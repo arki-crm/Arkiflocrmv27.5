@@ -8193,11 +8193,12 @@ async def save_settings(key: str, value: dict, user: User):
 # Company Settings
 @api_router.get("/settings/company")
 async def get_company_settings(request: Request):
-    """Get company settings"""
+    """Get company settings (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     default = {
         "name": "Arkiflo",
@@ -8211,11 +8212,12 @@ async def get_company_settings(request: Request):
 
 @api_router.put("/settings/company")
 async def update_company_settings(settings: CompanySettings, request: Request):
-    """Update company settings (Admin only)"""
+    """Update company settings (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     value = settings.model_dump(exclude_none=True)
     await save_settings("company", value, user)
@@ -8226,11 +8228,12 @@ async def update_company_settings(settings: CompanySettings, request: Request):
 # Branding Settings
 @api_router.get("/settings/branding")
 async def get_branding_settings(request: Request):
-    """Get branding settings"""
+    """Get branding settings (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     default = {
         "logo_url": "",
@@ -8244,10 +8247,11 @@ async def get_branding_settings(request: Request):
 
 @api_router.put("/settings/branding")
 async def update_branding_settings(settings: BrandingSettings, request: Request):
-    """Update branding settings (Admin only)"""
+    """Update branding settings (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
+    if not has_permission(user_doc, "admin.system_settings"):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     value = settings.model_dump(exclude_none=True)

@@ -12451,11 +12451,12 @@ async def send_to_production(design_project_id: str, request: Request):
 
 @api_router.get("/design-manager/dashboard")
 async def get_design_manager_dashboard(request: Request):
-    """Dashboard for Design Manager - overview of all design projects"""
+    """Dashboard for Design Manager - overview of all design projects (requires admin.view_reports or milestones.update.design)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "DesignManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.view_reports") and not has_permission(user_doc, "milestones.update.design"):
+        raise HTTPException(status_code=403, detail="Permission denied")
     
     now = datetime.now(timezone.utc)
     

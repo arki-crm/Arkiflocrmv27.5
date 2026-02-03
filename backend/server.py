@@ -5287,6 +5287,7 @@ async def list_leads(
     start_date: Optional[str] = None,   # For custom date range (ISO format)
     end_date: Optional[str] = None,     # For custom date range (ISO format)
     designer_id: Optional[str] = None,  # Filter by designer
+    hold_status: Optional[str] = None,  # Filter by hold status: Active, Hold, Deactivated
     sort_by: Optional[str] = None,      # created_at, updated_at, budget
     sort_order: Optional[str] = "desc"  # asc, desc
 ):
@@ -5369,6 +5370,29 @@ async def list_leads(
     # Designer filter
     if designer_id and designer_id != "all":
         query["designer_id"] = designer_id
+    
+    # Hold status filter (Active, Hold, Deactivated)
+    if hold_status and hold_status != "all":
+        if hold_status == "Active":
+            # Active means hold_status is "Active" or not set (default active)
+            query["$or"] = query.get("$or", [])
+            # We need to handle existing $or from lead_type_filter
+            if "$and" in query:
+                query["$and"].append({
+                    "$or": [
+                        {"hold_status": "Active"},
+                        {"hold_status": {"$exists": False}}
+                    ]
+                })
+            else:
+                query["$and"] = [{
+                    "$or": [
+                        {"hold_status": "Active"},
+                        {"hold_status": {"$exists": False}}
+                    ]
+                }]
+        else:
+            query["hold_status"] = hold_status
     
     leads = await db.leads.find(query, {"_id": 0}).to_list(1000)
     

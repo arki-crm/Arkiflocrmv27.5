@@ -7519,6 +7519,43 @@ async def update_project_financials(project_id: str, data: ProjectFinancialsUpda
     
     return {"message": "Project financials updated successfully"}
 
+@api_router.put("/projects/{project_id}/settings")
+async def update_project_settings(project_id: str, data: ProjectSettingsUpdate, request: Request):
+    """Update project settings (GST applicable, GST number, etc.)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Admin, Founder, ProjectManager can update settings
+    allowed_roles = ["Admin", "Founder", "ProjectManager"]
+    if user_doc.get("role") not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Access denied - requires Admin, Founder, or Project Manager role")
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if data.gst_applicable is not None:
+        update_dict["gst_applicable"] = data.gst_applicable
+        # Also update old field for backward compatibility
+        update_dict["is_gst_applicable"] = data.gst_applicable
+    
+    if data.gst_number is not None:
+        # Validate GST number format if provided
+        if data.gst_number:
+            gst_pattern = r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$'
+            if not re.match(gst_pattern, data.gst_number.upper()):
+                raise HTTPException(status_code=400, detail="Invalid GST number format. Expected format: 22AAAAA0000A1Z5")
+        update_dict["gst_number"] = data.gst_number.upper() if data.gst_number else None
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": update_dict}
+    )
+    
+    return {"success": True, "message": "Project settings updated successfully"}
+
 @api_router.post("/projects/{project_id}/payments")
 async def add_project_payment(project_id: str, payment: PaymentCreate, request: Request):
     """

@@ -1153,7 +1153,7 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                 </div>
                 
                 {/* Total Summary */}
-                <div className="text-right min-w-[180px]">
+                <div className="text-right min-w-[220px]">
                   <div className="space-y-1">
                     <div className="flex justify-between text-sm text-gray-500">
                       <span>Gross Total:</span>
@@ -1165,9 +1165,42 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                         <span className="font-medium">−{formatCurrency(calculateDiscountAmount())}</span>
                       </div>
                     )}
-                    <div className="flex justify-between pt-1 border-t">
-                      <span className="font-semibold">Net Payable:</span>
-                      <span className="text-xl font-bold text-emerald-700">{formatCurrency(calculateNetPayable())}</span>
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>Net Taxable:</span>
+                      <span className="font-medium">{formatCurrency(calculateNetTaxable())}</span>
+                    </div>
+                    {(() => {
+                      const gst = calculateGSTTotals();
+                      return gst.totalGST > 0 ? (
+                        <>
+                          {gst.totalCGST > 0 && (
+                            <div className="flex justify-between text-xs text-blue-600">
+                              <span>Total CGST:</span>
+                              <span>{formatCurrency(gst.totalCGST)}</span>
+                            </div>
+                          )}
+                          {gst.totalSGST > 0 && (
+                            <div className="flex justify-between text-xs text-blue-600">
+                              <span>Total SGST:</span>
+                              <span>{formatCurrency(gst.totalSGST)}</span>
+                            </div>
+                          )}
+                          {gst.totalIGST > 0 && (
+                            <div className="flex justify-between text-xs text-purple-600">
+                              <span>Total IGST:</span>
+                              <span>{formatCurrency(gst.totalIGST)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-sm text-green-600 font-medium">
+                            <span>Total GST:</span>
+                            <span>+{formatCurrency(gst.totalGST)}</span>
+                          </div>
+                        </>
+                      ) : null;
+                    })()}
+                    <div className="flex justify-between pt-2 border-t mt-1">
+                      <span className="font-semibold">Grand Total:</span>
+                      <span className="text-xl font-bold text-emerald-700">{formatCurrency(calculateGrandTotal())}</span>
                     </div>
                   </div>
                 </div>

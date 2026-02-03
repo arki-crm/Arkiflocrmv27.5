@@ -65,7 +65,7 @@ const getEntityIcon = (entityType) => {
 };
 
 export default function AuditTrail() {
-  const { token, user } = useAuth();
+  const { token, user, hasPermission } = useAuth();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);

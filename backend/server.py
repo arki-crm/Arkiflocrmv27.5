@@ -1557,7 +1557,8 @@ AVAILABLE_PERMISSIONS = {
             {"id": "presales.view_all", "name": "View All Pre-Sales", "description": "View all pre-sales leads in the system"},
             {"id": "presales.create", "name": "Create Pre-Sales", "description": "Create new pre-sales entries"},
             {"id": "presales.update", "name": "Update Pre-Sales", "description": "Update pre-sales details and stages"},
-            {"id": "presales.convert", "name": "Convert Pre-Sales", "description": "Promote pre-sales to leads"}
+            {"id": "presales.convert", "name": "Convert Pre-Sales", "description": "Promote pre-sales to leads"},
+            {"id": "presales.activate", "name": "Reactivate Pre-Sales", "description": "Reactivate dropped pre-sales leads"}
         ]
     },
     # Leads Permissions

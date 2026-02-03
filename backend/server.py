@@ -25042,7 +25042,7 @@ async def update_recurring_template(template_id: str, update: RecurringTemplateU
     if "account_id" in update_dict:
         account = await db.accounting_accounts.find_one({"account_id": update_dict["account_id"]})
         if account:
-            update_dict["account_name"] = account.get("name", "")
+            update_dict["account_name"] = account.get("account_name", "")
     
     await db.recurring_templates.update_one(
         {"template_id": template_id},

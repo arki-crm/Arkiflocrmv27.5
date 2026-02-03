@@ -30,7 +30,7 @@ import { cn } from '../lib/utils';
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const ValidationPipeline = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -40,12 +40,13 @@ const ValidationPipeline = () => {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (user?.role && !['Admin', 'Manager', 'ProductionManager'].includes(user.role)) {
+    // Require projects.view_all permission for validation pipeline
+    if (user && !hasPermission('projects.view_all')) {
       navigate('/dashboard');
       return;
     }
     fetchData();
-  }, [user, navigate]);
+  }, [user, navigate, hasPermission]);
 
   const fetchData = async () => {
     try {

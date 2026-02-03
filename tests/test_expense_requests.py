@@ -7,7 +7,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://gst-invoice-manager-1.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://leadstatus-filter.preview.emergentagent.com').rstrip('/')
 
 # Test data
 TEST_CATEGORY_ID = "cat_1a54fe27"  # Project Expenses

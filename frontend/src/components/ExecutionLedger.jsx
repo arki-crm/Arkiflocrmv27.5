@@ -795,7 +795,7 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
         </div>
       )}
 
-      {/* Add/Edit Invoice Entry Modal */}
+      {/* Add/Edit Purchase Invoice Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>

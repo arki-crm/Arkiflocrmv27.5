@@ -117,13 +117,13 @@ export default function BackupManagement() {
     });
   };
 
-  // Access check
-  if (!user || user.role !== 'Admin') {
+  // Access check - requires admin.system_settings permission
+  if (!user || !hasPermission('admin.system_settings')) {
     return (
       <div className="p-6">
         <Card className="border-red-200 bg-red-50">
           <CardContent className="p-6 text-center">
-            <p className="text-red-600">Access Denied. Only Admin can manage backups.</p>
+            <p className="text-red-600">Access Denied. Requires system settings permission to manage backups.</p>
           </CardContent>
         </Card>
       </div>

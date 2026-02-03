@@ -77,6 +77,17 @@ const DailyClosing = () => {
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
   const [history, setHistory] = useState([]);
+  
+  // Detailed view state
+  const [showDetailedView, setShowDetailedView] = useState(false);
+  const [detailedDate, setDetailedDate] = useState(null);
+  const [detailedData, setDetailedData] = useState(null);
+  const [loadingDetailed, setLoadingDetailed] = useState(false);
+  const [detailFilter, setDetailFilter] = useState({
+    account: 'all',
+    type: 'all',
+    search: ''
+  });
 
   const fetchData = async () => {
     try {

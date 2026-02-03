@@ -1678,6 +1678,15 @@ AVAILABLE_PERMISSIONS = {
         ]
     },
     
+    # Payment Confirmations (Gate checks)
+    "finance_confirmations": {
+        "name": "Payment Confirmations",
+        "permissions": [
+            {"id": "finance.confirm_booking_payment", "name": "Confirm Booking Payments", "description": "Confirm booking payments to unlock lead conversion"},
+            {"id": "finance.confirm_milestone_payment", "name": "Confirm Milestone Payments", "description": "Confirm milestone payments to unlock stage transitions"}
+        ]
+    },
+    
     # Expense Requests (Spend Control)
     "finance_expenses": {
         "name": "Expense Requests",

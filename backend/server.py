@@ -12307,11 +12307,12 @@ async def get_validation_pipeline(request: Request):
 
 @api_router.post("/validation-pipeline/{design_project_id}/validate")
 async def validate_design_project(design_project_id: str, data: ValidationRequest, request: Request):
-    """Validate production drawings - 1-click action"""
+    """Validate production drawings - 1-click action (requires milestones.update.production)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "ProductionManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "milestones.update.production"):
+        raise HTTPException(status_code=403, detail="Permission denied: milestones.update.production required")
     
     design_project = await db.design_projects.find_one(
         {"id": design_project_id},

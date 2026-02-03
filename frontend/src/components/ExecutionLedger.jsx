@@ -530,9 +530,9 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
           </Select>
           
           {canEdit && (
-            <Button onClick={openCreateModal} data-testid="add-invoice-entry">
+            <Button onClick={openCreateModal} data-testid="add-purchase-invoice">
               <Plus className="h-4 w-4 mr-2" />
-              Add Invoice
+              Add Purchase Invoice
             </Button>
           )}
         </div>

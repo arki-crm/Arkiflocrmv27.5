@@ -6351,9 +6351,11 @@ async def remove_lead_collaborator(lead_id: str, collaborator_user_id: str, requ
 async def convert_to_project(lead_id: str, request: Request):
     """Convert a lead to a project - carries forward PID and all history"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "SalesManager"]:
-        raise HTTPException(status_code=403, detail="Admin or SalesManager access required")
+    # Permission-based: need leads.convert
+    if not has_permission(user_doc, "leads.convert"):
+        raise HTTPException(status_code=403, detail="Permission denied: leads.convert required")
     
     lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
     

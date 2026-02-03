@@ -36,18 +36,19 @@ const EXECUTION_STAGES = [
 ];
 
 const ProductionOpsDashboard = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user?.role && !['Admin', 'ProductionOpsManager'].includes(user.role) && !user?.senior_manager_view) {
+    // Production ops managers and those with admin.view_reports can access
+    if (user && !hasPermission('admin.view_reports') && !hasPermission('milestones.update.production') && !user?.senior_manager_view) {
       navigate('/dashboard');
       return;
     }
     fetchData();
-  }, [user, navigate]);
+  }, [user, navigate, hasPermission]);
 
   const fetchData = async () => {
     try {

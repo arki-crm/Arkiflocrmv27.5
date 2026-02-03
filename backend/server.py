@@ -8466,11 +8466,11 @@ async def get_milestones_settings(request: Request):
 
 @api_router.put("/settings/milestones")
 async def update_milestones_settings(milestones: dict, request: Request):
-    """Update milestones configuration (Admin only)"""
+    """Update milestones configuration (requires admin.system_settings permission)"""
     user = await get_current_user(request)
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="You don't have permission to modify milestones settings")
     
     await save_settings("milestones", milestones, user)
     await log_system_action("milestones_updated", user, {"stages_count": len(milestones)})
@@ -8480,11 +8480,11 @@ async def update_milestones_settings(milestones: dict, request: Request):
 # System Logs
 @api_router.get("/settings/logs")
 async def get_system_logs(request: Request, limit: int = 100, offset: int = 0):
-    """Get system logs (Admin only)"""
+    """Get system logs (requires admin.view_logs permission)"""
     user = await get_current_user(request)
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user, "admin.view_logs"):
+        raise HTTPException(status_code=403, detail="You don't have permission to view system logs")
     
     logs = await db.system_logs.find({}, {"_id": 0}).sort("timestamp", -1).skip(offset).limit(limit).to_list(limit)
     total = await db.system_logs.count_documents({})

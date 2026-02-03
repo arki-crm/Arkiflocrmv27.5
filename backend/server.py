@@ -1567,7 +1567,10 @@ AVAILABLE_PERMISSIONS = {
             {"id": "leads.view_all", "name": "View All Leads", "description": "View all leads in the system"},
             {"id": "leads.create", "name": "Create Leads", "description": "Create new leads directly"},
             {"id": "leads.update", "name": "Update Leads", "description": "Update lead stages and details"},
-            {"id": "leads.convert", "name": "Convert Leads", "description": "Convert leads to projects"}
+            {"id": "leads.convert", "name": "Convert Leads", "description": "Convert leads to projects"},
+            {"id": "leads.hold", "name": "Hold Leads", "description": "Place leads on hold"},
+            {"id": "leads.activate", "name": "Activate Leads", "description": "Activate held/deactivated leads"},
+            {"id": "leads.deactivate", "name": "Deactivate Leads", "description": "Deactivate leads permanently"}
         ]
     },
     # Projects Permissions

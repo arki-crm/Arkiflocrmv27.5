@@ -2342,11 +2342,13 @@ async def list_all_users(
     role: Optional[str] = None,
     search: Optional[str] = None
 ):
-    """List all users (Admin and SalesManager only)"""
+    """List all users (requires admin.manage_users or admin.assign_permissions)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "SalesManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Permission-based access: need either admin.manage_users or admin.assign_permissions
+    if not has_permission(user_doc, "admin.manage_users") and not has_permission(user_doc, "admin.assign_permissions"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.manage_users or admin.assign_permissions required")
     
     # Build query
     query = {}

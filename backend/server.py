@@ -1576,7 +1576,10 @@ AVAILABLE_PERMISSIONS = {
         "permissions": [
             {"id": "projects.view", "name": "View Projects", "description": "View projects (assigned/collaborated only)"},
             {"id": "projects.view_all", "name": "View All Projects", "description": "View all projects in the system"},
-            {"id": "projects.manage_collaborators", "name": "Manage Collaborators", "description": "Add/remove project collaborators"}
+            {"id": "projects.manage_collaborators", "name": "Manage Collaborators", "description": "Add/remove project collaborators"},
+            {"id": "projects.hold", "name": "Hold Projects", "description": "Place projects on hold"},
+            {"id": "projects.activate", "name": "Activate Projects", "description": "Activate held/deactivated projects"},
+            {"id": "projects.deactivate", "name": "Deactivate Projects", "description": "Deactivate projects permanently"}
         ]
     },
     # Milestone Permissions - Explicit per-stage control

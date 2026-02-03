@@ -24950,7 +24950,7 @@ async def create_recurring_template(template: RecurringTemplateCreate, request: 
         "category_id": template.category_id,
         "category_name": category.get("name", ""),
         "account_id": template.account_id,
-        "account_name": account.get("name", ""),
+        "account_name": account.get("account_name", ""),
         "frequency": "monthly",
         "day_of_month": template.day_of_month,
         "description": template.description or template.name,

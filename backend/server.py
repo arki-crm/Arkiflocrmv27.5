@@ -8266,18 +8266,19 @@ async def get_lead_tat_settings(request: Request):
     """Get lead TAT settings"""
     user = await get_current_user(request)
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     return await get_settings("lead_tat", DEFAULT_LEAD_TAT)
 
 @api_router.put("/settings/tat/lead")
 async def update_lead_tat_settings(settings: LeadTATSettings, request: Request):
-    """Update lead TAT settings (Admin only)"""
+    """Update lead TAT settings (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     value = settings.model_dump(exclude_none=True)
     await save_settings("lead_tat", value, user)
@@ -8287,21 +8288,23 @@ async def update_lead_tat_settings(settings: LeadTATSettings, request: Request):
 
 @api_router.get("/settings/tat/project")
 async def get_project_tat_settings(request: Request):
-    """Get project TAT settings"""
+    """Get project TAT settings (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     return await get_settings("project_tat", DEFAULT_PROJECT_TAT)
 
 @api_router.put("/settings/tat/project")
 async def update_project_tat_settings(settings: ProjectTATSettings, request: Request):
-    """Update project TAT settings (Admin only)"""
+    """Update project TAT settings (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     # Merge with defaults to ensure all fields exist
     current = await get_settings("project_tat", DEFAULT_PROJECT_TAT)
@@ -8319,21 +8322,23 @@ async def update_project_tat_settings(settings: ProjectTATSettings, request: Req
 # Stage Settings
 @api_router.get("/settings/stages")
 async def get_stages_settings(request: Request):
-    """Get project stages configuration"""
+    """Get project stages configuration (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     return await get_settings("project_stages", DEFAULT_STAGES)
 
 @api_router.put("/settings/stages")
 async def update_stages_settings(stages: List[dict], request: Request):
-    """Update project stages configuration (Admin only)"""
+    """Update project stages configuration (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     await save_settings("project_stages", stages, user)
     await log_system_action("stages_updated", user, {"stages": stages})
@@ -8342,21 +8347,23 @@ async def update_stages_settings(stages: List[dict], request: Request):
 
 @api_router.get("/settings/stages/lead")
 async def get_lead_stages_settings(request: Request):
-    """Get lead stages configuration"""
+    """Get lead stages configuration (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     return await get_settings("lead_stages", DEFAULT_LEAD_STAGES)
 
 @api_router.put("/settings/stages/lead")
 async def update_lead_stages_settings(stages: List[dict], request: Request):
-    """Update lead stages configuration (Admin only)"""
+    """Update lead stages configuration (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     await save_settings("lead_stages", stages, user)
     await log_system_action("lead_stages_updated", user, {"stages": stages})
@@ -8366,11 +8373,12 @@ async def update_lead_stages_settings(stages: List[dict], request: Request):
 # Milestones Settings
 @api_router.get("/settings/milestones")
 async def get_milestones_settings(request: Request):
-    """Get milestones configuration for all stages"""
+    """Get milestones configuration for all stages (requires admin.system_settings)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required")
     
     default_milestones = {
         "Design Finalization": [

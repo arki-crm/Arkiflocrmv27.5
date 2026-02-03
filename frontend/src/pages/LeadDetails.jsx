@@ -1218,6 +1218,32 @@ const LeadDetails = () => {
             </DropdownMenu>
           )}
           
+          {/* Timeline Adjustment Buttons */}
+          {hasPermission('timeline.adjust') && !lead?.is_converted && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTimelineAdjustmentModal(true)}
+                className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                data-testid="adjust-timeline-btn"
+              >
+                <Clock className="w-4 h-4 mr-1.5" />
+                {lead?.current_timeline?.on_hold ? 'Resume Timeline' : 'Adjust Timeline'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={fetchTimelineHistory}
+                className="text-slate-500 hover:text-slate-700"
+                data-testid="timeline-history-btn"
+                title="View Timeline History"
+              >
+                <History className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+          
           {/* Status and Stage Badges */}
           <div className="flex items-center gap-2">
             {lead?.status && (

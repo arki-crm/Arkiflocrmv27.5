@@ -5,14 +5,14 @@ Build a full-stack CRM application for an interior design company, managing the 
 
 ## Architecture
 - **Frontend**: React 19 + TailwindCSS + Shadcn UI
-- **Backend**: FastAPI (Python) - Currently monolithic server.py (~11,000 lines)
+- **Backend**: FastAPI (Python) - Currently monolithic server.py (~15,000+ lines)
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: STABLE - Manual Testing Phase
-**As of January 2026**
+## Current Status: Permission System Purification IN PROGRESS
+**As of February 2026**
 
-The core CRM pipeline has been stabilized and is ready for manual end-to-end testing with real users.
+Major architectural refactoring underway to make permissions the single source of truth for access control.
 
 ---
 
@@ -28,14 +28,14 @@ The core CRM pipeline has been stabilized and is ready for manual end-to-end tes
 - [x] Local email/password login for testing
 - [x] Session management with httpOnly cookies
 
-### User Management & Permissions (Updated Jan 2026)
+### User Management & Permissions (Updated Feb 2026)
 - [x] Fine-grained permission-based access control
 - [x] Admin can create new users with local passwords
 - [x] Admin can assign specific permissions to any user
 - [x] Permission checks throughout the application
-- [x] **NEW: Operation Lead role** - ground-level execution for delivery/installation/handover
-- [x] **NEW: Finance Roles** - JuniorAccountant, SeniorAccountant, FinanceManager, CharteredAccountant, Founder
-- [x] **NEW: Granular Finance Permissions** - 9 permission groups with 40+ discrete permissions
+- [x] **MAJOR REFACTOR**: Migrated 85+ hardcoded role checks to permission-based
+- [x] **NEW: Admin permissions** - stage_rollback, milestone_rollback, delete_files, email_templates, view_logs, seed_data
+- [x] **NEW: Service permission** - assign_technician
 - [x] **Roles are templates only** - Admin can fully customize permissions for any user
 
 ### CRM Modules

@@ -2265,7 +2265,10 @@ async def ensure_user_permissions(user_id: str, user_doc: dict) -> dict:
     
     if needs_repair:
         role = user_doc.get("role", "Designer")
-        default_perms = DEFAULT_ROLE_PERMISSIONS.get(role, DEFAULT_ROLE_PERMISSIONS.get("Designer", []))
+        # Check for custom role permissions first
+        default_perms = await get_role_default_permissions_async(role)
+        if not default_perms:
+            default_perms = DEFAULT_ROLE_PERMISSIONS.get("Designer", [])
         
         # Repair the permissions in database
         await db.users.update_one(

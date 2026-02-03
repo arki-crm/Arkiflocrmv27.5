@@ -456,9 +456,8 @@ export default function RoleManagement() {
 
                   return (
                     <div key={groupKey} className="border rounded-lg overflow-hidden">
-                      <button
-                        type="button"
-                        className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100"
+                      <div
+                        className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 cursor-pointer"
                         onClick={() => toggleGroup(groupKey)}
                       >
                         <div className="flex items-center gap-2">
@@ -485,7 +484,7 @@ export default function RoleManagement() {
                         >
                           {selectedCount === groupPerms.length ? 'Deselect All' : 'Select All'}
                         </Button>
-                      </button>
+                      </div>
 
                       {isExpanded && (
                         <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-2 bg-white">

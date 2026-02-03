@@ -942,13 +942,10 @@ const LeadDetails = () => {
     return hasPermission('leads.convert');
   };
   
-  // Can confirm booking payment - Accounts team only
+  // Can confirm booking payment - requires finance.confirm_booking_payment permission
   const canConfirmBookingPayment = () => {
     if (!user) return false;
-    // Check for finance permissions (Accounts team)
-    return hasPermission('finance.receipts.create') || 
-           hasPermission('finance.cashbook.create') ||
-           user.role === 'Admin';
+    return hasPermission('finance.confirm_booking_payment');
   };
   
   // Handle booking payment confirmation

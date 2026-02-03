@@ -501,7 +501,7 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm text-gray-500">
-            {filteredEntries.length} invoice(s) • Total: {formatCurrency(totalValue)}
+            {filteredEntries.length} purchase invoice(s) • Total: {formatCurrency(totalValue)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

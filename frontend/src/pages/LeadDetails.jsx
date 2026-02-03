@@ -1031,6 +1031,43 @@ const LeadDetails = () => {
     }
   };
 
+  // Timeline adjustment handlers
+  const handleTimelineAdjustment = async (formData) => {
+    try {
+      setIsAdjustingTimeline(true);
+      await axios.post(`${API}/leads/${id}/adjust-timeline`, {
+        reason: formData.reason,
+        remarks: formData.remarks,
+        effective_date: formData.effective_date,
+        adjustment_type: formData.adjustment_type,
+        shift_days: formData.shift_days || null,
+        new_completion_date: formData.new_completion_date || null
+      }, { withCredentials: true });
+      
+      toast.success('Timeline adjusted successfully');
+      setShowTimelineAdjustmentModal(false);
+      await fetchLead();
+    } catch (err) {
+      console.error('Failed to adjust timeline:', err);
+      toast.error(err.response?.data?.detail || 'Failed to adjust timeline');
+    } finally {
+      setIsAdjustingTimeline(false);
+    }
+  };
+  
+  const fetchTimelineHistory = async () => {
+    try {
+      const response = await axios.get(`${API}/leads/${id}/timeline-history`, {
+        withCredentials: true
+      });
+      setTimelineHistory(response.data.timeline_adjustments || []);
+      setShowTimelineHistoryModal(true);
+    } catch (err) {
+      console.error('Failed to fetch timeline history:', err);
+      toast.error('Failed to load timeline history');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16" data-testid="lead-loading">

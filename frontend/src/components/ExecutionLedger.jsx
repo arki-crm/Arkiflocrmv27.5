@@ -358,7 +358,12 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
           brand: item.brand || null,
           quantity: parseFloat(item.quantity),
           unit: item.unit || 'pcs',
-          rate: parseFloat(item.rate)
+          rate: parseFloat(item.rate),
+          // GST fields (optional)
+          hsn_code: item.hsn_code || null,
+          cgst_percent: item.cgst_percent ? parseFloat(item.cgst_percent) : null,
+          sgst_percent: item.sgst_percent ? parseFloat(item.sgst_percent) : null,
+          igst_percent: item.igst_percent ? parseFloat(item.igst_percent) : null
         })),
         // Discount fields
         discount_type: form.discount_type || null,

@@ -14650,11 +14650,12 @@ async def get_academy_category(category_id: str, request: Request):
 
 @api_router.post("/academy/categories")
 async def create_academy_category(data: AcademyCategoryCreate, request: Request):
-    """Create a new academy category (Admin/Manager only)"""
+    """Create a new academy category (requires academy.manage)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
-        raise HTTPException(status_code=403, detail="Only Admin and Managers can create categories")
+    if not has_permission(user_doc, "academy.manage"):
+        raise HTTPException(status_code=403, detail="Permission denied: academy.manage required")
     
     now = datetime.now(timezone.utc)
     category_id = f"cat_{uuid.uuid4().hex[:8]}"
@@ -14687,11 +14688,12 @@ async def create_academy_category(data: AcademyCategoryCreate, request: Request)
 
 @api_router.put("/academy/categories/{category_id}")
 async def update_academy_category(category_id: str, request: Request):
-    """Update an academy category (Admin/Manager only)"""
+    """Update an academy category (requires academy.manage)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
-        raise HTTPException(status_code=403, detail="Only Admin and Managers can update categories")
+    if not has_permission(user_doc, "academy.manage"):
+        raise HTTPException(status_code=403, detail="Permission denied: academy.manage required")
     
     body = await request.json()
     category = await db.academy_categories.find_one({"category_id": category_id}, {"_id": 0})

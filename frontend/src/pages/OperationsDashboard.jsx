@@ -33,18 +33,19 @@ const OPERATIONS_STAGES = [
 ];
 
 const OperationsDashboard = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user?.role && !['Admin', 'Manager', 'OperationLead', 'ProductionOpsManager'].includes(user.role)) {
+    // Operations team and those with admin.view_reports can access
+    if (user && !hasPermission('admin.view_reports') && !hasPermission('milestones.update.delivery') && !hasPermission('milestones.update.installation')) {
       navigate('/dashboard');
       return;
     }
     fetchData();
-  }, [user, navigate]);
+  }, [user, navigate, hasPermission]);
 
   const fetchData = async () => {
     try {

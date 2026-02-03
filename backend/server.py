@@ -2223,6 +2223,16 @@ DEFAULT_ROLE_PERMISSIONS = {
 }
 
 
+async def get_role_default_permissions_async(role: str) -> list:
+    """Get default permissions for a role, checking custom overrides first"""
+    # Check for custom role or override in database
+    custom_role = await db.custom_roles.find_one({"id": role}, {"_id": 0})
+    if custom_role and "default_permissions" in custom_role:
+        return custom_role["default_permissions"]
+    # Fall back to built-in defaults
+    return DEFAULT_ROLE_PERMISSIONS.get(role, [])
+
+
 def get_user_permissions(user_doc: dict) -> list:
     """Get user's effective permissions (always use stored permissions if present, otherwise role defaults)"""
     # If user has permissions array stored AND it's non-empty, use that

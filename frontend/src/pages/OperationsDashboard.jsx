@@ -39,7 +39,7 @@ const OperationsDashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user?.role && !['Admin', 'Manager', 'OperationsLead'].includes(user.role)) {
+    if (user?.role && !['Admin', 'Manager', 'OperationLead', 'ProductionOpsManager'].includes(user.role)) {
       navigate('/dashboard');
       return;
     }

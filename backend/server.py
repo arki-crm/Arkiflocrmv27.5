@@ -9004,13 +9004,17 @@ async def get_task(task_id: str, request: Request):
 
 @api_router.post("/tasks")
 async def create_task(task_data: TaskCreate, request: Request):
-    """Create a new task"""
+    """Create a new task (requires tasks.create, and tasks.assign to create for others)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    # Only Admin, Manager can create tasks for others
-    # Designers/PreSales can only create tasks for themselves
-    if user.role in ["Designer", "PreSales"] and task_data.assigned_to != user.user_id:
-        raise HTTPException(status_code=403, detail="You can only create tasks for yourself")
+    # Permission check
+    if not has_permission(user_doc, "tasks.create"):
+        raise HTTPException(status_code=403, detail="Permission denied: tasks.create required")
+    
+    # To create tasks for others, need tasks.assign permission
+    if task_data.assigned_to != user.user_id and not has_permission(user_doc, "tasks.assign"):
+        raise HTTPException(status_code=403, detail="Permission denied: tasks.assign required to assign tasks to others")
     
     # Validate priority
     if task_data.priority not in TASK_PRIORITIES:

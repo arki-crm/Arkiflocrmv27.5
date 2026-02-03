@@ -170,6 +170,11 @@ const Leads = () => {
         params.append('designer_id', advancedFilters.designerId);
       }
       
+      // Hold status filter
+      if (advancedFilters.holdStatus && advancedFilters.holdStatus !== 'all') {
+        params.append('hold_status', advancedFilters.holdStatus);
+      }
+      
       // Sorting
       if (advancedFilters.sortBy) {
         const [sortField, sortOrder] = advancedFilters.sortBy.split(':');
@@ -329,6 +334,7 @@ const Leads = () => {
           designers={designers}
           type="leads"
           showDesignerFilter={['Admin', 'SalesManager', 'DesignManager'].includes(user?.role)}
+          showHoldStatus={true}
         />
       </div>
 

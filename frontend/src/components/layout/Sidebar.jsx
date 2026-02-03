@@ -221,7 +221,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
     // 7b. OPERATION LEAD - Ground-level execution: delivery, installation, snag
     case 'OperationLead':
       return [
-        { path: '/production-ops', label: 'Operations Dashboard', icon: LayoutDashboard },
+        { path: '/operations', label: 'Operations Dashboard', icon: LayoutDashboard },
         ...commonItems,
         { path: '/projects', label: 'Projects', icon: FolderKanban },
         { path: '/service-requests', label: 'Service Requests', icon: Wrench },

@@ -1680,6 +1680,38 @@ A simple YES/NO toggle in Project Settings that controls customer tax invoice ge
 
 ---
 
+## ✅ Account Name Display Bug Fix - COMPLETED Feb 3, 2026
+
+**P0 usability bug**: Account dropdowns across Finance modules were showing account IDs or raw numbers instead of account names.
+
+### Issue
+- Dropdowns displayed: `acc_d3cd5544` instead of `Petty Cash (₹21,945)`
+- Root cause: Frontend components used `acc.name` but backend returned `account_name`
+
+### Fix Applied
+Changed all account dropdowns to use fallback pattern: `acc.account_name || acc.name`
+
+### Components Fixed
+| Component | Location | Fix |
+|-----------|----------|-----|
+| ExecutionLedger.jsx | Line 1382 | Payment account dropdown |
+| Liabilities.jsx | Line 704 | Settle account dropdown |
+| CashBook.jsx | Lines 504, 528 | Internal transfer From/To dropdowns |
+| RecurringTransactions.jsx | Line 745 | Template account dropdown |
+
+### Verification
+- ✅ CashBook - Internal Transfer dropdowns
+- ✅ CashBook - Add Entry dropdown  
+- ✅ Liabilities - Settle dropdown
+- ✅ Purchase Invoice - Pay dropdown
+- ✅ Account Summary Cards
+- ✅ Transactions Table Account column
+- ✅ RecurringTransactions - New Template dropdown
+
+**All Finance module dropdowns now show: "Account Name (₹Balance)"**
+
+---
+
 ## 🔜 Upcoming Tasks
 
 ### P1: Quotation Builder Module

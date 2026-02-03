@@ -10663,6 +10663,7 @@ async def get_presales_detail(presales_id: str, request: Request):
 async def update_presales_status(presales_id: str, request: Request):
     """Update pre-sales lead status - forward-only progression"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     body = await request.json()
     new_status = body.get("status")
     
@@ -10677,12 +10678,10 @@ async def update_presales_status(presales_id: str, request: Request):
     if not presales_lead:
         raise HTTPException(status_code=404, detail="Pre-sales lead not found")
     
-    # Permission check
-    if user.role == "PreSales":
-        if presales_lead.get("assigned_to") != user.user_id and presales_lead.get("created_by") != user.user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
-    elif user.role not in ["Admin", "SalesManager"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # Permission check - need presales.update, owners can update their own
+    is_owner = presales_lead.get("assigned_to") == user.user_id or presales_lead.get("created_by") == user.user_id
+    if not is_owner and not has_permission(user_doc, "presales.update"):
+        raise HTTPException(status_code=403, detail="Permission denied: presales.update required")
     
     old_status = presales_lead.get("status")
     
@@ -10698,18 +10697,18 @@ async def update_presales_status(presales_id: str, request: Request):
                     detail=f"Cannot move backward from '{old_status}' to '{new_status}'. Status progression is forward-only."
                 )
             if new_index > old_index + 1:
-                # Allow skipping stages only for Admin/SalesManager
-                if user.role not in ["Admin", "SalesManager"]:
+                # Allow skipping stages only for users with presales.update permission
+                if not has_permission(user_doc, "presales.update"):
                     expected_next = PRESALES_STATUS_ORDER[old_index + 1]
                     raise HTTPException(
                         status_code=400,
                         detail=f"Cannot skip stages. Next valid status is '{expected_next}'."
                     )
     
-    # Cannot change status from Dropped back to progression (only Admin can)
+    # Cannot change status from Dropped back to progression (only with presales.activate permission)
     if old_status == "Dropped" and new_status in PRESALES_STATUS_ORDER:
-        if user.role != "Admin":
-            raise HTTPException(status_code=403, detail="Only Admin can reactivate dropped leads")
+        if not has_permission(user_doc, "presales.activate"):
+            raise HTTPException(status_code=403, detail="Permission denied: presales.activate required to reactivate dropped leads")
     
     now = datetime.now(timezone.utc)
     

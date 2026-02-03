@@ -193,14 +193,10 @@ const UserEdit = () => {
   const canEditField = (field) => {
     if (!targetUser) return false;
     
-    if (isAdmin) {
-      return true;
-    }
-    
-    if (isManager) {
-      if (['Admin', 'Manager'].includes(targetUser.role)) return false;
-      if (field === 'status') return false;
-      if (field === 'role') return true;
+    // Users with admin.manage_users can edit all fields
+    if (canManageUsers) {
+      // But only those with assign_permissions can manage admin users
+      if (['Admin', 'Manager'].includes(targetUser.role) && !canAssignPermissions) return false;
       return true;
     }
     
@@ -208,8 +204,8 @@ const UserEdit = () => {
   };
 
   const getAvailableRoles = () => {
-    if (isAdmin) return availableRoles.map(r => r.id);
-    if (isManager) return MANAGER_ALLOWED_ROLES;
+    if (canAssignPermissions) return availableRoles.map(r => r.id);
+    if (canManageUsers) return MANAGER_ALLOWED_ROLES;
     return [];
   };
 

@@ -16,6 +16,27 @@
 | Frontend: AuthContext.js | 1 (role shortcut) | ✅ Done |
 | Frontend: Users.jsx | 7 | ✅ Done |
 
+### Validation Results ✅ (Feb 3, 2026)
+
+**Test Users Created:**
+- `test.intern@arkiflo.com` (Designer role, no admin perms)
+- `test.finance@arkiflo.com` (Accountant role, no admin perms)
+- `test.customops@arkiflo.com` (OperationLead role, WITH `admin.manage_users`)
+
+**Backend API Test Results:**
+| Action | Admin | Intern | Finance | CustomOps | Result |
+|--------|-------|--------|---------|-----------|--------|
+| Create User | ✅ | ❌ | ❌ | ✅ | PASS |
+| View Permissions | ✅ | ❌ | ❌ | ❌ | PASS |
+| Update Permissions | ✅ | ❌ | ❌ | ❌ | PASS |
+| Reset Password | ✅ | ❌ | ❌ | ✅ | PASS |
+| Toggle Status | ✅ | ❌ | ❌ | ✅ | PASS |
+
+**Key Validation:** CustomOps user (role: OperationLead) with `admin.manage_users` permission can successfully create users, reset passwords, and toggle status - proving permissions work independently of role names.
+
+### Known Limitation (Frontend)
+The sidebar navigation (`Sidebar.jsx`) still uses role-based logic to show/hide menu items. Users with custom permissions may have API access but no sidebar link. This is a P1 item for Phase 3 completion.
+
 ### Remaining (By Priority)
 | Component | Role Checks | Priority |
 |-----------|-------------|----------|

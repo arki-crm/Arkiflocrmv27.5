@@ -2803,6 +2803,300 @@ async def get_available_permissions(request: Request):
     }
 
 
+# ============ ROLE MANAGEMENT ENDPOINTS ============
+
+@api_router.get("/roles")
+async def list_roles(request: Request):
+    """List all roles with their default permissions and user counts"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.manage_users"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.manage_users required")
+    
+    # Get custom roles from database
+    custom_roles = await db.custom_roles.find({}, {"_id": 0}).to_list(100)
+    custom_role_map = {r["id"]: r for r in custom_roles}
+    
+    # Count users per role
+    user_counts = {}
+    pipeline = [
+        {"$group": {"_id": "$role", "count": {"$sum": 1}}}
+    ]
+    async for doc in db.users.aggregate(pipeline):
+        user_counts[doc["_id"]] = doc["count"]
+    
+    roles = []
+    
+    # Built-in roles
+    for role_id in VALID_ROLES:
+        role_data = {
+            "id": role_id,
+            "name": role_id,
+            "description": get_role_description(role_id),
+            "is_builtin": True,
+            "default_permissions": DEFAULT_ROLE_PERMISSIONS.get(role_id, []),
+            "permission_count": len(DEFAULT_ROLE_PERMISSIONS.get(role_id, [])),
+            "user_count": user_counts.get(role_id, 0)
+        }
+        # Check if built-in role has custom overrides
+        if role_id in custom_role_map:
+            role_data["has_custom_permissions"] = True
+            role_data["custom_permissions"] = custom_role_map[role_id].get("default_permissions", [])
+            role_data["permission_count"] = len(custom_role_map[role_id].get("default_permissions", []))
+        roles.append(role_data)
+    
+    # Custom roles (not in VALID_ROLES)
+    for role_id, role_data in custom_role_map.items():
+        if role_id not in VALID_ROLES:
+            roles.append({
+                "id": role_id,
+                "name": role_data.get("name", role_id),
+                "description": role_data.get("description", ""),
+                "is_builtin": False,
+                "default_permissions": role_data.get("default_permissions", []),
+                "permission_count": len(role_data.get("default_permissions", [])),
+                "user_count": user_counts.get(role_id, 0),
+                "created_at": role_data.get("created_at"),
+                "created_by": role_data.get("created_by")
+            })
+    
+    return {
+        "roles": roles,
+        "total": len(roles),
+        "builtin_count": len(VALID_ROLES)
+    }
+
+
+def get_role_description(role_id: str) -> str:
+    """Get description for built-in roles"""
+    descriptions = {
+        "Admin": "Full system access, user management, all dashboards",
+        "PreSales": "Lead creation, qualification, handover",
+        "SalesManager": "All leads not booked, funnel view, reassign leads, sales pipeline",
+        "Designer": "Assigned leads/projects, sales stages, design Kanban, meetings, files",
+        "DesignManager": "All designers' tasks, delays, drawings, meetings, bottlenecks",
+        "ProductionOpsManager": "Validation, kick-off, production, delivery, installation, handover",
+        "OperationLead": "Ground-level execution: delivery, installation, handover milestones",
+        "Technician": "Service requests, visit completion, SLA tracking",
+        "Accountant": "Finance: add/view transactions, basic reports",
+        "JuniorAccountant": "Finance: basic data entry, view cashbook",
+        "SeniorAccountant": "Finance: verify transactions, all reports, manage categories",
+        "FinanceManager": "Finance: full control, approvals, overrides",
+        "CharteredAccountant": "Finance: read-only audit access, exports, no operational edits",
+        "Founder": "Full visibility, final override, not required for daily tasks"
+    }
+    return descriptions.get(role_id, "")
+
+
+@api_router.post("/roles")
+async def create_role(role_data: RoleCreate, request: Request):
+    """Create a new custom role"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.assign_permissions"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.assign_permissions required")
+    
+    # Check if role ID already exists
+    if role_data.id in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Role '{role_data.id}' is a built-in role and cannot be recreated")
+    
+    existing = await db.custom_roles.find_one({"id": role_data.id})
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Role '{role_data.id}' already exists")
+    
+    # Validate permissions
+    all_valid_permissions = []
+    for group in AVAILABLE_PERMISSIONS.values():
+        for perm in group["permissions"]:
+            all_valid_permissions.append(perm["id"])
+    
+    invalid_perms = [p for p in role_data.default_permissions if p not in all_valid_permissions]
+    if invalid_perms:
+        raise HTTPException(status_code=400, detail=f"Invalid permissions: {invalid_perms}")
+    
+    now = datetime.now(timezone.utc)
+    new_role = {
+        "id": role_data.id,
+        "name": role_data.name,
+        "description": role_data.description or "",
+        "default_permissions": role_data.default_permissions,
+        "is_builtin": False,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "updated_at": now.isoformat()
+    }
+    
+    await db.custom_roles.insert_one(new_role)
+    
+    # Log the action
+    await log_system_action("role_created", user, {"role_id": role_data.id, "permissions_count": len(role_data.default_permissions)})
+    
+    # Return without _id
+    del new_role["_id"] if "_id" in new_role else None
+    return {"message": f"Role '{role_data.name}' created successfully", "role": new_role}
+
+
+@api_router.get("/roles/{role_id}")
+async def get_role(role_id: str, request: Request):
+    """Get a specific role's details"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.manage_users"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.manage_users required")
+    
+    # Check custom roles first
+    custom_role = await db.custom_roles.find_one({"id": role_id}, {"_id": 0})
+    
+    if custom_role:
+        # Count users with this role
+        user_count = await db.users.count_documents({"role": role_id})
+        custom_role["user_count"] = user_count
+        custom_role["is_builtin"] = role_id in VALID_ROLES
+        return custom_role
+    
+    # Check built-in roles
+    if role_id in VALID_ROLES:
+        user_count = await db.users.count_documents({"role": role_id})
+        return {
+            "id": role_id,
+            "name": role_id,
+            "description": get_role_description(role_id),
+            "is_builtin": True,
+            "default_permissions": DEFAULT_ROLE_PERMISSIONS.get(role_id, []),
+            "user_count": user_count
+        }
+    
+    raise HTTPException(status_code=404, detail="Role not found")
+
+
+@api_router.put("/roles/{role_id}")
+async def update_role(role_id: str, update_data: RoleUpdate, request: Request):
+    """Update a role's default permissions"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.assign_permissions"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.assign_permissions required")
+    
+    # Validate permissions if provided
+    if update_data.default_permissions is not None:
+        all_valid_permissions = []
+        for group in AVAILABLE_PERMISSIONS.values():
+            for perm in group["permissions"]:
+                all_valid_permissions.append(perm["id"])
+        
+        invalid_perms = [p for p in update_data.default_permissions if p not in all_valid_permissions]
+        if invalid_perms:
+            raise HTTPException(status_code=400, detail=f"Invalid permissions: {invalid_perms}")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Check if it's a built-in role
+    is_builtin = role_id in VALID_ROLES
+    
+    # Get existing custom role data
+    existing = await db.custom_roles.find_one({"id": role_id})
+    
+    if existing:
+        # Update existing custom role
+        update_dict = {"updated_at": now.isoformat()}
+        if update_data.name is not None:
+            update_dict["name"] = update_data.name
+        if update_data.description is not None:
+            update_dict["description"] = update_data.description
+        if update_data.default_permissions is not None:
+            update_dict["default_permissions"] = update_data.default_permissions
+        
+        await db.custom_roles.update_one({"id": role_id}, {"$set": update_dict})
+    else:
+        # Create new custom role entry (for built-in role override or new role)
+        new_role = {
+            "id": role_id,
+            "name": update_data.name or role_id,
+            "description": update_data.description or get_role_description(role_id),
+            "default_permissions": update_data.default_permissions or DEFAULT_ROLE_PERMISSIONS.get(role_id, []),
+            "is_builtin": is_builtin,
+            "created_at": now.isoformat(),
+            "created_by": user.user_id,
+            "updated_at": now.isoformat()
+        }
+        await db.custom_roles.insert_one(new_role)
+    
+    # Log the action
+    await log_system_action("role_updated", user, {
+        "role_id": role_id, 
+        "permissions_count": len(update_data.default_permissions) if update_data.default_permissions else "unchanged"
+    })
+    
+    # Return updated role
+    updated_role = await db.custom_roles.find_one({"id": role_id}, {"_id": 0})
+    return {"message": f"Role '{role_id}' updated successfully", "role": updated_role}
+
+
+@api_router.delete("/roles/{role_id}")
+async def delete_role(role_id: str, request: Request):
+    """Delete a custom role (only if no users assigned)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.assign_permissions"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.assign_permissions required")
+    
+    # Cannot delete built-in roles
+    if role_id in VALID_ROLES:
+        # Check if it's just a custom override
+        custom_role = await db.custom_roles.find_one({"id": role_id})
+        if custom_role:
+            # Reset to default - just delete the custom override
+            await db.custom_roles.delete_one({"id": role_id})
+            await log_system_action("role_reset_to_default", user, {"role_id": role_id})
+            return {"message": f"Built-in role '{role_id}' reset to default permissions"}
+        raise HTTPException(status_code=400, detail=f"Cannot delete built-in role '{role_id}'")
+    
+    # Check if any users have this role
+    user_count = await db.users.count_documents({"role": role_id})
+    if user_count > 0:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Cannot delete role '{role_id}': {user_count} users still assigned. Reassign users first."
+        )
+    
+    # Delete the custom role
+    result = await db.custom_roles.delete_one({"id": role_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Role not found")
+    
+    await log_system_action("role_deleted", user, {"role_id": role_id})
+    return {"message": f"Role '{role_id}' deleted successfully"}
+
+
+@api_router.post("/roles/{role_id}/reset")
+async def reset_role_to_default(role_id: str, request: Request):
+    """Reset a built-in role's permissions back to system defaults"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.assign_permissions"):
+        raise HTTPException(status_code=403, detail="Permission denied: admin.assign_permissions required")
+    
+    if role_id not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"'{role_id}' is not a built-in role")
+    
+    # Delete any custom override
+    result = await db.custom_roles.delete_one({"id": role_id})
+    
+    await log_system_action("role_reset_to_default", user, {"role_id": role_id})
+    
+    return {
+        "message": f"Role '{role_id}' reset to default permissions",
+        "default_permissions": DEFAULT_ROLE_PERMISSIONS.get(role_id, [])
+    }
+
+
 @api_router.get("/users/{user_id}/permissions")
 async def get_user_permissions_endpoint(user_id: str, request: Request):
     """Get a user's current permissions"""

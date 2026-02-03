@@ -1745,6 +1745,90 @@ A read-only detailed view showing transaction-level rows for any date, accessibl
 
 ---
 
+## ✅ Advanced Filters & Sorting - COMPLETED Feb 3, 2026
+
+Enhanced filtering and sorting across Leads, Pre-Sales, and Projects to support operational review by Sales Managers and Design Managers.
+
+### Features Implemented
+
+#### 1. Custom Date Range Filter (All Modules)
+| Filter Option | Description |
+|---------------|-------------|
+| All Time | No date restriction (default) |
+| This Month | Current calendar month |
+| Last Month | Previous calendar month |
+| This Quarter | Current quarter |
+| Custom Range | User-specified From/To dates |
+
+#### 2. Role-Based Designer Filter
+
+**Design Manager View (Projects):**
+- Multi-select dropdown of designers
+- Filter projects by assigned designer
+- Track designer workload and performance
+
+**Sales Manager View (Leads/Projects):**
+- Shows designers assigned under that manager
+- Measure designer-wise conversion and follow-up
+
+#### 3. Hold Status Filter (Projects Only)
+| Status | Description |
+|--------|-------------|
+| All Status | Show all projects |
+| Active | Projects in progress |
+| On Hold | Temporarily paused |
+| Deactivated | Closed/cancelled |
+
+#### 4. Sorting Options
+| Module | Sort Fields |
+|--------|-------------|
+| Leads | Created Date, Updated Date, Budget |
+| Projects | Created Date, Updated Date, Project Value |
+| PreSales | Created Date, Updated Date, Budget |
+
+Each with ascending/descending order support.
+
+### UX Features
+- ✅ **Sticky Filters**: Persist in localStorage until cleared
+- ✅ **Clear All Filters**: One-click reset button
+- ✅ **Active Filter Count**: Badge showing active filters
+- ✅ **Visual Indicators**: Blue border/background on active filters
+
+### API Parameters Added
+```
+GET /api/leads
+  - designer_id: Filter by designer
+  - sort_by: created_at | updated_at | budget
+  - sort_order: asc | desc
+
+GET /api/projects  
+  - designer_id: Filter by collaborator
+  - hold_status: Active | Hold | Deactivated
+  - sort_by: created_at | updated_at | project_value
+  - sort_order: asc | desc
+
+GET /api/presales
+  - time_filter: all | this_month | last_month | this_quarter | custom
+  - start_date, end_date: For custom range
+  - sort_by: created_at | updated_at | budget
+  - sort_order: asc | desc
+```
+
+### Files Created/Modified
+- **NEW**: `/app/frontend/src/components/AdvancedFilters.jsx` - Reusable filter component
+- **MODIFIED**: `/app/frontend/src/pages/Leads.jsx`
+- **MODIFIED**: `/app/frontend/src/pages/Projects.jsx`
+- **MODIFIED**: `/app/frontend/src/pages/PreSales.jsx`
+- **MODIFIED**: `/app/backend/server.py` - API endpoints updated
+
+### Testing Status
+- ✅ Backend: 40/40 tests passed (100%)
+- ✅ Frontend: 11/11 features verified (100%)
+- ✅ localStorage persistence confirmed
+- ✅ Designer filter role-based visibility confirmed
+
+---
+
 ## 🔜 Upcoming Tasks
 
 ### P1: Quotation Builder Module

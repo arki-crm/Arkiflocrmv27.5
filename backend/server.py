@@ -4768,9 +4768,9 @@ async def update_note(project_id: str, note_id: str, note_data: NoteUpdate, requ
     
     note = notes[note_index]
     
-    # Check permission - only creator or Admin can edit
-    if note["created_by"] != user.user_id and user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Only creator or Admin can edit this note")
+    # Check permission - only creator or users with projects.update permission can edit
+    if note["created_by"] != user.user_id and not has_permission(user_doc, "projects.update"):
+        raise HTTPException(status_code=403, detail="Only creator or users with projects.update permission can edit this note")
     
     # Update fields
     now = datetime.now(timezone.utc).isoformat()

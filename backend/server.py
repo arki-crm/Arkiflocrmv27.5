@@ -3433,6 +3433,7 @@ async def update_project_customer_details(project_id: str, request: Request):
 async def update_stage(project_id: str, stage_update: StageUpdate, request: Request):
     """Update project stage - forward-only progression (except Admin)"""
     user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
     # PreSales cannot access project details
     if user.role == "PreSales":

@@ -83,6 +83,9 @@ import RecurringTransactions from './pages/RecurringTransactions';
 import PurchaseReturns from './pages/PurchaseReturns';
 import SalesReturns from './pages/SalesReturns';
 import ReturnedItemsRegister from './pages/ReturnedItemsRegister';
+import CreditNotes from './pages/CreditNotes';
+import DebitNotes from './pages/DebitNotes';
+import ReplacementOrders from './pages/ReplacementOrders';
 
 // Role Management
 import RoleManagement from './pages/RoleManagement';

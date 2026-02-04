@@ -375,7 +375,7 @@ class LeadStageUpdate(BaseModel):
     stage: str
 
 class LeadAssignDesigner(BaseModel):
-    designer_id: str
+    designer_id: Optional[str] = None  # None to remove designer
 
 # ============ HOLD/ACTIVATE/DEACTIVATE MODELS ============
 

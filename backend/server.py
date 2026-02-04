@@ -26929,8 +26929,65 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
     
     await db.execution_ledger.insert_one(new_entry)
     
+    # BUG FIX: Auto-create liability for credit purchases
+    liability_id = None
+    if entry.purchase_type == "credit" and grand_total > 0:
+        liability_id = f"lia_{uuid.uuid4().hex[:8]}"
+        liability_doc = {
+            "liability_id": liability_id,
+            "project_id": entry.project_id,
+            "vendor_id": vendor_id,
+            "vendor_name": vendor_name,
+            "category": "vendor_payable",
+            "amount": grand_total,
+            "amount_settled": 0,
+            "amount_remaining": grand_total,
+            "due_date": entry.invoice_date,  # Use invoice date as initial due date
+            "description": f"Purchase Invoice: {entry.invoice_no or entry_id}",
+            "source": "execution_ledger",
+            "source_reference_id": entry_id,
+            "status": "open",
+            "settlements": [],
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat()
+        }
+        await db.finance_liabilities.insert_one(liability_doc)
+        
+        # Update execution entry with liability link
+        await db.execution_ledger.update_one(
+            {"execution_id": entry_id},
+            {"$set": {"linked_liability_id": liability_id}}
+        )
+        new_entry["linked_liability_id"] = liability_id
+    
+    # BUG FIX: Create Daybook entry for purchase invoice
+    daybook_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+    daybook_entry = {
+        "transaction_id": daybook_txn_id,
+        "transaction_date": entry.execution_date or entry.invoice_date or now.strftime("%Y-%m-%d"),
+        "transaction_type": "outflow",
+        "entry_type": "purchase_invoice",
+        "amount": grand_total,
+        "description": f"Purchase Invoice: {entry.invoice_no or 'N/A'} - {vendor_name or 'Unknown Vendor'}",
+        "account_id": None,  # Will be set when payment is made
+        "category_id": None,
+        "project_id": entry.project_id,
+        "vendor_id": vendor_id,
+        "reference_type": "execution_ledger",
+        "reference_id": entry_id,
+        "liability_id": liability_id,
+        "payment_status": "unpaid" if entry.purchase_type == "credit" else "paid",
+        "remarks": entry.remarks,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat()
+    }
+    await db.accounting_transactions.insert_one(daybook_entry)
+    
     new_entry.pop("_id", None)
-    return {"success": True, "entry": new_entry}
+    return {"success": True, "entry": new_entry, "liability_id": liability_id}
 
 
 @api_router.get("/finance/execution-ledger/project/{project_id}")

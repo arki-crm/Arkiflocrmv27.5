@@ -2441,11 +2441,24 @@ EXECUTION_STAGES = [
     "Handover"
 ]
 
-# All stages combined (19 total for V1)
-ALL_PROJECT_STAGES = SALES_STAGES + DESIGN_STAGES + EXECUTION_STAGES
+# All stages combined (19 total for V1) + Cancelled
+ALL_PROJECT_STAGES = SALES_STAGES + DESIGN_STAGES + EXECUTION_STAGES + ["Cancelled"]
 
 # Pre-booking stages (for Sales Manager)
 PRE_BOOKING_STAGES = SALES_STAGES[:-1]  # All except "Booking Completed"
+
+# Cancellation reasons (mandatory dropdown)
+CANCELLATION_REASONS = [
+    "Budget Constraints",
+    "Changed Requirements",
+    "Competitor Selected",
+    "Project Delayed Indefinitely",
+    "Location Changed",
+    "Personal Reasons",
+    "Quality Concerns",
+    "Timeline Not Acceptable",
+    "Other"
+]
 
 # ============ AUTO-COLLABORATOR SYSTEM (V1) ============
 

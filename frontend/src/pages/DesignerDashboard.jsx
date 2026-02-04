@@ -248,11 +248,16 @@ export default function DesignerDashboard() {
             <CardTitle className="text-base flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-slate-500" />
               Designer-wise Performance
+              {selectedDesigner !== 'all' && (
+                <Badge variant="outline" className="ml-2 text-xs">
+                  Filtered: {filteredDesigners[0]?.designer_name}
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {designers.filter(d => d.designer_id !== 'unassigned').map((designer) => (
+              {filteredDesigners.filter(d => d.designer_id !== 'unassigned').map((designer) => (
                 <div key={designer.designer_id} className="border rounded-lg">
                   {/* Designer Row Header */}
                   <div 

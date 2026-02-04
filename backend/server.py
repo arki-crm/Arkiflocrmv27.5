@@ -8922,6 +8922,388 @@ async def get_cancellation_reasons():
     return {"reasons": CANCELLATION_REASONS}
 
 
+# ============ DESIGNER ASSIGNMENT TRACKING ============
+
+@api_router.get("/projects/{project_id}/designer-assignments")
+async def get_project_designer_assignments(request: Request, project_id: str):
+    """
+    Get all designer assignments for a project (full history).
+    Shows active and ended assignments for accountability tracking.
+    """
+    user = await get_current_user(request)
+    
+    # Verify project exists
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get all assignments for this project
+    assignments = await db.designer_assignments.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).sort("assigned_from", -1).to_list(None)
+    
+    # Get user names for each assignment
+    user_ids = set()
+    for a in assignments:
+        user_ids.add(a.get("designer_id"))
+        user_ids.add(a.get("assigned_by"))
+    
+    users = await db.users.find(
+        {"user_id": {"$in": list(user_ids)}},
+        {"_id": 0, "user_id": 1, "name": 1}
+    ).to_list(None)
+    user_map = {u["user_id"]: u.get("name", "Unknown") for u in users}
+    
+    # Enrich assignments with names
+    result = []
+    for a in assignments:
+        result.append({
+            "assignment_id": a.get("assignment_id"),
+            "project_id": a.get("project_id"),
+            "designer_id": a.get("designer_id"),
+            "designer_name": user_map.get(a.get("designer_id"), "Unknown"),
+            "role": a.get("role"),
+            "assigned_from": a.get("assigned_from"),
+            "assigned_to": a.get("assigned_to"),
+            "assignment_reason": a.get("assignment_reason"),
+            "end_reason": a.get("end_reason"),
+            "assigned_by": a.get("assigned_by"),
+            "assigned_by_name": user_map.get(a.get("assigned_by"), "Unknown"),
+            "notes": a.get("notes"),
+            "is_active": a.get("assigned_to") is None
+        })
+    
+    # Get current primary designer
+    current_primary = next((a for a in result if a["role"] == "Primary" and a["is_active"]), None)
+    
+    return {
+        "project_id": project_id,
+        "current_primary": current_primary,
+        "assignments": result,
+        "total_assignments": len(result),
+        "active_count": sum(1 for a in result if a["is_active"])
+    }
+
+
+@api_router.post("/projects/{project_id}/designer-assignments")
+async def assign_designer_to_project(
+    request: Request, 
+    project_id: str, 
+    data: DesignerAssignmentCreate
+):
+    """
+    Assign or reassign a designer to a project.
+    
+    Rules:
+    - Only one active Primary designer allowed at a time
+    - When assigning a new Primary, the previous Primary's assignment is ended
+    - Assignments are never deleted, only ended (for accountability)
+    - Support designers can be added without affecting Primary
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    now = datetime.now(timezone.utc)
+    
+    # Access control: Admin, Founder, or project.manage_team permission
+    allowed_roles = ["Admin", "Founder", "DesignManager"]
+    if user_doc.get("role") not in allowed_roles and not user_doc.get("is_founder"):
+        if not has_permission(user_doc, "projects.manage_team"):
+            raise HTTPException(
+                status_code=403, 
+                detail="Access denied. Requires Admin, Design Manager, or team management permission."
+            )
+    
+    # Verify project exists
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Verify designer exists and is a designer role
+    designer = await db.users.find_one({"user_id": data.designer_id})
+    if not designer:
+        raise HTTPException(status_code=404, detail="Designer not found")
+    
+    designer_roles = ["Designer", "SeniorDesigner", "DesignManager"]
+    if designer.get("role") not in designer_roles:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"User {designer.get('name')} is not a designer role"
+        )
+    
+    # Validate role
+    if data.role not in DESIGNER_ROLES:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid role. Must be one of: {DESIGNER_ROLES}"
+        )
+    
+    # Validate assignment reason
+    if data.assignment_reason not in ASSIGNMENT_REASONS:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid reason. Must be one of: {ASSIGNMENT_REASONS}"
+        )
+    
+    # Check if designer already has an active assignment on this project
+    existing_active = await db.designer_assignments.find_one({
+        "project_id": project_id,
+        "designer_id": data.designer_id,
+        "assigned_to": None  # Active assignment
+    })
+    
+    if existing_active:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Designer {designer.get('name')} already has an active assignment on this project"
+        )
+    
+    # If assigning as Primary, end current Primary's assignment
+    previous_primary = None
+    if data.role == "Primary":
+        current_primary = await db.designer_assignments.find_one({
+            "project_id": project_id,
+            "role": "Primary",
+            "assigned_to": None
+        })
+        
+        if current_primary:
+            # End the current primary's assignment
+            await db.designer_assignments.update_one(
+                {"assignment_id": current_primary["assignment_id"]},
+                {
+                    "$set": {
+                        "assigned_to": now.isoformat(),
+                        "end_reason": "reassigned",
+                        "ended_by": user.user_id,
+                        "ended_by_name": user.name
+                    }
+                }
+            )
+            previous_primary = current_primary.get("designer_id")
+            
+            # Get previous designer name for comment
+            prev_designer = await db.users.find_one({"user_id": previous_primary})
+            prev_name = prev_designer.get("name", "Unknown") if prev_designer else "Unknown"
+    
+    # Create new assignment
+    assignment_id = str(uuid.uuid4())
+    assignment = {
+        "assignment_id": assignment_id,
+        "project_id": project_id,
+        "designer_id": data.designer_id,
+        "role": data.role,
+        "assigned_from": now.isoformat(),
+        "assigned_to": None,  # Active
+        "assignment_reason": data.assignment_reason,
+        "end_reason": None,
+        "assigned_by": user.user_id,
+        "notes": data.notes,
+        "created_at": now.isoformat()
+    }
+    
+    await db.designer_assignments.insert_one(assignment)
+    
+    # Update project's current primary designer fields (computed from assignments)
+    if data.role == "Primary":
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {
+                "$set": {
+                    "primary_designer_id": data.designer_id,
+                    "primary_designer_name": designer.get("name"),
+                    "primary_designer_assignment_id": assignment_id,
+                    "updated_at": now.isoformat()
+                }
+            }
+        )
+        
+        # Add timeline entry
+        timeline_entry = {
+            "type": "designer_assigned",
+            "role": "Primary",
+            "designer_id": data.designer_id,
+            "designer_name": designer.get("name"),
+            "reason": data.assignment_reason,
+            "assigned_by": user.user_id,
+            "assigned_by_name": user.name,
+            "previous_designer_id": previous_primary,
+            "timestamp": now.isoformat()
+        }
+        
+        # Add comment
+        comment_text = f"Primary Designer assigned: {designer.get('name')}"
+        if previous_primary:
+            comment_text += f" (replacing {prev_name})"
+        comment_text += f". Reason: {data.assignment_reason}"
+        
+        comment = {
+            "id": str(uuid.uuid4()),
+            "user_id": "system",
+            "user_name": "System",
+            "role": "System",
+            "message": comment_text,
+            "is_system": True,
+            "created_at": now.isoformat()
+        }
+        
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {
+                "$push": {
+                    "timeline": timeline_entry,
+                    "comments": comment
+                }
+            }
+        )
+    
+    return {
+        "success": True,
+        "message": f"Designer {designer.get('name')} assigned as {data.role}",
+        "assignment_id": assignment_id,
+        "previous_primary_ended": previous_primary is not None
+    }
+
+
+@api_router.put("/projects/{project_id}/designer-assignments/{assignment_id}/end")
+async def end_designer_assignment(
+    request: Request,
+    project_id: str,
+    assignment_id: str,
+    data: DesignerAssignmentEnd
+):
+    """
+    End a designer assignment (soft delete - preserves history).
+    
+    Note: If ending a Primary assignment, a new Primary should be assigned.
+    Projects should not be left without a Primary designer.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    now = datetime.now(timezone.utc)
+    
+    # Access control
+    allowed_roles = ["Admin", "Founder", "DesignManager"]
+    if user_doc.get("role") not in allowed_roles and not user_doc.get("is_founder"):
+        if not has_permission(user_doc, "projects.manage_team"):
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied. Requires Admin, Design Manager, or team management permission."
+            )
+    
+    # Find the assignment
+    assignment = await db.designer_assignments.find_one({
+        "assignment_id": assignment_id,
+        "project_id": project_id
+    })
+    
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    if assignment.get("assigned_to") is not None:
+        raise HTTPException(status_code=400, detail="Assignment already ended")
+    
+    # End the assignment
+    await db.designer_assignments.update_one(
+        {"assignment_id": assignment_id},
+        {
+            "$set": {
+                "assigned_to": now.isoformat(),
+                "end_reason": data.end_reason,
+                "end_notes": data.notes,
+                "ended_by": user.user_id,
+                "ended_by_name": user.name
+            }
+        }
+    )
+    
+    # If this was the Primary, update project and warn
+    warning = None
+    if assignment.get("role") == "Primary":
+        # Clear project's current primary
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {
+                "$set": {
+                    "primary_designer_id": None,
+                    "primary_designer_name": None,
+                    "primary_designer_assignment_id": None,
+                    "updated_at": now.isoformat()
+                }
+            }
+        )
+        warning = "Primary designer removed. Please assign a new Primary designer."
+        
+        # Get designer name for comment
+        designer = await db.users.find_one({"user_id": assignment.get("designer_id")})
+        designer_name = designer.get("name", "Unknown") if designer else "Unknown"
+        
+        # Add comment
+        comment = {
+            "id": str(uuid.uuid4()),
+            "user_id": "system",
+            "user_name": "System",
+            "role": "System",
+            "message": f"Primary Designer {designer_name} assignment ended. Reason: {data.end_reason}",
+            "is_system": True,
+            "created_at": now.isoformat()
+        }
+        
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {"$push": {"comments": comment}}
+        )
+    
+    return {
+        "success": True,
+        "message": "Assignment ended",
+        "warning": warning
+    }
+
+
+@api_router.get("/designer-assignment-options")
+async def get_designer_assignment_options():
+    """Get available roles and reasons for designer assignments"""
+    return {
+        "roles": DESIGNER_ROLES,
+        "assignment_reasons": ASSIGNMENT_REASONS
+    }
+
+
+async def get_primary_designer_at_event(project_id: str, event_timestamp: str) -> Optional[dict]:
+    """
+    Get the Primary designer who was active at a specific timestamp.
+    Used for attribution in dashboards.
+    
+    Returns: {designer_id, designer_name, assignment_id} or None
+    """
+    # Find assignment where:
+    # - role = Primary
+    # - assigned_from <= event_timestamp
+    # - assigned_to is None OR assigned_to > event_timestamp
+    
+    assignments = await db.designer_assignments.find({
+        "project_id": project_id,
+        "role": "Primary"
+    }).to_list(None)
+    
+    for a in assignments:
+        assigned_from = a.get("assigned_from", "")
+        assigned_to = a.get("assigned_to")
+        
+        # Check if event falls within assignment period
+        if assigned_from <= event_timestamp:
+            if assigned_to is None or assigned_to > event_timestamp:
+                designer = await db.users.find_one({"user_id": a.get("designer_id")})
+                return {
+                    "designer_id": a.get("designer_id"),
+                    "designer_name": designer.get("name") if designer else "Unknown",
+                    "assignment_id": a.get("assignment_id")
+                }
+    
+    return None
+
+
 # ============ ROLE-BASED DASHBOARDS ============
 
 def get_financial_year_range():

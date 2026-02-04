@@ -497,17 +497,42 @@ const LeadStagesPanel = ({
         <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Designer</h4>
         
         {designerDetails ? (
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
-            <div className={cn(
-              "w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium text-white",
-              getAvatarColor(designerDetails.name)
-            )}>
-              {getInitials(designerDetails.name)}
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium text-white",
+                getAvatarColor(designerDetails.name)
+              )}>
+                {getInitials(designerDetails.name)}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-slate-900">{designerDetails.name}</p>
+                <p className="text-xs text-slate-500">Assigned Designer</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-slate-900">{designerDetails.name}</p>
-              <p className="text-xs text-slate-500">Assigned Designer</p>
-            </div>
+            {canAssignDesigner && (
+              <div className="flex gap-2 mt-3 pt-3 border-t border-slate-200">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onAssignDesigner}
+                  className="flex-1 h-8 text-xs"
+                  data-testid="change-designer-btn"
+                >
+                  <UserCog className="w-3.5 h-3.5 mr-1.5" />
+                  Change
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onRemoveDesigner}
+                  className="h-8 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                  data-testid="remove-designer-btn"
+                >
+                  <UserMinus className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center py-3">

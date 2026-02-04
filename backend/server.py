@@ -28512,7 +28512,12 @@ async def get_export_types(request: Request):
 @api_router.post("/admin/export")
 async def export_data(export_req: ExportRequest, request: Request):
     """Export data to Excel or CSV format"""
-    user = await require_admin(request)
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # BUG FIX: Use permission check - finance users with export permission can export finance data
+    if not has_permission(user_doc, "finance.reports.export") and not has_permission(user_doc, "finance.export_data"):
+        raise HTTPException(status_code=403, detail="Access denied - requires finance.reports.export or finance.export_data permission")
     
     if export_req.data_type not in EXPORT_FIELD_MAPPINGS:
         raise HTTPException(status_code=400, detail=f"Invalid data type: {export_req.data_type}")

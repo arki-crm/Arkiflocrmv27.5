@@ -1010,16 +1010,26 @@ const ProjectDetails = () => {
       )}
 
       {activeTab === 'collaborators' && (
-        <Card className="border-slate-200">
-          <CardContent className="p-6">
-            <CollaboratorsTab 
-              projectId={id}
-              collaborators={collaborators}
-              onCollaboratorsChange={setCollaborators}
-              userRole={user?.role}
-            />
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          {/* Designer Assignment Panel - Primary at top */}
+          <DesignerAssignmentPanel 
+            projectId={id}
+            currentPrimaryDesigner={project?.primary_designer_name}
+            onUpdate={fetchProject}
+          />
+          
+          {/* Team Collaborators */}
+          <Card className="border-slate-200">
+            <CardContent className="p-6">
+              <CollaboratorsTab 
+                projectId={id}
+                collaborators={collaborators}
+                onCollaboratorsChange={setCollaborators}
+                userRole={user?.role}
+              />
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {activeTab === 'meetings' && (

@@ -7456,6 +7456,30 @@ async def convert_to_project(lead_id: str, request: Request):
     
     await db.projects.insert_one(new_project)
     
+    # ========== CREATE INITIAL DESIGNER ASSIGNMENT ==========
+    # If a primary designer is assigned, create the first assignment record
+    if primary_designer_id:
+        initial_assignment = {
+            "assignment_id": str(uuid.uuid4()),
+            "project_id": project_id,
+            "designer_id": primary_designer_id,
+            "role": "Primary",
+            "assigned_from": now.isoformat(),
+            "assigned_to": None,  # Active
+            "assignment_reason": "initial",
+            "end_reason": None,
+            "assigned_by": user.user_id,
+            "notes": f"Initial assignment from lead conversion. Lead: {lead_id}",
+            "created_at": now.isoformat()
+        }
+        await db.designer_assignments.insert_one(initial_assignment)
+        
+        # Update project with assignment reference
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {"$set": {"primary_designer_assignment_id": initial_assignment["assignment_id"]}}
+        )
+    
     # Mark lead as converted
     await db.leads.update_one(
         {"lead_id": lead_id},

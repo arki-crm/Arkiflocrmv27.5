@@ -133,10 +133,34 @@ export default function SalesDashboard() {
             </Button>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Sales & Funnel Analysis</h1>
-              <p className="text-sm text-slate-500">{data?.period?.label}</p>
+              <p className="text-sm text-slate-500">
+                {data?.period?.label}
+                {selectedDesigner !== 'all' && (
+                  <Badge variant="outline" className="ml-2 text-xs">
+                    Designer: {designers.find(d => d.user_id === selectedDesigner)?.name || 'Selected'}
+                  </Badge>
+                )}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {/* Designer Filter */}
+            <Select value={selectedDesigner} onValueChange={setSelectedDesigner}>
+              <SelectTrigger className="w-48" data-testid="designer-filter">
+                <User className="w-4 h-4 mr-2 text-slate-500" />
+                <SelectValue placeholder="All Designers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Designers</SelectItem>
+                {designers.map(d => (
+                  <SelectItem key={d.user_id} value={d.user_id}>
+                    {d.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            {/* Period Filter */}
             <Select value={period} onValueChange={setPeriod}>
               <SelectTrigger className="w-40">
                 <SelectValue />

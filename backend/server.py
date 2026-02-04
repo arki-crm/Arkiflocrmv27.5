@@ -7375,11 +7375,12 @@ async def convert_to_project(lead_id: str, request: Request):
         # Project Details
         "stage": "Design Finalization",
         
-        # ========== PRIMARY DESIGNER (LOCKED AFTER BOOKING) ==========
+        # ========== PRIMARY DESIGNER (Managed via designer_assignments) ==========
+        # Primary designer can change mid-project via assignment system
+        # KPIs attributed to Primary at time of Sign-Off/Cancellation
         "primary_designer_id": primary_designer_id,
         "primary_designer_name": primary_designer_name,
-        "primary_designer_locked": True,  # Cannot be changed after project creation
-        "primary_designer_locked_at": now.isoformat(),
+        "primary_designer_assignment_id": None,  # Links to active assignment
         
         # ========== PRE-SALES ATTRIBUTION ==========
         "assigned_presales_id": lead.get("assigned_to"),

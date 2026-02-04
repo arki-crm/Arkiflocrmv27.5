@@ -230,6 +230,39 @@ class CommentCreate(BaseModel):
 class StageUpdate(BaseModel):
     stage: str
 
+# ============ DESIGNER ASSIGNMENT MODELS ============
+
+DESIGNER_ROLES = ["Primary", "Support"]
+ASSIGNMENT_REASONS = ["initial", "reassigned", "resigned", "escalation", "workload_balance"]
+
+class DesignerAssignmentCreate(BaseModel):
+    """Create or reassign a designer to a project"""
+    designer_id: str
+    role: str = "Primary"  # Primary or Support
+    assignment_reason: str = "initial"  # initial, reassigned, resigned, escalation, workload_balance
+    notes: Optional[str] = None
+
+class DesignerAssignmentEnd(BaseModel):
+    """End a designer assignment (do not delete)"""
+    end_reason: str  # reassigned, resigned, escalation, project_complete
+    notes: Optional[str] = None
+
+class DesignerAssignmentResponse(BaseModel):
+    """Designer assignment record"""
+    assignment_id: str
+    project_id: str
+    designer_id: str
+    designer_name: str
+    role: str
+    assigned_from: str
+    assigned_to: Optional[str]  # null = active
+    assignment_reason: str
+    end_reason: Optional[str]
+    assigned_by: str
+    assigned_by_name: str
+    notes: Optional[str]
+    is_active: bool
+
 # ============ FINANCIAL GATES MODELS ============
 
 class GateOverrideRequest(BaseModel):

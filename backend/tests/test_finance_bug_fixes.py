@@ -55,7 +55,7 @@ class FinanceBugFixVerifier:
             "vendor_name": "Test Vendor - Liability Verification",
             "purchase_type": "credit",
             "items": [{
-                "category": "Other",
+                "category": "Hardware & Accessories",
                 "material_name": "Test Material for Bug Fix Verification",
                 "specification": "N/A",
                 "quantity": 1,

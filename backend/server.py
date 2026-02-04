@@ -6775,8 +6775,24 @@ async def confirm_booking_payment(lead_id: str, request: Request):
     }
     
     # Update lead with payment confirmation AND capture booked_value
-    # booked_value is immutable once set - represents the value at which customer agreed to proceed
-    booked_value = lead.get("budget", 0) or 0
+    # booked_value = quotation value at the moment first payment is received
+    # This is AUTO-LOCKED and IMMUTABLE - prevents manipulation
+    
+    # Get the latest quotation value (if quotation history exists)
+    quotation_history = lead.get("quotation_history", [])
+    if quotation_history:
+        # Use the most recent quotation value
+        latest_quotation = quotation_history[-1]
+        booked_value = latest_quotation.get("quoted_value", 0)
+    else:
+        # Fallback to budget if no quotation exists
+        booked_value = lead.get("budget", 0) or 0
+    
+    # Check if booked_value was already set (prevent re-setting)
+    existing_booked_value = lead.get("booked_value")
+    if existing_booked_value and existing_booked_value > 0:
+        # Already locked - use existing value
+        booked_value = existing_booked_value
     
     await db.leads.update_one(
         {"lead_id": lead_id},
@@ -6786,7 +6802,11 @@ async def confirm_booking_payment(lead_id: str, request: Request):
                 "booking_payment_confirmed_by": user.user_id,
                 "booking_payment_confirmed_by_name": user.name,
                 "booking_payment_confirmed_at": now.isoformat(),
-                "booked_value": booked_value,  # Captured at booking, immutable
+                "booked_value": booked_value,  # AUTO-CAPTURED at first payment, IMMUTABLE
+                "booked_value_locked": True,  # System lock flag
+                "booked_value_locked_at": now.isoformat(),
+                "booked_value_locked_by": user.user_id,
+                "booked_value_source": "quotation" if quotation_history else "inquiry",
                 "updated_at": now.isoformat()
             },
             "$push": {"comments": system_comment}

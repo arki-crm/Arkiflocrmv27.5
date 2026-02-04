@@ -2329,6 +2329,9 @@ async def ensure_user_permissions(user_id: str, user_doc: dict) -> dict:
 
 def has_permission(user_doc: dict, permission: str) -> bool:
     """Check if user has a specific permission"""
+    # FOUNDER BYPASS: System owner always has all permissions
+    if user_doc.get("email") == FOUNDER_EMAIL:
+        return True
     # Admin always has all permissions
     if user_doc.get("role") == "Admin":
         return True

@@ -8272,6 +8272,8 @@ async def add_project_quotation_history(project_id: str, entry: QuotationHistory
     new_version = len(current_history) + 1
     
     now = datetime.now(timezone.utc)
+    
+    # Build new quotation entry with line items support
     new_entry = {
         "version": new_version,
         "quoted_value": entry.quoted_value,
@@ -8279,7 +8281,9 @@ async def add_project_quotation_history(project_id: str, entry: QuotationHistory
         "created_at": now.isoformat(),
         "created_by": user.user_id,
         "created_by_name": user.name,
-        "note": entry.note
+        "note": entry.note,
+        # Line items for detailed scope breakdown
+        "line_items": [item.model_dump() for item in entry.line_items] if entry.line_items else None
     }
     
     # If new entry is "Approved", mark all previous entries as "Superseded"
@@ -8292,11 +8296,39 @@ async def add_project_quotation_history(project_id: str, entry: QuotationHistory
             {"$set": {"quotation_history": current_history}}
         )
     
+    # Update current_quotation_value for quick access
     await db.projects.update_one(
         {"project_id": project_id},
         {
             "$push": {"quotation_history": new_entry},
-            "$set": {"updated_at": now.isoformat()}
+            "$set": {
+                "current_quotation_value": entry.quoted_value,
+                "updated_at": now.isoformat()
+            }
+        }
+    )
+    
+    # Add audit comment
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$push": {
+                "comments": {
+                    "id": f"comment_{uuid.uuid4().hex[:8]}",
+                    "user_id": user.user_id,
+                    "user_name": user.name,
+                    "message": f"💼 Quotation v{new_version} added: ₹{entry.quoted_value:,.0f} ({entry.status})" + 
+                              (f" - {entry.note}" if entry.note else ""),
+                    "is_system": True,
+                    "created_at": now.isoformat(),
+                    "metadata": {
+                        "type": "quotation_added",
+                        "version": new_version,
+                        "quoted_value": entry.quoted_value,
+                        "status": entry.status
+                    }
+                }
+            }
         }
     )
     

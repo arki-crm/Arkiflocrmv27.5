@@ -139,7 +139,7 @@ export default function SalesReturns() {
 
   const fetchInvoices = async () => {
     try {
-      const response = await axios.get(`${API}/invoices`, {
+      const response = await axios.get(`${API}/finance/invoices`, {
         withCredentials: true
       });
       setInvoices(response.data || []);

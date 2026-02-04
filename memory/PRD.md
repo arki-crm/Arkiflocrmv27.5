@@ -9,7 +9,34 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Phase 2 Returns Module COMPLETE ✅
+## Current Status: Exceptions Panel COMPLETE ✅
+**As of February 4, 2026**
+
+### Exceptions Panel on Returns Register:
+A minimal, text-based panel showing actionable items only:
+
+| Exception Type | Description |
+|----------------|-------------|
+| Pending Purchase Refunds | With aging (days since return) |
+| Pending Sales Refunds | With aging |
+| Items Awaiting Disposition | Items with company needing decision |
+| Pending Replacements | With priority marker (🔴 for urgent) |
+| Unused Vendor Credits | From debit notes |
+| Unused Customer Credits | From credit notes |
+
+**Features:**
+- Collapsible panel
+- Grouped by category
+- Click to navigate to relevant return/invoice
+- Read-only (no actions inside panel)
+- Aging displayed for refunds
+
+**API Endpoint:**
+- `GET /api/finance/returns/exceptions` - Returns actionable exceptions
+
+---
+
+## Previous Status: Phase 2 Returns Module COMPLETE ✅
 **As of February 4, 2026**
 
 ### Phase 2 Features Implemented:

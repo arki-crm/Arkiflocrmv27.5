@@ -183,6 +183,9 @@ const AppRouter = () => {
         <Route path="/finance/purchase-returns" element={<PurchaseReturns />} />
         <Route path="/finance/sales-returns" element={<SalesReturns />} />
         <Route path="/finance/returned-items-register" element={<ReturnedItemsRegister />} />
+        <Route path="/finance/credit-notes" element={<CreditNotes />} />
+        <Route path="/finance/debit-notes" element={<DebitNotes />} />
+        <Route path="/finance/replacement-orders" element={<ReplacementOrders />} />
         
         {/* Settings Routes */}
         <Route path="/settings/company-profile" element={<CompanyProfile />} />

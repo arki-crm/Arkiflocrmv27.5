@@ -27272,7 +27272,135 @@ async def delete_execution_entry(execution_id: str, request: Request):
     return {"success": True, "message": "Execution entry deleted"}
 
 
-@api_router.post("/finance/execution-ledger/{execution_id}/record-payment")
+class PurchaseReturnRequest(BaseModel):
+    """Request model for purchase return / credit note"""
+    return_amount: float
+    return_reason: str
+    return_date: Optional[str] = None
+    items_returned: Optional[List[dict]] = None  # Optional: specific items returned
+    remarks: Optional[str] = None
+
+
+@api_router.post("/finance/execution-ledger/{execution_id}/return")
+async def record_purchase_return(execution_id: str, return_req: PurchaseReturnRequest, request: Request):
+    """
+    Record a Purchase Return / Credit Note against an invoice.
+    - Reduces vendor liability
+    - Reduces project cost
+    - Creates Daybook entry for the return
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.liabilities.create"):
+        raise HTTPException(status_code=403, detail="Access denied - requires finance.liabilities.create permission")
+    
+    entry = await db.execution_ledger.find_one({"execution_id": execution_id})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Execution entry not found")
+    
+    # Validate return amount
+    grand_total = entry.get("grand_total", 0)
+    existing_returns = entry.get("total_returns", 0)
+    max_returnable = grand_total - existing_returns
+    
+    if return_req.return_amount <= 0:
+        raise HTTPException(status_code=400, detail="Return amount must be positive")
+    if return_req.return_amount > max_returnable:
+        raise HTTPException(status_code=400, detail=f"Return amount exceeds maximum returnable: ₹{max_returnable:,.2f}")
+    
+    now = datetime.now(timezone.utc)
+    return_id = f"ret_{uuid.uuid4().hex[:8]}"
+    return_date = return_req.return_date or now.strftime("%Y-%m-%d")
+    
+    # Create return record
+    return_record = {
+        "return_id": return_id,
+        "return_date": return_date,
+        "amount": return_req.return_amount,
+        "reason": return_req.return_reason,
+        "items_returned": return_req.items_returned,
+        "remarks": return_req.remarks,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat()
+    }
+    
+    # Update execution entry
+    new_total_returns = existing_returns + return_req.return_amount
+    new_net_payable = grand_total - new_total_returns
+    
+    await db.execution_ledger.update_one(
+        {"execution_id": execution_id},
+        {
+            "$set": {
+                "total_returns": new_total_returns,
+                "net_payable": new_net_payable,
+                "amount_remaining": max(0, new_net_payable - entry.get("total_paid", 0)),
+                "updated_at": now.isoformat()
+            },
+            "$push": {"returns": return_record}
+        }
+    )
+    
+    # Reduce liability if exists
+    liability_id = entry.get("linked_liability_id")
+    if liability_id:
+        liability = await db.finance_liabilities.find_one({"liability_id": liability_id})
+        if liability:
+            new_liability_amount = max(0, liability.get("amount_remaining", 0) - return_req.return_amount)
+            new_status = "settled" if new_liability_amount == 0 else liability.get("status", "open")
+            
+            await db.finance_liabilities.update_one(
+                {"liability_id": liability_id},
+                {"$set": {
+                    "amount_remaining": new_liability_amount,
+                    "status": new_status,
+                    "updated_at": now.isoformat()
+                },
+                "$push": {"settlements": {
+                    "settlement_id": return_id,
+                    "type": "purchase_return",
+                    "amount": return_req.return_amount,
+                    "date": return_date,
+                    "remarks": f"Purchase Return: {return_req.return_reason}",
+                    "created_by": user.user_id,
+                    "created_at": now.isoformat()
+                }}}
+            )
+    
+    # Create Daybook entry for the return (credit/inflow)
+    daybook_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+    daybook_entry = {
+        "transaction_id": daybook_txn_id,
+        "transaction_date": return_date,
+        "transaction_type": "inflow",  # Return reduces our payable, so it's effectively an inflow
+        "entry_type": "purchase_return",
+        "amount": return_req.return_amount,
+        "description": f"Purchase Return: {entry.get('vendor_name', 'Unknown')} - {return_req.return_reason}",
+        "account_id": None,
+        "category_id": None,
+        "project_id": entry.get("project_id"),
+        "vendor_id": entry.get("vendor_id"),
+        "reference_type": "execution_ledger_return",
+        "reference_id": execution_id,
+        "return_id": return_id,
+        "remarks": return_req.remarks,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat()
+    }
+    await db.accounting_transactions.insert_one(daybook_entry)
+    
+    updated_entry = await db.execution_ledger.find_one({"execution_id": execution_id}, {"_id": 0})
+    
+    return {
+        "success": True,
+        "message": f"Purchase return of ₹{return_req.return_amount:,.2f} recorded",
+        "return_id": return_id,
+        "entry": updated_entry,
+        "liability_updated": liability_id is not None
+    }
 async def record_invoice_payment(execution_id: str, payment: InvoicePaymentRecord, request: Request):
     """
     Record a payment against an invoice entry.

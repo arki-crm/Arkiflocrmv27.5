@@ -244,6 +244,58 @@ export default function ReturnedItemsRegister() {
         </Card>
       </div>
 
+      {/* Exceptions Panel - Minimal Text-based List */}
+      {exceptions.length > 0 && (
+        <div className="border border-amber-200 bg-amber-50/50 rounded-lg" data-testid="exceptions-panel">
+          <button 
+            className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-amber-100/50 transition-colors"
+            onClick={() => setShowExceptions(!showExceptions)}
+          >
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-800">
+                {exceptions.length} item{exceptions.length !== 1 ? 's' : ''} need attention
+              </span>
+            </div>
+            <ChevronRight className={`w-4 h-4 text-amber-600 transition-transform ${showExceptions ? 'rotate-90' : ''}`} />
+          </button>
+          
+          {showExceptions && (
+            <div className="px-4 pb-3 space-y-1">
+              {/* Group exceptions by category */}
+              {Object.entries(
+                exceptions.reduce((acc, ex) => {
+                  const cat = ex.category;
+                  if (!acc[cat]) acc[cat] = [];
+                  acc[cat].push(ex);
+                  return acc;
+                }, {})
+              ).map(([category, items]) => (
+                <div key={category} className="pt-2 first:pt-0">
+                  <p className="text-xs font-medium text-amber-700 mb-1">{category}</p>
+                  <div className="space-y-0.5">
+                    {items.map((item, idx) => (
+                      <button
+                        key={`${item.reference_id}-${idx}`}
+                        onClick={() => navigate(item.navigate_to)}
+                        className="w-full text-left px-2 py-1 text-sm text-slate-700 hover:bg-amber-100 rounded flex items-center justify-between group"
+                        data-testid={`exception-item-${item.reference_id}`}
+                      >
+                        <span className="truncate">{item.text}</span>
+                        <span className="flex items-center gap-2 text-xs text-slate-400 group-hover:text-amber-600">
+                          {item.aging && <span className="text-amber-600 font-medium">{item.aging}</span>}
+                          <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Filters */}
       <Card>
         <CardContent className="p-4">

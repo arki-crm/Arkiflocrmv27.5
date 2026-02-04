@@ -24590,6 +24590,8 @@ async def create_salary_payment(data: SalaryPaymentCreate, request: Request):
             "employee_name": salary_master.get("employee_name", "Unknown"),
             "month_year": data.month_year,
             "monthly_salary": salary_master.get("monthly_salary", 0),
+            "total_deductions": 0,  # BUG FIX: Track deductions (leave, late, etc.)
+            "net_payable": salary_master.get("monthly_salary", 0),  # monthly_salary - deductions
             "total_advances": 0,
             "total_salary_paid": 0,
             "balance_payable": salary_master.get("monthly_salary", 0),

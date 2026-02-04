@@ -9100,11 +9100,25 @@ async def get_sales_funnel_dashboard(
         start_date, end_date = get_financial_year_range()
         period_label = f"FY {start_date[:4]}-{int(start_date[:4])+1}"
     
-    # Get ALL projects (including cancelled) for funnel analysis
-    projects = await db.projects.find({}, {"_id": 0}).to_list(None)
+    # Build query filter for designer
+    project_filter = {}
+    lead_filter = {}
+    if designer_id:
+        project_filter["primary_designer_id"] = designer_id
+        lead_filter["assigned_to"] = designer_id  # leads use assigned_to
     
-    # Get ALL leads for inquiry value tracking
-    leads = await db.leads.find({}, {"_id": 0}).to_list(None)
+    # Get projects (filtered by designer if specified)
+    projects = await db.projects.find(project_filter, {"_id": 0}).to_list(None)
+    
+    # Get leads for inquiry value tracking (filtered by designer if specified)
+    leads = await db.leads.find(lead_filter, {"_id": 0}).to_list(None)
+    
+    # Get designer name for display
+    designer_name = None
+    if designer_id:
+        designer_doc = await db.users.find_one({"user_id": designer_id})
+        if designer_doc:
+            designer_name = designer_doc.get("name")
     
     # Initialize counters
     total_inquiry_value = 0

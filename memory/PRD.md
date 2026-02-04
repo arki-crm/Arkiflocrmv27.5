@@ -9,7 +9,41 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Exceptions Panel COMPLETE ✅
+## Current Status: 4-Stage Value Lifecycle COMPLETE ✅
+**As of February 4, 2026**
+
+### Redesigned Project Value System
+
+| Stage | Field | Role | Lock Behavior |
+|-------|-------|------|---------------|
+| **1. Inquiry Value** | `inquiry_value` | Pre-Sales | Editable until lead converts |
+| **2. Booked Value** | `booked_value` | System | Auto-captured at first payment, IMMUTABLE |
+| **3. Quotation Value** | `quotation_history[]` | Designer | Versioned, append-only with line items |
+| **4. Sign-Off Value** | `signoff_value` | System | Auto-locked at KWS Sign-Off milestone |
+
+### Key Rules (NON-NEGOTIABLE)
+1. **Booked Value** = Quotation value at moment first payment is received (auto-locked)
+2. **Sign-Off Value** = Auto-locked when "KWS Sign-Off" milestone completes
+3. **ONLY signoff_value** is used for financial calculations (revenue, cash flow, reports)
+4. Admin can override with reason + full audit trail
+
+### New API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/projects/{id}/value-lifecycle` | GET | Get complete 4-stage value data |
+| `/api/admin/migrate-project-values` | POST | Migration for existing projects |
+| `/api/projects/{id}/quotation-history` | POST | Add quotation with line items |
+| `/api/projects/{id}/lock-contract-value` | POST | Manual sign-off lock (deprecated) |
+| `/api/projects/{id}/override-contract-value` | POST | Admin override with audit |
+
+### Migration Completed
+- 20 projects migrated
+- Projects with locked contract_value → migrated to signoff_value (locked)
+- Projects without lock → signoff_value=None (requires manual sign-off)
+
+---
+
+## Previous Status: Exceptions Panel COMPLETE ✅
 **As of February 4, 2026**
 
 ### Exceptions Panel on Returns Register:

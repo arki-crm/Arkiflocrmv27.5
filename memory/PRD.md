@@ -9,8 +9,39 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: System Owner / Founder Implementation COMPLETE ✅
+## Current Status: Purchase Return & Sales Return Phase 1 MVP COMPLETE ✅
 **As of February 2026**
+
+**Implemented:** Complete Purchase Return and Sales Return system with:
+- **Dual Tracking**: Refund status tracked INDEPENDENTLY from item disposition
+- **Refund Status**: pending → partial → completed → no_refund
+- **Item Disposition**: returned_to_vendor | with_company_office | with_company_site | scrapped | vendor_rejected | pending_decision
+- **Returned Items Register**: Aggregated view of all returns with filters and summary
+
+### New API Endpoints:
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/purchase-returns` | POST | Create purchase return |
+| `/api/finance/purchase-returns` | GET | List purchase returns |
+| `/api/finance/purchase-returns/{id}` | GET | Get specific return |
+| `/api/finance/purchase-returns/{id}/refund` | PUT | Update refund status |
+| `/api/finance/purchase-returns/{id}/disposition` | PUT | Update item disposition |
+| `/api/finance/sales-returns` | POST | Create sales return |
+| `/api/finance/sales-returns` | GET | List sales returns |
+| `/api/finance/sales-returns/{id}` | GET | Get specific return |
+| `/api/finance/sales-returns/{id}/refund` | PUT | Update refund status |
+| `/api/finance/sales-returns/{id}/disposition` | PUT | Update item disposition |
+| `/api/finance/sales-returns/{id}/replacement` | PUT | Mark replacement delivered |
+| `/api/finance/returned-items-register` | GET | Aggregated returns view |
+
+### New Database Collections:
+- `finance_returns` - Unified collection for both purchase and sales returns
+- `finance_vendor_receivables` - Vendor refunds owed to company
+- `finance_customer_payables` - Customer refunds owed by company
+
+---
+
+## Previous Status: System Owner / Founder Implementation COMPLETE ✅
 
 **Implemented:** Protected System Owner account (`sidheeq.arkidots@gmail.com`) with:
 - **Permission Bypass**: Founder always has ALL permissions regardless of role settings

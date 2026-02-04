@@ -79,6 +79,11 @@ import BackupManagement from './pages/BackupManagement';
 import PaymentReminders from './pages/PaymentReminders';
 import RecurringTransactions from './pages/RecurringTransactions';
 
+// Purchase & Sales Returns Module
+import PurchaseReturns from './pages/PurchaseReturns';
+import SalesReturns from './pages/SalesReturns';
+import ReturnedItemsRegister from './pages/ReturnedItemsRegister';
+
 // Role Management
 import RoleManagement from './pages/RoleManagement';
 
@@ -172,6 +177,9 @@ const AppRouter = () => {
         <Route path="/finance/reports/project-profitability" element={<ProjectProfitabilityReport />} />
         <Route path="/finance/payment-reminders" element={<PaymentReminders />} />
         <Route path="/finance/recurring-transactions" element={<RecurringTransactions />} />
+        <Route path="/finance/purchase-returns" element={<PurchaseReturns />} />
+        <Route path="/finance/sales-returns" element={<SalesReturns />} />
+        <Route path="/finance/returned-items-register" element={<ReturnedItemsRegister />} />
         
         {/* Settings Routes */}
         <Route path="/settings/company-profile" element={<CompanyProfile />} />

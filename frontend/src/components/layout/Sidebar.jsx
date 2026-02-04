@@ -43,7 +43,10 @@ import {
   FileUp,
   History,
   Database,
-  Mail
+  Mail,
+  RotateCcw,
+  Package,
+  ClipboardList
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 

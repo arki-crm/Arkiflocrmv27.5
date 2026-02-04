@@ -61,6 +61,7 @@ import { cn } from '../lib/utils';
 import { Textarea } from '../components/ui/textarea';
 import { Switch } from '../components/ui/switch';
 import CustomerDetailsSection from '../components/CustomerDetailsSection';
+import DesignerAssignmentPanel from '../components/DesignerAssignmentPanel';
 
 // Import extracted components
 import { 

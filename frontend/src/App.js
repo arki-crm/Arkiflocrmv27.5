@@ -161,6 +161,8 @@ const AppRouter = () => {
         
         {/* Finance/Accounting Routes */}
         <Route path="/finance/dashboard" element={<FinanceDashboard />} />
+        <Route path="/finance/sales-dashboard" element={<SalesDashboard />} />
+        <Route path="/finance/designer-dashboard" element={<DesignerDashboard />} />
         <Route path="/finance/founder-dashboard" element={<FounderDashboard />} />
         <Route path="/finance/cashbook" element={<CashBook />} />
         <Route path="/finance/booking-confirmations" element={<BookingConfirmations />} />

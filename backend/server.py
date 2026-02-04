@@ -8496,33 +8496,202 @@ async def apply_discount(project_id: str, discount: DiscountApplication, request
 
 @api_router.get("/projects/{project_id}/value-lifecycle")
 async def get_project_value_lifecycle(project_id: str, request: Request):
-    """Get complete value lifecycle data for analytics."""
+    """
+    Get complete 4-stage value lifecycle data for a project.
+    
+    Stages:
+    1. INQUIRY_VALUE - Pre-Sales estimate (for forecasting only)
+    2. BOOKED_VALUE - Auto-captured at first payment (immutable)
+    3. QUOTATION_HISTORY - Versioned quotations (append-only)
+    4. SIGNOFF_VALUE - Final contract value (locked at Design Sign-Off)
+    
+    IMPORTANT: Only signoff_value is used for financial calculations.
+    """
     user = await get_current_user(request)
     
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    contract_value = project.get("contract_value") or project.get("project_value") or 0
+    # Get values from each stage
+    inquiry_value = project.get("inquiry_value") or project.get("budget") or 0
+    booked_value = project.get("booked_value") or 0
+    quotation_history = project.get("quotation_history", [])
+    current_quotation_value = quotation_history[-1].get("quoted_value", 0) if quotation_history else 0
+    signoff_value = project.get("signoff_value")
     discount = project.get("discount_amount") or 0
+    
+    # Final value for financials (ONLY signoff_value if locked)
+    financial_value = signoff_value if project.get("signoff_locked") else None
     
     return {
         "project_id": project_id,
-        "inquiry_value": project.get("inquiry_value") or project.get("budget") or 0,
-        "quotation_history": project.get("quotation_history", []),
-        "booked_value": project.get("booked_value") or 0,
-        "contract_value": contract_value,
-        "contract_value_locked": project.get("contract_value_locked", False),
-        "contract_value_locked_at": project.get("contract_value_locked_at"),
-        "contract_value_overrides": project.get("contract_value_overrides", []),
+        "pid": project.get("pid"),
+        
+        # ========== 4-STAGE VALUE LIFECYCLE ==========
+        # Stage 1: INQUIRY VALUE (Pre-Sales)
+        "inquiry_value": inquiry_value,
+        
+        # Stage 2: BOOKED VALUE (Auto-captured at first payment)
+        "booked_value": booked_value,
+        "booked_value_locked": project.get("booked_value_locked", False),
+        "booked_value_locked_at": project.get("booked_value_locked_at"),
+        "booked_value_source": project.get("booked_value_source", "unknown"),
+        
+        # Stage 3: QUOTATION HISTORY (Versioned)
+        "quotation_history": quotation_history,
+        "current_quotation_value": current_quotation_value,
+        "quotation_revisions_count": len(quotation_history),
+        
+        # Stage 4: SIGNOFF VALUE (Final - Single Source of Truth for Finance)
+        "signoff_value": signoff_value,
+        "signoff_locked": project.get("signoff_locked", False),
+        "signoff_locked_at": project.get("signoff_locked_at"),
+        "signoff_locked_by_name": project.get("signoff_locked_by_name"),
+        "signoff_value_overrides": project.get("signoff_value_overrides", []),
+        
+        # ========== FINANCIAL CALCULATIONS ==========
+        # IMPORTANT: Use ONLY this value for revenue, cash flow, reports
+        "financial_value": financial_value,  # None if not locked yet
         "discount_amount": discount,
         "discount_reason": project.get("discount_reason"),
-        "discount_approved_by_name": project.get("discount_approved_by_name"),
-        "final_value": contract_value - discount,
-        # Analytics
-        "inquiry_to_booked_jump": (project.get("booked_value") or 0) - (project.get("inquiry_value") or project.get("budget") or 0),
-        "booked_to_contract_jump": contract_value - (project.get("booked_value") or 0),
-        "quotation_revisions_count": len(project.get("quotation_history", []))
+        "final_financial_value": (financial_value - discount) if financial_value else None,
+        
+        # ========== ANALYTICS ==========
+        "value_progression": {
+            "inquiry_to_booked": booked_value - inquiry_value if booked_value else None,
+            "booked_to_quotation": current_quotation_value - booked_value if current_quotation_value and booked_value else None,
+            "quotation_to_signoff": (signoff_value - current_quotation_value) if signoff_value and current_quotation_value else None
+        },
+        
+        # ========== STATUS FLAGS ==========
+        "status": {
+            "has_inquiry_value": inquiry_value > 0,
+            "has_booked_value": booked_value > 0,
+            "has_quotations": len(quotation_history) > 0,
+            "has_signoff_value": signoff_value is not None and signoff_value > 0,
+            "is_finance_ready": project.get("signoff_locked", False)  # Can be used in financial reports
+        },
+        
+        # Legacy compatibility
+        "contract_value": project.get("contract_value"),
+        "contract_value_locked": project.get("contract_value_locked", False)
+    }
+
+
+@api_router.post("/admin/migrate-project-values")
+async def migrate_project_values(request: Request):
+    """
+    Migration endpoint: Convert existing projects to new 4-stage value model.
+    
+    Rules:
+    - If contract_value_locked=True → migrate to signoff_value and lock
+    - If contract_value_locked=False → leave signoff_value blank (force manual sign-off)
+    - Preserve all existing values for audit
+    
+    Admin/Founder only.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Admin/Founder can run migration
+    if user_doc.get("role") not in ["Admin", "Founder"] and not user_doc.get("is_founder"):
+        raise HTTPException(status_code=403, detail="Only Admin/Founder can run migration")
+    
+    now = datetime.now(timezone.utc)
+    migrated_count = 0
+    skipped_count = 0
+    migration_results = []
+    
+    # Get all projects
+    projects = await db.projects.find({}).to_list(None)
+    
+    for project in projects:
+        project_id = project.get("project_id")
+        
+        # Skip if already migrated
+        if project.get("signoff_value") is not None:
+            skipped_count += 1
+            continue
+        
+        update_fields = {
+            "updated_at": now.isoformat()
+        }
+        
+        # Set inquiry_value if not exists
+        if not project.get("inquiry_value"):
+            update_fields["inquiry_value"] = project.get("budget") or 0
+        
+        # Set booked_value if not exists but has booking confirmation
+        if not project.get("booked_value") and project.get("booked_value_locked"):
+            # Already has booked_value_locked, preserve it
+            pass
+        elif not project.get("booked_value"):
+            # Try to infer from payments or quotation history
+            quotation_history = project.get("quotation_history", [])
+            if quotation_history:
+                update_fields["booked_value"] = quotation_history[0].get("quoted_value", 0)
+            else:
+                update_fields["booked_value"] = project.get("budget") or 0
+        
+        # Migration rule: If contract_value_locked=True, migrate to signoff_value
+        if project.get("contract_value_locked"):
+            contract_value = project.get("contract_value") or project.get("project_value") or 0
+            update_fields["signoff_value"] = contract_value
+            update_fields["signoff_locked"] = True
+            update_fields["signoff_locked_at"] = project.get("contract_value_locked_at") or now.isoformat()
+            update_fields["signoff_locked_by"] = project.get("contract_value_locked_by")
+            update_fields["signoff_locked_by_name"] = project.get("contract_value_locked_by_name") or "Migration"
+            
+            migration_results.append({
+                "project_id": project_id,
+                "action": "migrated_locked",
+                "signoff_value": contract_value
+            })
+        else:
+            # Leave signoff_value as None - requires manual sign-off
+            update_fields["signoff_value"] = None
+            update_fields["signoff_locked"] = False
+            
+            migration_results.append({
+                "project_id": project_id,
+                "action": "requires_manual_signoff",
+                "signoff_value": None
+            })
+        
+        # Add migration audit comment
+        migration_comment = {
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": "system",
+            "user_name": "System",
+            "role": "System",
+            "message": f"📊 Value Lifecycle Migration: Project migrated to 4-stage value model. "
+                       f"Signoff: {'₹{:,.0f} (locked)'.format(update_fields.get('signoff_value')) if update_fields.get('signoff_locked') else 'Requires manual sign-off'}",
+            "is_system": True,
+            "created_at": now.isoformat(),
+            "metadata": {
+                "type": "value_lifecycle_migration",
+                "migrated_by": user.user_id,
+                "migration_date": now.isoformat()
+            }
+        }
+        
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {
+                "$set": update_fields,
+                "$push": {"comments": migration_comment}
+            }
+        )
+        
+        migrated_count += 1
+    
+    return {
+        "success": True,
+        "message": f"Migration complete. Migrated: {migrated_count}, Skipped (already migrated): {skipped_count}",
+        "migrated_count": migrated_count,
+        "skipped_count": skipped_count,
+        "results": migration_results[:50]  # Limit results to first 50
     }
 
 

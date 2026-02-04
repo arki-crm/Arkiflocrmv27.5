@@ -46,7 +46,10 @@ import {
   Mail,
   RotateCcw,
   Package,
-  ClipboardList
+  ClipboardList,
+  FileMinus,
+  FilePlus,
+  PackageCheck
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 

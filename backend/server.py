@@ -3716,21 +3716,45 @@ async def get_project(project_id: str, request: Request):
         "client_requirements": project.get("client_requirements"),
         "lead_source": project.get("lead_source"),
         "budget": project.get("budget"),
-        "inquiry_value": project.get("inquiry_value") or project.get("budget"),  # Original inquiry value
+        
+        # ========== 4-STAGE VALUE LIFECYCLE ==========
+        # Stage 1: INQUIRY VALUE (Pre-Sales estimate)
+        "inquiry_value": project.get("inquiry_value") or project.get("budget") or 0,
+        
+        # Stage 2: BOOKED VALUE (Auto-captured at first payment, immutable)
+        "booked_value": project.get("booked_value") or 0,
+        "booked_value_locked": project.get("booked_value_locked", False),
+        "booked_value_locked_at": project.get("booked_value_locked_at"),
+        "booked_value_source": project.get("booked_value_source"),
+        
+        # Stage 3: QUOTATION HISTORY (Versioned, append-only)
+        "quotation_history": project.get("quotation_history", []),
+        "current_quotation_value": (project.get("quotation_history", [{}])[-1].get("quoted_value", 0) 
+                                    if project.get("quotation_history") else 0),
+        
+        # Stage 4: SIGNOFF VALUE (Final - ONLY use this for financials)
+        "signoff_value": project.get("signoff_value"),
+        "signoff_locked": project.get("signoff_locked", False),
+        "signoff_locked_at": project.get("signoff_locked_at"),
+        "signoff_locked_by": project.get("signoff_locked_by"),
+        "signoff_locked_by_name": project.get("signoff_locked_by_name"),
+        
+        # Legacy compatibility (DEPRECATED - use signoff_value)
         "project_value": project.get("project_value"),
-        "contract_value": project.get("contract_value") or project.get("project_value"),  # Contract/Sign-off value
-        # Value Lifecycle fields
-        "booked_value": project.get("booked_value") or 0,  # Value at booking (immutable)
+        "contract_value": project.get("contract_value") or project.get("signoff_value"),
         "contract_value_locked": project.get("contract_value_locked", False),
         "contract_value_locked_at": project.get("contract_value_locked_at"),
         "contract_value_locked_by": project.get("contract_value_locked_by"),
         "contract_value_locked_by_name": project.get("contract_value_locked_by_name"),
-        "quotation_history": project.get("quotation_history", []),  # Append-only log
+        
+        # Discount (applied after signoff_value)
         "discount_amount": project.get("discount_amount") or 0,
         "discount_reason": project.get("discount_reason"),
         "discount_approved_by": project.get("discount_approved_by"),
         "discount_approved_by_name": project.get("discount_approved_by_name"),
         "discount_approved_at": project.get("discount_approved_at"),
+        
+        # Status
         "stage": project["stage"],
         "hold_status": project.get("hold_status", "Active"),
         "hold_reason": project.get("hold_reason"),

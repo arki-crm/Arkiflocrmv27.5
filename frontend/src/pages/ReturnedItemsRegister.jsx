@@ -55,6 +55,9 @@ export default function ReturnedItemsRegister() {
   
   const [data, setData] = useState({ items: [], summary: {} });
   const [loading, setLoading] = useState(true);
+  const [exceptions, setExceptions] = useState([]);
+  const [exceptionsLoading, setExceptionsLoading] = useState(true);
+  const [showExceptions, setShowExceptions] = useState(true);
   
   // Filters
   const [filters, setFilters] = useState({
@@ -67,6 +70,7 @@ export default function ReturnedItemsRegister() {
 
   useEffect(() => {
     fetchRegister();
+    fetchExceptions();
   }, [filters]);
 
   const fetchRegister = async () => {
@@ -88,6 +92,20 @@ export default function ReturnedItemsRegister() {
       toast.error('Failed to load returned items register');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchExceptions = async () => {
+    try {
+      setExceptionsLoading(true);
+      const response = await axios.get(`${API}/finance/returns/exceptions`, {
+        withCredentials: true
+      });
+      setExceptions(response.data.exceptions || []);
+    } catch (err) {
+      console.error('Failed to fetch exceptions:', err);
+    } finally {
+      setExceptionsLoading(false);
     }
   };
 

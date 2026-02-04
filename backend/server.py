@@ -3210,9 +3210,17 @@ async def update_user_permissions(user_id: str, perm_data: PermissionsUpdate, re
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Cannot modify another Admin's permissions
+    # FOUNDER PROTECTION: Cannot modify Founder's permissions (they always have all)
+    if is_founder_email(target_user.get("email", "")):
+        raise HTTPException(
+            status_code=403, 
+            detail="Cannot modify System Owner's permissions. They always have full access."
+        )
+    
+    # Cannot modify another Admin's permissions (unless you're Founder)
     if target_user.get("role") == "Admin" and user.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Cannot modify another Admin's permissions")
+        if not is_founder(user_doc):
+            raise HTTPException(status_code=403, detail="Cannot modify another Admin's permissions")
     
     # Validate permissions
     all_valid_permissions = []

@@ -3289,10 +3289,20 @@ async def update_user(user_id: str, update_data: UserUpdate, request: Request):
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # FOUNDER PROTECTION: Cannot modify Founder's role or status
+    if is_founder_email(target_user.get("email", "")):
+        if update_data.role is not None or update_data.status is not None:
+            raise HTTPException(
+                status_code=403, 
+                detail="Cannot modify System Owner's role or status. This account is protected."
+            )
+    
     # Cannot edit users with admin.manage_users permission unless you're editing yourself
     target_user_doc = await db.users.find_one({"user_id": user_id})
     if has_permission(target_user_doc, "admin.manage_users") and user.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Cannot edit users with admin permissions")
+        # Exception: Founder can edit anyone
+        if not is_founder(user_doc):
+            raise HTTPException(status_code=403, detail="Cannot edit users with admin permissions")
     
     # Validate role if provided
     if update_data.role and update_data.role not in VALID_ROLES:

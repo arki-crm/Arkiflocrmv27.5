@@ -72,9 +72,11 @@ export const AuthProvider = ({ children }) => {
     logout,
     checkAuth,
     setUserFromCallback,
-    // Permission helper - checks effective_permissions array only (no role shortcuts)
+    // Permission helper - checks effective_permissions array, Founder bypasses all
     hasPermission: (permission) => {
       if (!user) return false;
+      // Founder has all permissions
+      if (user.is_founder || user.role === 'Founder') return true;
       // Check effective permissions - this is the SINGLE source of truth
       return (user.effective_permissions || []).includes(permission);
     }

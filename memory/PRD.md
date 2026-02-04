@@ -9,7 +9,54 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: 4-Stage Value Lifecycle COMPLETE ✅
+## Current Status: Finance Dashboard (Phase 1) COMPLETE ✅
+**As of February 4, 2026**
+
+### Implemented: Role-Based Dashboards Architecture
+
+#### 1. Finance Dashboard (Sign-Off Value ONLY) ✅
+**Access:** Finance roles + Admin + Founder
+
+| Metric | Description |
+|--------|-------------|
+| Sign-Off Value | Total from `signoff_value` (locked projects only) |
+| Amount Collected | Sum of receipts by project |
+| Pending | Sign-Off Value - Collected |
+| Collection % | Collected / Sign-Off Value |
+
+**Features:**
+- Clear "Sign-Off Value Only" indicator with tooltip
+- Financial Year default (Apr-Mar), with MTD/QTD/Custom options
+- Project-wise payment status table
+- Excludes cancelled projects
+
+#### 2. New Data Model Fields
+| Field | Purpose |
+|-------|---------|
+| `primary_designer_id` | Single accountable owner (locked after booking) |
+| `primary_designer_name` | Name for display |
+| `assigned_presales_id` | Pre-Sales attribution |
+| `stage: "Cancelled"` | Explicit cancellation stage |
+| `cancellation_reason` | Mandatory dropdown |
+| `cancelled_value` | Preserved for funnel analysis |
+
+#### 3. Project Cancellation System
+- Mandatory reason dropdown
+- Captures `cancelled_value` automatically
+- Cancelled projects: 
+  - ❌ NEVER in Finance Dashboard
+  - ✅ ALWAYS in Funnel & Designer dashboards
+
+### New API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/dashboards/finance` | GET | Finance Dashboard data |
+| `/api/projects/{id}/cancel` | POST | Cancel project with reason |
+| `/api/cancellation-reasons` | GET | Get cancellation reasons list |
+
+---
+
+## Previous Status: 4-Stage Value Lifecycle COMPLETE ✅
 **As of February 4, 2026**
 
 ### Redesigned Project Value System

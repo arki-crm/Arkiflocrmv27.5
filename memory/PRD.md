@@ -9,13 +9,15 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Finance Dashboard (Phase 1) COMPLETE ✅
+## Current Status: Role-Based Dashboards COMPLETE ✅
 **As of February 4, 2026**
 
-### Implemented: Role-Based Dashboards Architecture
+### Implemented: Three Role-Based, Purpose-Driven Dashboards
 
 #### 1. Finance Dashboard (Sign-Off Value ONLY) ✅
 **Access:** Finance roles + Admin + Founder
+**Route:** `/finance/dashboard`
+**API:** `GET /api/dashboards/finance`
 
 | Metric | Description |
 |--------|-------------|
@@ -30,7 +32,69 @@ Build a full-stack CRM application for an interior design company, managing the 
 - Project-wise payment status table
 - Excludes cancelled projects
 
-#### 2. New Data Model Fields
+#### 2. Sales & Funnel Analysis Dashboard ✅ (NEW)
+**Access:** Admin, Founder, SalesManager
+**Route:** `/finance/sales-dashboard`
+**API:** `GET /api/dashboards/sales`
+
+| Metric | Description |
+|--------|-------------|
+| Inquiry Value | Total from leads + projects (with counts) |
+| Booked Value | Locked at first payment (with counts) |
+| Sign-Off Value | Final contract value (with counts) |
+| Cancelled Value | Lost value from cancellations (with counts) |
+| Conversion Rates | Inquiry→Booked %, Booked→Sign-Off % |
+| Value Changes | Absolute and % change between stages |
+
+**Features:**
+- Full value lifecycle tracking (Inquiry → Booked → Sign-Off)
+- Visual conversion funnel with counts
+- Value change analysis (drop/gain between stages)
+- Stage-wise breakdown (collapsible)
+- Cancelled projects list with reasons
+- Period filtering: FY, MTD, QTD, Custom Range
+- Tooltips explaining each value source
+
+#### 3. Designer Performance Dashboard ✅ (NEW)
+**Access:** Admin, Founder, DesignManager
+**Route:** `/finance/designer-dashboard`
+**API:** `GET /api/dashboards/designer`
+
+| Metric | Description |
+|--------|-------------|
+| Total Booked Value | Team total from booked projects |
+| Total Sign-Off Value | Team total from finalized contracts |
+| Net Value Change | Sign-Off minus Booked (team) |
+| Active Designers | Designers with projects |
+| Per-Designer Metrics | Booked/Sign-Off/Net Change/Retention |
+
+**Features:**
+- Team summary cards
+- Designer-wise performance breakdown (expandable rows)
+- Monthly trend breakdown per designer (time-based performance)
+- Project list per designer
+- Retention rate (non-cancelled / total)
+- Value contribution percentage
+- Period filtering: FY, MTD, QTD, Custom Range with custom date inputs
+- Tooltips explaining value sources
+
+### New API Endpoints (Dashboards)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/dashboards/finance` | GET | Finance Dashboard (Sign-Off Only) |
+| `/api/dashboards/sales` | GET | Sales & Funnel Analysis Dashboard |
+| `/api/dashboards/designer` | GET | Designer Performance Dashboard |
+| `/api/projects/{id}/cancel` | POST | Cancel project with reason |
+| `/api/cancellation-reasons` | GET | Get cancellation reasons list |
+
+### Dashboard Data Sources (NON-NEGOTIABLE)
+| Dashboard | Data Source | Excludes |
+|-----------|-------------|----------|
+| Finance | `signoff_value` ONLY | inquiry_value, booked_value, cancelled |
+| Sales & Funnel | inquiry_value, booked_value, signoff_value | None (shows all including cancelled) |
+| Designer | booked_value, signoff_value per primary_designer_id | None (shows all including cancelled) |
+
+### New Data Model Fields
 | Field | Purpose |
 |-------|---------|
 | `primary_designer_id` | Single accountable owner (locked after booking) |
@@ -40,19 +104,12 @@ Build a full-stack CRM application for an interior design company, managing the 
 | `cancellation_reason` | Mandatory dropdown |
 | `cancelled_value` | Preserved for funnel analysis |
 
-#### 3. Project Cancellation System
+### Project Cancellation System
 - Mandatory reason dropdown
 - Captures `cancelled_value` automatically
 - Cancelled projects: 
   - ❌ NEVER in Finance Dashboard
-  - ✅ ALWAYS in Funnel & Designer dashboards
-
-### New API Endpoints
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/dashboards/finance` | GET | Finance Dashboard data |
-| `/api/projects/{id}/cancel` | POST | Cancel project with reason |
-| `/api/cancellation-reasons` | GET | Get cancellation reasons list |
+  - ✅ ALWAYS in Sales Funnel & Designer dashboards
 
 ---
 

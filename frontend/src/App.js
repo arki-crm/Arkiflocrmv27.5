@@ -73,6 +73,8 @@ import ProjectProfitabilityReport from './pages/ProjectProfitabilityReport';
 import BookingConfirmations from './pages/BookingConfirmations';
 import MilestonePaymentConfirmations from './pages/MilestonePaymentConfirmations';
 import FinanceDashboard from './pages/FinanceDashboard';
+import SalesDashboard from './pages/SalesDashboard';
+import DesignerDashboard from './pages/DesignerDashboard';
 
 // BUCKET 1 - Operational Hygiene
 import AuditTrail from './pages/AuditTrail';

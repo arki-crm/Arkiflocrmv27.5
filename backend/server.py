@@ -10010,6 +10010,13 @@ async def get_designer_performance_dashboard(
         "dashboard_type": "designer_performance",
         "value_sources_tooltip": "This dashboard tracks designer performance: Booked Value (at first payment) and Sign-Off Value (final contract). Net change shows value gained/lost during design process.",
         
+        "attribution_rules": {
+            "sign_off": "Primary designer at time of sign-off",
+            "cancelled": "Primary designer at time of cancellation",
+            "active": "Current Primary designer",
+            "note": "Designer assignments track full history - mid-project changes preserve accountability"
+        },
+        
         "period": {
             "type": period,
             "label": period_label,

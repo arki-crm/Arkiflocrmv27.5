@@ -1439,8 +1439,6 @@ async def local_login(credentials: LocalLoginRequest, response: Response):
     Local login for testing outside Emergent environment.
     This does NOT replace Google OAuth - it's an additional option for local testing.
     """
-    logger.info(f"Local login attempt for: {credentials.email}")
-    
     # Find user by email with local password
     user_doc = await db.users.find_one(
         {"email": credentials.email, "local_password": {"$exists": True}},
@@ -1448,18 +1446,10 @@ async def local_login(credentials: LocalLoginRequest, response: Response):
     )
     
     if not user_doc:
-        logger.warning(f"User not found: {credentials.email}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    logger.info(f"User found: {user_doc.get('email')}, role: {user_doc.get('role')}")
-    
     # Verify password
-    stored_pw = user_doc.get("local_password", "")
-    expected_pw = hash_password(credentials.password)
-    logger.info(f"Password check - stored: {stored_pw[:20]}..., expected: {expected_pw[:20]}...")
-    
-    if not verify_password(credentials.password, stored_pw):
-        logger.warning(f"Password mismatch for: {credentials.email}")
+    if not verify_password(credentials.password, user_doc.get("local_password", "")):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
     # Check if user is active

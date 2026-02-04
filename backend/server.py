@@ -9047,7 +9047,8 @@ async def get_sales_funnel_dashboard(
     request: Request,
     period: str = "fy",  # fy (default), mtd, qtd, custom
     from_date: Optional[str] = None,
-    to_date: Optional[str] = None
+    to_date: Optional[str] = None,
+    designer_id: Optional[str] = None  # NEW: Filter by designer
 ):
     """
     SALES & FUNNEL ANALYSIS DASHBOARD
@@ -9065,6 +9066,10 @@ async def get_sales_funnel_dashboard(
     - Conversion rates: Inquiry→Booked, Booked→Sign-Off
     - Value drop/gain analysis between stages
     - Stage-wise project breakdown
+    
+    Filters:
+    - period: fy, mtd, qtd, custom
+    - designer_id: Filter by primary_designer_id
     """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})

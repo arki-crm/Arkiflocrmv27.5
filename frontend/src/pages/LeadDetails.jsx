@@ -363,6 +363,7 @@ const LeadStagesPanel = ({
   isUpdating,
   designerDetails,
   onAssignDesigner,
+  onRemoveDesigner,
   canAssignDesigner,
   onConvertToProject,
   canConvert,

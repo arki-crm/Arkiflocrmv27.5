@@ -9759,7 +9759,12 @@ async def get_designer_performance_dashboard(
     Access: Admin, Founder, DesignManager
     
     Purpose: Track designer value contribution and performance.
-    Metrics grouped by primary_designer_id.
+    
+    ATTRIBUTION RULES (Fair Accountability):
+    - Sign-Off Value: Attributed to Primary designer at time of sign-off
+    - Cancelled Value: Attributed to Primary designer at time of cancellation
+    - Booked Value: Attributed to Primary designer at time of booking
+    - Active Projects: Attributed to current Primary designer
     
     Per Designer Metrics:
     - Total Booked Value handled
@@ -9802,9 +9807,41 @@ async def get_designer_performance_dashboard(
     # Get ALL projects (including cancelled) for designer analysis
     projects = await db.projects.find({}, {"_id": 0}).to_list(None)
     
+    # Get all designer assignments for attribution lookup
+    all_assignments = await db.designer_assignments.find({}, {"_id": 0}).to_list(None)
+    
+    # Build assignment lookup by project
+    project_assignments = {}
+    for a in all_assignments:
+        pid = a.get("project_id")
+        if pid not in project_assignments:
+            project_assignments[pid] = []
+        project_assignments[pid].append(a)
+    
     # Get all users for designer names
     users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "role": 1}).to_list(None)
     user_map = {u["user_id"]: u for u in users}
+    
+    def get_primary_at_timestamp(project_id: str, timestamp: str) -> Optional[str]:
+        """Get Primary designer_id active at given timestamp"""
+        assignments = project_assignments.get(project_id, [])
+        for a in assignments:
+            if a.get("role") != "Primary":
+                continue
+            assigned_from = a.get("assigned_from", "")
+            assigned_to = a.get("assigned_to")
+            if assigned_from <= timestamp:
+                if assigned_to is None or assigned_to > timestamp:
+                    return a.get("designer_id")
+        return None
+    
+    def get_current_primary(project_id: str) -> Optional[str]:
+        """Get current active Primary designer_id"""
+        assignments = project_assignments.get(project_id, [])
+        for a in assignments:
+            if a.get("role") == "Primary" and a.get("assigned_to") is None:
+                return a.get("designer_id")
+        return None
     
     # Designer metrics dictionary
     designer_metrics = {}
@@ -9815,18 +9852,36 @@ async def get_designer_performance_dashboard(
     total_projects = 0
     
     for project in projects:
-        designer_id = project.get("primary_designer_id")
-        if not designer_id:
-            designer_id = "unassigned"
+        project_id = project.get("project_id")
+        stage = project.get("stage", "Unknown")
+        
+        # Determine attribution based on project status
+        if stage == "Cancelled":
+            # Cancelled: Attribute to Primary at cancellation time
+            cancelled_at = project.get("cancelled_at", project.get("updated_at", ""))
+            attributed_designer = get_primary_at_timestamp(project_id, cancelled_at)
+        elif project.get("signoff_locked"):
+            # Signed-off: Attribute to Primary at sign-off time
+            signoff_at = project.get("signoff_locked_at", project.get("updated_at", ""))
+            attributed_designer = get_primary_at_timestamp(project_id, signoff_at)
+        else:
+            # Active/In-progress: Attribute to current Primary
+            attributed_designer = get_current_primary(project_id)
+        
+        # Fallback to project's primary_designer_id if no assignment found
+        if not attributed_designer:
+            attributed_designer = project.get("primary_designer_id")
+        
+        if not attributed_designer:
+            attributed_designer = "unassigned"
         
         # Initialize designer entry if not exists
-        if designer_id not in designer_metrics:
-            designer_name = project.get("primary_designer_name")
-            if not designer_name and designer_id != "unassigned":
-                user_data = user_map.get(designer_id, {})
-                designer_name = user_data.get("name", "Unknown")
-            designer_metrics[designer_id] = {
-                "designer_id": designer_id,
+        if attributed_designer not in designer_metrics:
+            designer_name = user_map.get(attributed_designer, {}).get("name")
+            if not designer_name and attributed_designer != "unassigned":
+                designer_name = project.get("primary_designer_name", "Unknown")
+            designer_metrics[attributed_designer] = {
+                "designer_id": attributed_designer,
                 "designer_name": designer_name or "Unassigned",
                 "total_booked_value": 0,
                 "total_signoff_value": 0,
@@ -9841,8 +9896,7 @@ async def get_designer_performance_dashboard(
                 "monthly_breakdown": {}
             }
         
-        dm = designer_metrics[designer_id]
-        stage = project.get("stage", "Unknown")
+        dm = designer_metrics[attributed_designer]
         
         # Get values
         booked_value = project.get("booked_value") or 0

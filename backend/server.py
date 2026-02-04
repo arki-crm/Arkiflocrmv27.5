@@ -3746,7 +3746,8 @@ async def get_project(project_id: str, request: Request):
         "completed_substages": project.get("completed_substages", []),
         "percentage_substages": project.get("percentage_substages", {}),
         # GST Settings for customer invoices
-        "gst_applicable": project.get("gst_applicable") or project.get("is_gst_applicable", False),
+        "is_gst_applicable": project.get("is_gst_applicable") or project.get("gst_applicable", False),
+        "gst_applicable": project.get("is_gst_applicable") or project.get("gst_applicable", False),  # Keep for backward compat
         "gst_number": project.get("gst_number"),
         "updated_at": updated_at,
         "created_at": created_at

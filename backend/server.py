@@ -3489,7 +3489,20 @@ async def list_users(request: Request):
 @api_router.put("/auth/users/{user_id}/role")
 async def update_user_role(user_id: str, role_update: RoleUpdateRequest, request: Request):
     """Update user role (Admin only) - Legacy endpoint"""
-    await require_admin(request)
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check if user is admin or founder
+    if not has_permission(user_doc, "admin.manage_users"):
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # FOUNDER PROTECTION: Cannot change Founder's role
+    target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if target_user and is_founder_email(target_user.get("email", "")):
+        raise HTTPException(
+            status_code=403, 
+            detail="Cannot change System Owner's role. This account is protected."
+        )
     
     if role_update.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {VALID_ROLES}")

@@ -9040,6 +9040,498 @@ async def get_finance_dashboard(
     }
 
 
+# ============ SALES & FUNNEL ANALYSIS DASHBOARD ============
+
+@api_router.get("/dashboards/sales")
+async def get_sales_funnel_dashboard(
+    request: Request,
+    period: str = "fy",  # fy (default), mtd, qtd, custom
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """
+    SALES & FUNNEL ANALYSIS DASHBOARD
+    
+    Access: Admin, Founder, SalesManager
+    
+    Purpose: Track value lifecycle from Inquiry → Booked → Sign-Off
+    Analyze conversions, value changes (drop/gain), and cancellation impact.
+    
+    Metrics (with counts alongside values):
+    - Total Inquiry Value (count of inquiries)
+    - Total Booked Value (count of booked projects)
+    - Total Sign-Off Value (count of signed-off projects)
+    - Total Cancelled Value (count of cancelled projects)
+    - Conversion rates: Inquiry→Booked, Booked→Sign-Off
+    - Value drop/gain analysis between stages
+    - Stage-wise project breakdown
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Access control: Admin, Founder, SalesManager, or admin permissions
+    allowed_roles = ["Admin", "Founder", "SalesManager"]
+    if user_doc.get("role") not in allowed_roles and not user_doc.get("is_founder"):
+        if not has_permission(user_doc, "admin.view_reports"):
+            raise HTTPException(status_code=403, detail="Access denied. Sales Dashboard requires Sales Manager or Admin permissions.")
+    
+    # Determine date range based on period
+    if period == "mtd":
+        today = datetime.now(timezone.utc)
+        start_date = datetime(today.year, today.month, 1).strftime("%Y-%m-%d")
+        end_date = today.strftime("%Y-%m-%d")
+        period_label = "Month to Date"
+    elif period == "qtd":
+        today = datetime.now(timezone.utc)
+        quarter_month = ((today.month - 1) // 3) * 3 + 1
+        start_date = datetime(today.year, quarter_month, 1).strftime("%Y-%m-%d")
+        end_date = today.strftime("%Y-%m-%d")
+        period_label = "Quarter to Date"
+    elif period == "custom" and from_date and to_date:
+        start_date = from_date
+        end_date = to_date
+        period_label = f"{from_date} to {to_date}"
+    else:  # Default: Financial Year
+        start_date, end_date = get_financial_year_range()
+        period_label = f"FY {start_date[:4]}-{int(start_date[:4])+1}"
+    
+    # Get ALL projects (including cancelled) for funnel analysis
+    projects = await db.projects.find({}, {"_id": 0}).to_list(None)
+    
+    # Get ALL leads for inquiry value tracking
+    leads = await db.leads.find({}, {"_id": 0}).to_list(None)
+    
+    # Initialize counters
+    total_inquiry_value = 0
+    total_booked_value = 0
+    total_signoff_value = 0
+    total_cancelled_value = 0
+    
+    inquiry_count = 0
+    booked_count = 0
+    signoff_count = 0
+    cancelled_count = 0
+    
+    # Stage-wise breakdown
+    stage_breakdown = {}
+    
+    # Value changes tracking
+    inquiry_to_booked_changes = []
+    booked_to_signoff_changes = []
+    
+    # Cancelled projects detail
+    cancelled_projects = []
+    
+    # Process leads for inquiry values (leads that haven't converted yet)
+    for lead in leads:
+        if not lead.get("is_converted"):
+            inquiry_value = lead.get("budget") or lead.get("inquiry_value") or 0
+            if inquiry_value > 0:
+                total_inquiry_value += inquiry_value
+                inquiry_count += 1
+    
+    # Process projects
+    for project in projects:
+        # Get all value types
+        inquiry_value = project.get("inquiry_value") or project.get("budget") or 0
+        booked_value = project.get("booked_value") or 0
+        signoff_value = project.get("signoff_value") or 0
+        cancelled_value = project.get("cancelled_value") or 0
+        
+        # Add to inquiry totals (converted leads)
+        if inquiry_value > 0:
+            total_inquiry_value += inquiry_value
+            inquiry_count += 1
+        
+        stage = project.get("stage", "Unknown")
+        
+        # Handle cancelled projects
+        if stage == "Cancelled":
+            cancelled_count += 1
+            total_cancelled_value += cancelled_value
+            cancelled_projects.append({
+                "project_id": project.get("project_id"),
+                "pid": project.get("pid"),
+                "client_name": project.get("client_name"),
+                "cancelled_value": cancelled_value,
+                "cancellation_reason": project.get("cancellation_reason"),
+                "cancelled_at": project.get("cancelled_at"),
+                "primary_designer": project.get("primary_designer_name")
+            })
+            continue
+        
+        # Track booked values (where booked_value_locked=True)
+        if project.get("booked_value_locked") and booked_value > 0:
+            total_booked_value += booked_value
+            booked_count += 1
+            
+            # Track inquiry to booked change
+            if inquiry_value > 0:
+                change = booked_value - inquiry_value
+                change_pct = (change / inquiry_value * 100) if inquiry_value > 0 else 0
+                inquiry_to_booked_changes.append({
+                    "project_id": project.get("project_id"),
+                    "pid": project.get("pid"),
+                    "inquiry_value": inquiry_value,
+                    "booked_value": booked_value,
+                    "change": change,
+                    "change_percent": round(change_pct, 1)
+                })
+        
+        # Track signoff values (where signoff_locked=True)
+        if project.get("signoff_locked") and signoff_value > 0:
+            total_signoff_value += signoff_value
+            signoff_count += 1
+            
+            # Track booked to signoff change
+            if booked_value > 0:
+                change = signoff_value - booked_value
+                change_pct = (change / booked_value * 100) if booked_value > 0 else 0
+                booked_to_signoff_changes.append({
+                    "project_id": project.get("project_id"),
+                    "pid": project.get("pid"),
+                    "booked_value": booked_value,
+                    "signoff_value": signoff_value,
+                    "change": change,
+                    "change_percent": round(change_pct, 1)
+                })
+        
+        # Stage breakdown
+        if stage not in stage_breakdown:
+            stage_breakdown[stage] = {"count": 0, "inquiry_value": 0, "booked_value": 0, "signoff_value": 0}
+        stage_breakdown[stage]["count"] += 1
+        stage_breakdown[stage]["inquiry_value"] += inquiry_value
+        stage_breakdown[stage]["booked_value"] += booked_value
+        stage_breakdown[stage]["signoff_value"] += signoff_value
+    
+    # Calculate conversion rates
+    inquiry_to_booked_rate = (booked_count / inquiry_count * 100) if inquiry_count > 0 else 0
+    booked_to_signoff_rate = (signoff_count / booked_count * 100) if booked_count > 0 else 0
+    
+    # Calculate value retention/loss
+    inquiry_to_booked_value_change = total_booked_value - total_inquiry_value
+    inquiry_to_booked_value_pct = ((total_booked_value / total_inquiry_value - 1) * 100) if total_inquiry_value > 0 else 0
+    
+    booked_to_signoff_value_change = total_signoff_value - total_booked_value
+    booked_to_signoff_value_pct = ((total_signoff_value / total_booked_value - 1) * 100) if total_booked_value > 0 else 0
+    
+    # Aggregate drop/gain analysis
+    positive_changes_inquiry_to_booked = sum(1 for c in inquiry_to_booked_changes if c["change"] > 0)
+    negative_changes_inquiry_to_booked = sum(1 for c in inquiry_to_booked_changes if c["change"] < 0)
+    
+    positive_changes_booked_to_signoff = sum(1 for c in booked_to_signoff_changes if c["change"] > 0)
+    negative_changes_booked_to_signoff = sum(1 for c in booked_to_signoff_changes if c["change"] < 0)
+    
+    # Sort stage breakdown by order
+    sorted_stages = []
+    for stage in ALL_PROJECT_STAGES:
+        if stage in stage_breakdown:
+            sorted_stages.append({
+                "stage": stage,
+                **stage_breakdown[stage]
+            })
+    
+    return {
+        "dashboard_type": "sales_funnel",
+        "value_sources_tooltip": "This dashboard tracks the value lifecycle: Inquiry Value → Booked Value → Sign-Off Value. All values are shown for complete funnel analysis.",
+        
+        "period": {
+            "type": period,
+            "label": period_label,
+            "from_date": start_date,
+            "to_date": end_date
+        },
+        
+        "funnel_summary": {
+            "inquiry": {
+                "label": "Inquiry Value",
+                "tooltip": "Initial estimated project value from customer inquiry/budget",
+                "total_value": total_inquiry_value,
+                "count": inquiry_count
+            },
+            "booked": {
+                "label": "Booked Value",
+                "tooltip": "Value locked at first payment (quotation value when booking received)",
+                "total_value": total_booked_value,
+                "count": booked_count
+            },
+            "signoff": {
+                "label": "Sign-Off Value",
+                "tooltip": "Final contracted value locked at design sign-off milestone",
+                "total_value": total_signoff_value,
+                "count": signoff_count
+            },
+            "cancelled": {
+                "label": "Cancelled Value",
+                "tooltip": "Total value lost from cancelled projects (captured at cancellation)",
+                "total_value": total_cancelled_value,
+                "count": cancelled_count
+            }
+        },
+        
+        "conversion_rates": {
+            "inquiry_to_booked": {
+                "rate": round(inquiry_to_booked_rate, 1),
+                "label": "Inquiry → Booked"
+            },
+            "booked_to_signoff": {
+                "rate": round(booked_to_signoff_rate, 1),
+                "label": "Booked → Sign-Off"
+            }
+        },
+        
+        "value_changes": {
+            "inquiry_to_booked": {
+                "absolute_change": inquiry_to_booked_value_change,
+                "percent_change": round(inquiry_to_booked_value_pct, 1),
+                "projects_with_increase": positive_changes_inquiry_to_booked,
+                "projects_with_decrease": negative_changes_inquiry_to_booked,
+                "label": "Inquiry → Booked"
+            },
+            "booked_to_signoff": {
+                "absolute_change": booked_to_signoff_value_change,
+                "percent_change": round(booked_to_signoff_value_pct, 1),
+                "projects_with_increase": positive_changes_booked_to_signoff,
+                "projects_with_decrease": negative_changes_booked_to_signoff,
+                "label": "Booked → Sign-Off"
+            }
+        },
+        
+        "stage_breakdown": sorted_stages,
+        
+        "cancelled_projects": cancelled_projects,
+        
+        "generated_at": datetime.now(timezone.utc).isoformat()
+    }
+
+
+# ============ DESIGNER PERFORMANCE DASHBOARD ============
+
+@api_router.get("/dashboards/designer")
+async def get_designer_performance_dashboard(
+    request: Request,
+    period: str = "fy",  # fy (default), mtd, qtd, custom
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """
+    DESIGNER PERFORMANCE DASHBOARD
+    
+    Access: Admin, Founder, DesignManager
+    
+    Purpose: Track designer value contribution and performance.
+    Metrics grouped by primary_designer_id.
+    
+    Per Designer Metrics:
+    - Total Booked Value handled
+    - Total Sign-Off Value achieved
+    - Net value change (booked → signoff)
+    - Project count (active, completed, cancelled)
+    - Retention rate (non-cancelled)
+    
+    Time-based performance with custom date filters.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Access control: Admin, Founder, DesignManager
+    allowed_roles = ["Admin", "Founder", "DesignManager"]
+    if user_doc.get("role") not in allowed_roles and not user_doc.get("is_founder"):
+        if not has_permission(user_doc, "admin.view_reports"):
+            raise HTTPException(status_code=403, detail="Access denied. Designer Dashboard requires Design Manager or Admin permissions.")
+    
+    # Determine date range based on period
+    if period == "mtd":
+        today = datetime.now(timezone.utc)
+        start_date = datetime(today.year, today.month, 1).strftime("%Y-%m-%d")
+        end_date = today.strftime("%Y-%m-%d")
+        period_label = "Month to Date"
+    elif period == "qtd":
+        today = datetime.now(timezone.utc)
+        quarter_month = ((today.month - 1) // 3) * 3 + 1
+        start_date = datetime(today.year, quarter_month, 1).strftime("%Y-%m-%d")
+        end_date = today.strftime("%Y-%m-%d")
+        period_label = "Quarter to Date"
+    elif period == "custom" and from_date and to_date:
+        start_date = from_date
+        end_date = to_date
+        period_label = f"{from_date} to {to_date}"
+    else:  # Default: Financial Year
+        start_date, end_date = get_financial_year_range()
+        period_label = f"FY {start_date[:4]}-{int(start_date[:4])+1}"
+    
+    # Get ALL projects (including cancelled) for designer analysis
+    projects = await db.projects.find({}, {"_id": 0}).to_list(None)
+    
+    # Get all users for designer names
+    users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "role": 1}).to_list(None)
+    user_map = {u["user_id"]: u for u in users}
+    
+    # Designer metrics dictionary
+    designer_metrics = {}
+    
+    # Totals for comparison
+    total_booked_all = 0
+    total_signoff_all = 0
+    total_projects = 0
+    
+    for project in projects:
+        designer_id = project.get("primary_designer_id")
+        if not designer_id:
+            designer_id = "unassigned"
+        
+        # Initialize designer entry if not exists
+        if designer_id not in designer_metrics:
+            designer_name = project.get("primary_designer_name")
+            if not designer_name and designer_id != "unassigned":
+                user_data = user_map.get(designer_id, {})
+                designer_name = user_data.get("name", "Unknown")
+            designer_metrics[designer_id] = {
+                "designer_id": designer_id,
+                "designer_name": designer_name or "Unassigned",
+                "total_booked_value": 0,
+                "total_signoff_value": 0,
+                "net_value_change": 0,
+                "project_count": 0,
+                "active_projects": 0,
+                "completed_projects": 0,
+                "cancelled_projects": 0,
+                "cancelled_value": 0,
+                "projects": [],
+                # Monthly breakdown for trend analysis
+                "monthly_breakdown": {}
+            }
+        
+        dm = designer_metrics[designer_id]
+        stage = project.get("stage", "Unknown")
+        
+        # Get values
+        booked_value = project.get("booked_value") or 0
+        signoff_value = project.get("signoff_value") or 0
+        cancelled_value = project.get("cancelled_value") or 0
+        
+        # Track totals
+        dm["project_count"] += 1
+        total_projects += 1
+        
+        # Handle cancelled projects
+        if stage == "Cancelled":
+            dm["cancelled_projects"] += 1
+            dm["cancelled_value"] += cancelled_value
+        elif stage in ["Handover", "Completed"]:
+            dm["completed_projects"] += 1
+        else:
+            dm["active_projects"] += 1
+        
+        # Add values (only from booked projects)
+        if project.get("booked_value_locked") and booked_value > 0:
+            dm["total_booked_value"] += booked_value
+            total_booked_all += booked_value
+        
+        if project.get("signoff_locked") and signoff_value > 0:
+            dm["total_signoff_value"] += signoff_value
+            total_signoff_all += signoff_value
+        
+        # Monthly breakdown for trend
+        created_at = project.get("created_at")
+        if created_at:
+            try:
+                if isinstance(created_at, str):
+                    created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                else:
+                    created_dt = created_at
+                month_key = created_dt.strftime("%Y-%m")
+                
+                if month_key not in dm["monthly_breakdown"]:
+                    dm["monthly_breakdown"][month_key] = {
+                        "month": month_key,
+                        "booked_value": 0,
+                        "signoff_value": 0,
+                        "project_count": 0
+                    }
+                dm["monthly_breakdown"][month_key]["project_count"] += 1
+                if project.get("booked_value_locked"):
+                    dm["monthly_breakdown"][month_key]["booked_value"] += booked_value
+                if project.get("signoff_locked"):
+                    dm["monthly_breakdown"][month_key]["signoff_value"] += signoff_value
+            except (ValueError, TypeError):
+                pass
+        
+        # Project detail
+        dm["projects"].append({
+            "project_id": project.get("project_id"),
+            "pid": project.get("pid"),
+            "client_name": project.get("client_name"),
+            "stage": stage,
+            "booked_value": booked_value,
+            "signoff_value": signoff_value,
+            "status": "Cancelled" if stage == "Cancelled" else ("Completed" if stage in ["Handover", "Completed"] else "Active")
+        })
+    
+    # Calculate net value change and retention for each designer
+    designer_list = []
+    for designer_id, dm in designer_metrics.items():
+        dm["net_value_change"] = dm["total_signoff_value"] - dm["total_booked_value"]
+        dm["net_value_change_percent"] = round(
+            (dm["net_value_change"] / dm["total_booked_value"] * 100) if dm["total_booked_value"] > 0 else 0, 1
+        )
+        
+        # Retention rate (non-cancelled / total)
+        non_cancelled = dm["project_count"] - dm["cancelled_projects"]
+        dm["retention_rate"] = round(
+            (non_cancelled / dm["project_count"] * 100) if dm["project_count"] > 0 else 0, 1
+        )
+        
+        # Convert monthly_breakdown dict to sorted list
+        dm["monthly_breakdown"] = sorted(
+            dm["monthly_breakdown"].values(), 
+            key=lambda x: x["month"]
+        )
+        
+        # Contribution percentage
+        dm["booked_value_contribution"] = round(
+            (dm["total_booked_value"] / total_booked_all * 100) if total_booked_all > 0 else 0, 1
+        )
+        dm["signoff_value_contribution"] = round(
+            (dm["total_signoff_value"] / total_signoff_all * 100) if total_signoff_all > 0 else 0, 1
+        )
+        
+        designer_list.append(dm)
+    
+    # Sort by signoff value (top performers first)
+    designer_list.sort(key=lambda x: -x["total_signoff_value"])
+    
+    # Calculate team totals
+    team_totals = {
+        "total_booked_value": total_booked_all,
+        "total_signoff_value": total_signoff_all,
+        "net_value_change": total_signoff_all - total_booked_all,
+        "net_value_change_percent": round(
+            ((total_signoff_all / total_booked_all - 1) * 100) if total_booked_all > 0 else 0, 1
+        ),
+        "total_projects": total_projects,
+        "active_designers": len([d for d in designer_list if d["project_count"] > 0 and d["designer_id"] != "unassigned"])
+    }
+    
+    return {
+        "dashboard_type": "designer_performance",
+        "value_sources_tooltip": "This dashboard tracks designer performance: Booked Value (at first payment) and Sign-Off Value (final contract). Net change shows value gained/lost during design process.",
+        
+        "period": {
+            "type": period,
+            "label": period_label,
+            "from_date": start_date,
+            "to_date": end_date
+        },
+        
+        "team_summary": team_totals,
+        
+        "designers": designer_list,
+        
+        "generated_at": datetime.now(timezone.utc).isoformat()
+    }
+
+
 # ============ PROJECT FINANCIALS ============
 
 # Default payment schedule - Arki Dots business rules

@@ -9254,6 +9254,11 @@ async def get_sales_funnel_dashboard(
         "dashboard_type": "sales_funnel",
         "value_sources_tooltip": "This dashboard tracks the value lifecycle: Inquiry Value → Booked Value → Sign-Off Value. All values are shown for complete funnel analysis.",
         
+        "filter": {
+            "designer_id": designer_id,
+            "designer_name": designer_name
+        },
+        
         "period": {
             "type": period,
             "label": period_label,

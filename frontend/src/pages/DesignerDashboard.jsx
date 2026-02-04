@@ -107,6 +107,14 @@ export default function DesignerDashboard() {
 
   const teamSummary = data?.team_summary || {};
   const designers = data?.designers || [];
+  
+  // Filter designers based on selection
+  const filteredDesigners = selectedDesigner === 'all' 
+    ? designers 
+    : designers.filter(d => d.designer_id === selectedDesigner);
+  
+  // Get list of designers for dropdown (exclude unassigned)
+  const designerOptions = designers.filter(d => d.designer_id !== 'unassigned');
 
   return (
     <TooltipProvider>
@@ -124,6 +132,23 @@ export default function DesignerDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {/* Designer Filter */}
+            <Select value={selectedDesigner} onValueChange={setSelectedDesigner}>
+              <SelectTrigger className="w-48" data-testid="designer-filter">
+                <User className="w-4 h-4 mr-2 text-slate-500" />
+                <SelectValue placeholder="All Designers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Designers</SelectItem>
+                {designerOptions.map(d => (
+                  <SelectItem key={d.designer_id} value={d.designer_id}>
+                    {d.designer_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            {/* Period Filter */}
             <Select value={period} onValueChange={setPeriod}>
               <SelectTrigger className="w-40">
                 <SelectValue />

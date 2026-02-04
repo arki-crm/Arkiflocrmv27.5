@@ -48,11 +48,28 @@ Handle mid-project designer changes without losing accountability. Fair attribut
 | `/api/projects/{id}/designer-assignments/{aid}/end` | PUT | End an assignment |
 | `/api/designer-assignment-options` | GET | Get roles and reasons |
 
+#### Frontend UI: Designer Assignment Panel ✅ (NEW)
+**Location:** Project Details → Team Tab
+**Component:** `DesignerAssignmentPanel.jsx`
+
+**Features:**
+- Shows current Primary Designer with badge and assignment date
+- "Assign Designer" button opens modal with Designer/Role/Reason dropdowns
+- Warning when replacing current Primary designer
+- Collapsible Assignment History showing all past assignments
+- Attribution Rules info box explaining KPI ownership
+- "End" button for each active assignment
+
 #### Dashboard Attribution Logic (Updated)
 - **Designer Performance Dashboard** now uses proper attribution:
   - Sign-Off projects → Primary at sign-off time
   - Cancelled projects → Primary at cancellation time  
   - Active projects → Current Primary
+
+#### Migration Script
+- **Path:** `/app/backend/scripts/migrate_designer_assignments.py`
+- **Purpose:** Creates initial assignments for existing projects with `primary_designer_id`
+- **Status:** ✅ Executed successfully
 
 ---
 

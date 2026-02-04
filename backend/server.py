@@ -8785,6 +8785,261 @@ async def migrate_project_values(request: Request):
     }
 
 
+# ============ PROJECT CANCELLATION ============
+
+class ProjectCancellationRequest(BaseModel):
+    """Cancel a project with mandatory reason"""
+    reason: str  # From CANCELLATION_REASONS dropdown
+    notes: Optional[str] = None
+
+
+@api_router.post("/projects/{project_id}/cancel")
+async def cancel_project(project_id: str, data: ProjectCancellationRequest, request: Request):
+    """
+    Cancel a project. Requires mandatory reason.
+    
+    Rules:
+    - Captures cancelled_value = booked_value (for funnel analysis)
+    - Cancelled projects NEVER appear in Finance Dashboard
+    - Cancelled projects ALWAYS appear in Funnel & Designer dashboards
+    - This action is audited and cannot be silently undone
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only certain roles can cancel
+    allowed_roles = ["Admin", "Founder", "DesignManager", "Manager"]
+    if user_doc.get("role") not in allowed_roles and not user_doc.get("is_founder"):
+        raise HTTPException(status_code=403, detail="Only Managers/Admin can cancel projects")
+    
+    # Validate reason
+    if data.reason not in CANCELLATION_REASONS:
+        raise HTTPException(status_code=400, detail=f"Invalid cancellation reason. Must be one of: {CANCELLATION_REASONS}")
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if project.get("stage") == "Cancelled":
+        raise HTTPException(status_code=400, detail="Project is already cancelled")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Capture cancelled_value = booked_value (for funnel analysis)
+    cancelled_value = project.get("booked_value") or project.get("signoff_value") or project.get("inquiry_value") or 0
+    
+    cancel_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user_doc.get("role"),
+        "message": f"❌ PROJECT CANCELLED\n"
+                   f"Reason: {data.reason}\n"
+                   f"Cancelled Value: ₹{cancelled_value:,.0f}\n"
+                   f"Notes: {data.notes or 'None'}",
+        "is_system": True,
+        "created_at": now.isoformat(),
+        "metadata": {
+            "type": "project_cancelled",
+            "reason": data.reason,
+            "notes": data.notes,
+            "cancelled_value": cancelled_value,
+            "previous_stage": project.get("stage")
+        }
+    }
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$set": {
+                "stage": "Cancelled",
+                "previous_stage": project.get("stage"),
+                "cancelled_at": now.isoformat(),
+                "cancelled_by": user.user_id,
+                "cancelled_by_name": user.name,
+                "cancellation_reason": data.reason,
+                "cancellation_notes": data.notes,
+                "cancelled_value": cancelled_value,  # For funnel analysis
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "comments": cancel_comment,
+                "timeline": {
+                    "type": "project_cancelled",
+                    "reason": data.reason,
+                    "cancelled_value": cancelled_value,
+                    "cancelled_by": user.user_id,
+                    "cancelled_by_name": user.name,
+                    "timestamp": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    return {
+        "success": True,
+        "message": f"Project cancelled. Reason: {data.reason}",
+        "cancelled_value": cancelled_value
+    }
+
+
+@api_router.get("/cancellation-reasons")
+async def get_cancellation_reasons():
+    """Get available cancellation reasons for dropdown"""
+    return {"reasons": CANCELLATION_REASONS}
+
+
+# ============ ROLE-BASED DASHBOARDS ============
+
+def get_financial_year_range():
+    """Get current financial year date range (Apr-Mar)"""
+    today = datetime.now(timezone.utc)
+    if today.month >= 4:  # Apr onwards = current year is FY start
+        fy_start = datetime(today.year, 4, 1, tzinfo=timezone.utc)
+        fy_end = datetime(today.year + 1, 3, 31, 23, 59, 59, tzinfo=timezone.utc)
+    else:  # Jan-Mar = previous year is FY start
+        fy_start = datetime(today.year - 1, 4, 1, tzinfo=timezone.utc)
+        fy_end = datetime(today.year, 3, 31, 23, 59, 59, tzinfo=timezone.utc)
+    return fy_start.strftime("%Y-%m-%d"), fy_end.strftime("%Y-%m-%d")
+
+
+@api_router.get("/dashboards/finance")
+async def get_finance_dashboard(
+    request: Request,
+    period: str = "fy",  # fy (default), mtd, qtd, custom
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """
+    FINANCE DASHBOARD - Sign-Off Value ONLY (Audit-Safe)
+    
+    Access: Finance roles + Admin + Founder
+    
+    Rules:
+    - Uses ONLY signoff_value (where signoff_locked=True)
+    - Ignores inquiry_value and booked_value completely
+    - Excludes cancelled projects
+    
+    Metrics:
+    - Total Sign-Off Value
+    - Amount Collected
+    - Pending Collection
+    - Collection % against Sign-Off
+    - Project-wise payment status
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Access control: Finance roles + Admin + Founder
+    finance_roles = ["Admin", "Founder", "Accountant", "SeniorAccountant", "JuniorAccountant", 
+                     "CharteredAccountant", "FinanceManager"]
+    if user_doc.get("role") not in finance_roles and not user_doc.get("is_founder"):
+        if not has_permission(user_doc, "finance.view_cashbook"):
+            raise HTTPException(status_code=403, detail="Access denied. Finance Dashboard requires finance permissions.")
+    
+    # Determine date range based on period
+    if period == "mtd":
+        today = datetime.now(timezone.utc)
+        start_date = datetime(today.year, today.month, 1).strftime("%Y-%m-%d")
+        end_date = today.strftime("%Y-%m-%d")
+        period_label = "Month to Date"
+    elif period == "qtd":
+        today = datetime.now(timezone.utc)
+        quarter_month = ((today.month - 1) // 3) * 3 + 1
+        start_date = datetime(today.year, quarter_month, 1).strftime("%Y-%m-%d")
+        end_date = today.strftime("%Y-%m-%d")
+        period_label = "Quarter to Date"
+    elif period == "custom" and from_date and to_date:
+        start_date = from_date
+        end_date = to_date
+        period_label = f"{from_date} to {to_date}"
+    else:  # Default: Financial Year
+        start_date, end_date = get_financial_year_range()
+        period_label = f"FY {start_date[:4]}-{int(start_date[:4])+1}"
+    
+    # Query projects with LOCKED signoff_value (finance-ready only)
+    # IMPORTANT: Excludes cancelled projects
+    query = {
+        "signoff_locked": True,
+        "stage": {"$ne": "Cancelled"}
+    }
+    
+    projects = await db.projects.find(query, {"_id": 0}).to_list(None)
+    
+    # Get all receipts for collection data
+    receipts = await db.finance_receipts.find({}, {"_id": 0}).to_list(None)
+    
+    # Build project-wise collection map
+    project_collections = {}
+    for receipt in receipts:
+        proj_id = receipt.get("project_id")
+        if proj_id:
+            project_collections[proj_id] = project_collections.get(proj_id, 0) + (receipt.get("amount") or 0)
+    
+    # Calculate metrics
+    total_signoff_value = 0
+    total_collected = 0
+    project_details = []
+    
+    for project in projects:
+        signoff_value = project.get("signoff_value") or 0
+        discount = project.get("discount_amount") or 0
+        net_signoff = signoff_value - discount
+        
+        collected = project_collections.get(project.get("project_id"), 0)
+        pending = max(0, net_signoff - collected)
+        collection_pct = (collected / net_signoff * 100) if net_signoff > 0 else 0
+        
+        total_signoff_value += net_signoff
+        total_collected += collected
+        
+        project_details.append({
+            "project_id": project.get("project_id"),
+            "pid": project.get("pid"),
+            "client_name": project.get("client_name"),
+            "stage": project.get("stage"),
+            "signoff_value": signoff_value,
+            "discount": discount,
+            "net_signoff_value": net_signoff,
+            "amount_collected": collected,
+            "amount_pending": pending,
+            "collection_percentage": round(collection_pct, 1),
+            "signoff_date": project.get("signoff_locked_at"),
+            "primary_designer": project.get("primary_designer_name")
+        })
+    
+    # Sort by pending amount (highest first)
+    project_details.sort(key=lambda x: -x.get("amount_pending", 0))
+    
+    total_pending = total_signoff_value - total_collected
+    overall_collection_pct = (total_collected / total_signoff_value * 100) if total_signoff_value > 0 else 0
+    
+    return {
+        "dashboard_type": "finance",
+        "value_source": "signoff_value ONLY",  # Clear label for users
+        "value_source_tooltip": "This dashboard uses ONLY Sign-Off Value (locked final contract value). Inquiry and Booked values are excluded.",
+        
+        "period": {
+            "type": period,
+            "label": period_label,
+            "from_date": start_date,
+            "to_date": end_date
+        },
+        
+        "summary": {
+            "total_signoff_value": total_signoff_value,
+            "amount_collected": total_collected,
+            "amount_pending": total_pending,
+            "collection_percentage": round(overall_collection_pct, 1),
+            "project_count": len(project_details)
+        },
+        
+        "projects": project_details,
+        
+        "generated_at": datetime.now(timezone.utc).isoformat()
+    }
+
+
 # ============ PROJECT FINANCIALS ============
 
 # Default payment schedule - Arki Dots business rules

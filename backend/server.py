@@ -1195,12 +1195,16 @@ async def get_me(request: Request):
     
     effective_permissions = get_user_permissions(user_doc)
     
+    # Check if user is the System Owner/Founder
+    user_is_founder = is_founder(user_doc)
+    
     return {
         "user_id": user.user_id,
         "email": user.email,
         "name": user.name,
         "picture": user.picture,
         "role": user.role,
+        "is_founder": user_is_founder,  # True if this is the System Owner
         "custom_permissions": user_doc.get("custom_permissions", False),
         "permissions": user_doc.get("permissions", []),
         "effective_permissions": effective_permissions

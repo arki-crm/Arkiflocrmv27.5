@@ -26864,6 +26864,46 @@ async def get_execution_categories():
     return {"categories": EXECUTION_CATEGORIES}
 
 
+@api_router.get("/finance/execution-ledger")
+async def get_all_execution_entries(
+    request: Request,
+    project_id: Optional[str] = None,
+    vendor_id: Optional[str] = None,
+    status: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    limit: int = 500
+):
+    """Get all execution ledger entries (purchase invoices) with optional filters"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Permission check
+    if not has_permission(user_doc, "finance.view_cashbook") and not has_permission(user_doc, "finance.liabilities.view"):
+        allowed_roles = ["Admin", "Founder", "SeniorAccountant", "JuniorAccountant", "FinanceManager", "CharteredAccountant", "ProjectManager"]
+        if user_doc.get("role") not in allowed_roles:
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if project_id:
+        query["project_id"] = project_id
+    if vendor_id:
+        query["vendor_id"] = vendor_id
+    if status:
+        query["payment_status"] = status
+    if from_date:
+        query["execution_date"] = {"$gte": from_date}
+    if to_date:
+        query.setdefault("execution_date", {})["$lte"] = to_date
+    
+    entries = await db.execution_ledger.find(query, {"_id": 0}).sort("execution_date", -1).to_list(limit)
+    
+    return {
+        "entries": entries,
+        "total_count": len(entries)
+    }
+
+
 @api_router.post("/finance/execution-ledger")
 async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
     """Create a new execution ledger entry (invoice-based with line items)"""

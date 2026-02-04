@@ -1392,6 +1392,7 @@ const LeadDetails = () => {
                   setShowDesignerDialog(true);
                   fetchDesigners();
                 }}
+                onRemoveDesigner={handleRemoveDesigner}
                 canAssignDesigner={canAssignDesigner()}
                 onConvertToProject={handleConvertToProject}
                 canConvert={canConvert()}

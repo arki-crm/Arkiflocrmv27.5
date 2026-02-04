@@ -925,6 +925,25 @@ const LeadDetails = () => {
     }
   };
 
+  // Remove designer
+  const handleRemoveDesigner = async () => {
+    if (!window.confirm('Are you sure you want to remove the designer from this lead?')) {
+      return;
+    }
+    try {
+      await axios.put(`${API}/leads/${id}/assign-designer`,
+        { designer_id: null },
+        { withCredentials: true }
+      );
+      
+      await fetchLead();
+      toast.success('Designer removed');
+    } catch (err) {
+      console.error('Failed to remove designer:', err);
+      toast.error(err.response?.data?.detail || 'Failed to remove designer');
+    }
+  };
+
   // Convert to project
   const handleConvertToProject = async () => {
     try {

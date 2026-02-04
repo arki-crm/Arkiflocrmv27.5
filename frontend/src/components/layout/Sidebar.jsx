@@ -58,6 +58,7 @@ const SIDEBAR_EXPANDED_KEY = 'arkiflo_sidebar_expanded_menus';
 
 // Finance submenu items - only routes that exist
 const financeSubItems = [
+  { path: '/finance/dashboard', label: 'Finance Dashboard', icon: TrendingUp },  // Sign-Off Value ONLY
   { path: '/finance/founder-dashboard', label: 'Overview', icon: Gauge },
   { path: '/finance/project-finance', label: 'Project Finance', icon: FolderKanban },
   { path: '/finance/cashbook', label: 'Cash Book', icon: Wallet },

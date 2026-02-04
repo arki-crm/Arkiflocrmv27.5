@@ -27601,9 +27601,9 @@ async def export_execution_ledger(project_id: str, request: Request, format: str
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    allowed_roles = ["Admin", "Founder", "SeniorAccountant", "ProjectManager"]
-    if user_doc.get("role") not in allowed_roles:
-        raise HTTPException(status_code=403, detail="Access denied")
+    # BUG FIX: Use permission check instead of role check
+    if not has_permission(user_doc, "finance.reports.export") and not has_permission(user_doc, "finance.export_data"):
+        raise HTTPException(status_code=403, detail="Access denied - requires finance.reports.export or finance.export_data permission")
     
     project = await db.projects.find_one({"project_id": project_id})
     if not project:

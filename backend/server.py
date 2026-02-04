@@ -45,6 +45,15 @@ GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', '')
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
+# ============ SYSTEM OWNER / FOUNDER CONFIGURATION ============
+# This email is the immutable system owner with guaranteed full access.
+# The Founder:
+#   - Always has ALL permissions (bypasses permission checks)
+#   - Cannot be demoted, disabled, or have permissions removed
+#   - Can assign any role/permissions to any user
+#   - Serves as the recovery mechanism if other admins lose access
+FOUNDER_EMAIL = "sidheeq.arkidots@gmail.com"
+
 # Google OAuth URLs
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"

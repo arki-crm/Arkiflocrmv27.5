@@ -24757,6 +24757,93 @@ async def update_salary_budget_actuals(month_year: str, amount: float):
         pass
 
 
+class SalaryCycleDeductionUpdate(BaseModel):
+    """Update deductions on a salary cycle"""
+    deduction_amount: float
+    deduction_reason: str  # leave, late, advance_recovery, other
+    notes: Optional[str] = None
+
+
+@api_router.put("/finance/salary-cycles/{employee_id}/{month_year}/deductions")
+async def update_salary_cycle_deductions(
+    employee_id: str, 
+    month_year: str, 
+    data: SalaryCycleDeductionUpdate,
+    request: Request
+):
+    """
+    Update deductions on a salary cycle.
+    BUG FIX: Allow setting deductions so that balance_payable = monthly_salary - deductions - advances
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.salaries.manage permission")
+    
+    cycle = await db.finance_salary_cycles.find_one({
+        "employee_id": employee_id,
+        "month_year": month_year
+    })
+    
+    if not cycle:
+        raise HTTPException(status_code=404, detail="Salary cycle not found")
+    
+    if cycle.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="Cannot modify closed salary cycle")
+    
+    if data.deduction_amount < 0:
+        raise HTTPException(status_code=400, detail="Deduction amount cannot be negative")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Calculate new values
+    monthly_salary = cycle.get("monthly_salary", 0)
+    current_deductions = cycle.get("total_deductions", 0)
+    new_total_deductions = current_deductions + data.deduction_amount
+    net_payable = monthly_salary - new_total_deductions
+    
+    # Recalculate balance_payable = net_payable - advances - salary_paid
+    total_advances = cycle.get("total_advances", 0)
+    total_salary_paid = cycle.get("total_salary_paid", 0)
+    new_balance_payable = net_payable - total_advances - total_salary_paid
+    
+    # Create deduction record
+    deduction_record = {
+        "deduction_id": f"ded_{uuid.uuid4().hex[:8]}",
+        "amount": data.deduction_amount,
+        "reason": data.deduction_reason,
+        "notes": data.notes,
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", "Unknown"),
+        "created_at": now.isoformat()
+    }
+    
+    await db.finance_salary_cycles.update_one(
+        {"employee_id": employee_id, "month_year": month_year},
+        {
+            "$set": {
+                "total_deductions": new_total_deductions,
+                "net_payable": net_payable,
+                "balance_payable": max(0, new_balance_payable),
+                "updated_at": now
+            },
+            "$push": {"deductions": deduction_record}
+        }
+    )
+    
+    updated = await db.finance_salary_cycles.find_one(
+        {"employee_id": employee_id, "month_year": month_year},
+        {"_id": 0}
+    )
+    
+    return {
+        "success": True,
+        "message": f"Deduction of ₹{data.deduction_amount:,.2f} recorded",
+        "cycle": updated
+    }
+
+
 @api_router.post("/finance/salary-cycles/{employee_id}/{month_year}/close")
 async def close_salary_cycle(employee_id: str, month_year: str, request: Request):
     """Close a salary cycle for an employee for a specific month"""

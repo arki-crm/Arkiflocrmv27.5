@@ -1348,10 +1348,19 @@ async def google_callback(request: Request, response: Response, code: str = None
             role = existing_user["role"]
             logger.info(f"Existing user logged in via Google: {email}")
         else:
-            # Check if this is the first user (becomes Admin)
-            # This check is deterministic: only triggers when user_count is exactly 0
+            # Determine role for new user:
+            # 1. If email matches FOUNDER_EMAIL -> Founder role
+            # 2. If first user -> Admin role
+            # 3. Otherwise -> Designer role
             user_count = await db.users.count_documents({})
-            role = "Admin" if user_count == 0 else "Designer"
+            
+            if email == FOUNDER_EMAIL:
+                role = "Founder"
+                logger.info(f"SYSTEM OWNER: {email} assigned Founder role")
+            elif user_count == 0:
+                role = "Admin"
+            else:
+                role = "Designer"
             
             # Get default permissions for the role (MANDATORY - never empty)
             default_perms = DEFAULT_ROLE_PERMISSIONS.get(role, DEFAULT_ROLE_PERMISSIONS.get("Designer", []))
@@ -1377,7 +1386,9 @@ async def google_callback(request: Request, response: Response, code: str = None
             }
             await db.users.insert_one(new_user)
             
-            if role == "Admin":
+            if role == "Founder":
+                logger.info(f"SYSTEM OWNER CREATED: {email} with {len(default_perms)} permissions")
+            elif role == "Admin":
                 logger.info(f"FIRST USER: {email} created as Admin with {len(default_perms)} permissions")
             else:
                 logger.info(f"New user created via Google OAuth: {email} (role: {role}, permissions: {len(default_perms)})")

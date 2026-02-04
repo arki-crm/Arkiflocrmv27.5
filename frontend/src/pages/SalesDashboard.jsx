@@ -21,7 +21,8 @@ import {
   Info,
   ArrowRight,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  User
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -36,15 +37,33 @@ export default function SalesDashboard() {
   const [customDates, setCustomDates] = useState({ from: '', to: '' });
   const [showStageBreakdown, setShowStageBreakdown] = useState(false);
   const [showCancelledProjects, setShowCancelledProjects] = useState(false);
+  const [designers, setDesigners] = useState([]);
+  const [selectedDesigner, setSelectedDesigner] = useState('all');
 
   useEffect(() => {
     fetchDashboard();
-  }, [period]);
+    fetchDesigners();
+  }, [period, selectedDesigner]);
+
+  const fetchDesigners = async () => {
+    try {
+      const response = await axios.get(`${API}/users?role=Designer`, { withCredentials: true });
+      if (response.data) {
+        setDesigners(response.data.filter(u => u.role === 'Designer' || u.role === 'SeniorDesigner'));
+      }
+    } catch (err) {
+      console.error('Failed to fetch designers:', err);
+    }
+  };
 
   const fetchDashboard = async () => {
     try {
       setLoading(true);
       let url = `${API}/dashboards/sales?period=${period}`;
+      
+      if (selectedDesigner !== 'all') {
+        url += `&designer_id=${selectedDesigner}`;
+      }
       
       if (period === 'custom' && customDates.from && customDates.to) {
         url += `&from_date=${customDates.from}&to_date=${customDates.to}`;

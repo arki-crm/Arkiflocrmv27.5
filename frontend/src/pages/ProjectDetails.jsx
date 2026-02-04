@@ -866,7 +866,7 @@ const ProjectDetails = () => {
             data-testid="tab-collaborators"
           >
             <Users className="w-4 h-4 mr-2" />
-            Collaborators
+            Team
           </TabsTrigger>
           <TabsTrigger 
             value="meetings" 

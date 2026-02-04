@@ -7044,7 +7044,7 @@ async def add_lead_quotation_history(lead_id: str, entry: QuotationHistoryEntry,
 
 @api_router.put("/leads/{lead_id}/assign-designer")
 async def assign_designer(lead_id: str, assign_data: LeadAssignDesigner, request: Request):
-    """Assign a designer to a lead - requires leads.update permission"""
+    """Assign or remove a designer from a lead - requires leads.update permission"""
     user = await get_current_user(request)
     
     # Get user document for permission check
@@ -7062,23 +7062,57 @@ async def assign_designer(lead_id: str, assign_data: LeadAssignDesigner, request
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     
-    # Verify designer exists
+    now = datetime.now(timezone.utc)
+    
+    # Handle removing designer (designer_id is None or empty)
+    if not assign_data.designer_id:
+        old_designer_name = lead.get("designer_name", "Unknown")
+        
+        system_comment = {
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": user.user_id,
+            "user_name": user.name,
+            "role": user.role,
+            "message": f"Designer {old_designer_name} removed by {user.name} on {now.strftime('%d/%m/%Y at %H:%M')}",
+            "is_system": True,
+            "created_at": now.isoformat()
+        }
+        
+        await db.leads.update_one(
+            {"lead_id": lead_id},
+            {
+                "$set": {
+                    "designer_id": None,
+                    "designer_name": None,
+                    "designer_details": None,
+                    "updated_at": now.isoformat()
+                },
+                "$push": {"comments": system_comment}
+            }
+        )
+        
+        return {
+            "message": "Designer removed successfully",
+            "designer_id": None,
+            "designer_name": None
+        }
+    
+    # Verify designer exists (check multiple designer roles)
     designer = await db.users.find_one(
-        {"user_id": assign_data.designer_id, "role": "Designer"},
-        {"_id": 0, "name": 1}
+        {"user_id": assign_data.designer_id, "role": {"$in": ["Designer", "SeniorDesigner", "DesignManager"]}},
+        {"_id": 0, "name": 1, "user_id": 1, "role": 1, "email": 1}
     )
     
     if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
     
     # Create system comment
-    now = datetime.now(timezone.utc)
     system_comment = {
         "id": f"comment_{uuid.uuid4().hex[:8]}",
         "user_id": user.user_id,
         "user_name": user.name,
         "role": user.role,
-        "message": f"Lead assigned to {designer['name']} on {now.strftime('%d/%m/%Y at %H:%M')}",
+        "message": f"Lead assigned to {designer['name']} by {user.name} on {now.strftime('%d/%m/%Y at %H:%M')}",
         "is_system": True,
         "created_at": now.isoformat()
     }
@@ -7088,6 +7122,13 @@ async def assign_designer(lead_id: str, assign_data: LeadAssignDesigner, request
         {
             "$set": {
                 "designer_id": assign_data.designer_id,
+                "designer_name": designer["name"],
+                "designer_details": {
+                    "user_id": designer["user_id"],
+                    "name": designer["name"],
+                    "role": designer.get("role"),
+                    "email": designer.get("email")
+                },
                 "updated_at": now.isoformat()
             },
             "$push": {"comments": system_comment}

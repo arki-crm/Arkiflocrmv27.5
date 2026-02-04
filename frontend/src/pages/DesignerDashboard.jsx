@@ -36,6 +36,7 @@ export default function DesignerDashboard() {
   const [period, setPeriod] = useState('fy');
   const [customDates, setCustomDates] = useState({ from: '', to: '' });
   const [expandedDesigner, setExpandedDesigner] = useState(null);
+  const [selectedDesigner, setSelectedDesigner] = useState('all'); // NEW: Designer filter
 
   useEffect(() => {
     fetchDashboard();

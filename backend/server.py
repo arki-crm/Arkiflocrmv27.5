@@ -27491,6 +27491,9 @@ async def record_purchase_return(execution_id: str, return_req: PurchaseReturnRe
         "entry": updated_entry,
         "liability_updated": liability_id is not None
     }
+
+
+@api_router.post("/finance/execution-ledger/{execution_id}/record-payment")
 async def record_invoice_payment(execution_id: str, payment: InvoicePaymentRecord, request: Request):
     """
     Record a payment against an invoice entry.

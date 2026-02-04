@@ -28430,6 +28430,179 @@ async def get_returned_items_register(
     }
 
 
+# ============ RETURNS EXCEPTIONS PANEL API ============
+
+@api_router.get("/finance/returns/exceptions")
+async def get_returns_exceptions(request: Request):
+    """
+    Get actionable exceptions for Returns module.
+    Returns only items that need attention - no summaries or counts.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    from datetime import datetime, timedelta
+    today = datetime.now(timezone.utc).date()
+    
+    exceptions = []
+    
+    # 1. Pending Purchase Return refunds (by aging)
+    purchase_returns = await db.finance_returns.find({
+        "return_type": "purchase",
+        "refund_status": "pending",
+        "expected_refund_amount": {"$gt": 0}
+    }, {"_id": 0}).to_list(100)
+    
+    for pr in purchase_returns:
+        return_date = pr.get("return_date", "")
+        if return_date:
+            try:
+                rd = datetime.strptime(return_date, "%Y-%m-%d").date()
+                days_pending = (today - rd).days
+                aging_label = f"{days_pending}d" if days_pending > 0 else "Today"
+            except:
+                aging_label = "N/A"
+                days_pending = 0
+        else:
+            aging_label = "N/A"
+            days_pending = 0
+        
+        exceptions.append({
+            "type": "purchase_refund_pending",
+            "category": "Pending Purchase Refunds",
+            "text": f"{pr.get('vendor_name', 'Unknown Vendor')} - ₹{pr.get('expected_refund_amount', 0):,.0f}",
+            "aging": aging_label,
+            "days_pending": days_pending,
+            "reference_id": pr.get("return_id"),
+            "navigate_to": f"/finance/purchase-returns?highlight={pr.get('return_id')}"
+        })
+    
+    # 2. Pending Sales Return refunds
+    sales_returns = await db.finance_returns.find({
+        "return_type": "sales",
+        "refund_status": "pending",
+        "refund_amount": {"$gt": 0}
+    }, {"_id": 0}).to_list(100)
+    
+    for sr in sales_returns:
+        return_date = sr.get("return_date", "")
+        if return_date:
+            try:
+                rd = datetime.strptime(return_date, "%Y-%m-%d").date()
+                days_pending = (today - rd).days
+                aging_label = f"{days_pending}d" if days_pending > 0 else "Today"
+            except:
+                aging_label = "N/A"
+                days_pending = 0
+        else:
+            aging_label = "N/A"
+            days_pending = 0
+        
+        exceptions.append({
+            "type": "sales_refund_pending",
+            "category": "Pending Sales Refunds",
+            "text": f"{sr.get('customer_name', 'Unknown Customer')} - ₹{sr.get('refund_amount', 0):,.0f}",
+            "aging": aging_label,
+            "days_pending": days_pending,
+            "reference_id": sr.get("return_id"),
+            "navigate_to": f"/finance/sales-returns?highlight={sr.get('return_id')}"
+        })
+    
+    # 3. Returned items "With Company" awaiting disposition
+    with_company_returns = await db.finance_returns.find({
+        "item_disposition": {"$in": ["with_company_office", "with_company_site", "pending_decision"]}
+    }, {"_id": 0}).to_list(100)
+    
+    for ret in with_company_returns:
+        disposition = ret.get("item_disposition", "pending_decision")
+        location = ret.get("disposition_location", "")
+        loc_text = f" at {location}" if location else ""
+        disp_label = {
+            "with_company_office": "Office",
+            "with_company_site": "Site",
+            "pending_decision": "Pending Decision"
+        }.get(disposition, disposition)
+        
+        return_type = ret.get("return_type", "purchase")
+        route = "purchase-returns" if return_type == "purchase" else "sales-returns"
+        
+        exceptions.append({
+            "type": "awaiting_disposition",
+            "category": "Items Awaiting Disposition",
+            "text": f"{ret.get('vendor_name') or ret.get('customer_name', 'Unknown')} - {disp_label}{loc_text}",
+            "aging": "",
+            "days_pending": 0,
+            "reference_id": ret.get("return_id"),
+            "navigate_to": f"/finance/{route}?highlight={ret.get('return_id')}"
+        })
+    
+    # 4. Pending replacement deliveries
+    pending_replacements = await db.finance_replacement_orders.find({
+        "status": {"$in": ["pending", "processing", "dispatched"]}
+    }, {"_id": 0}).to_list(100)
+    
+    for repl in pending_replacements:
+        status = repl.get("status", "pending")
+        status_label = {"pending": "Not Started", "processing": "Processing", "dispatched": "In Transit"}.get(status, status)
+        priority = repl.get("priority", "normal")
+        priority_marker = "🔴 " if priority == "urgent" else ""
+        
+        exceptions.append({
+            "type": "replacement_pending",
+            "category": "Pending Replacements",
+            "text": f"{priority_marker}{repl.get('customer_name', 'Unknown Customer')} - {status_label}",
+            "aging": "",
+            "days_pending": 0,
+            "reference_id": repl.get("order_id"),
+            "navigate_to": f"/finance/replacement-orders?highlight={repl.get('order_id')}"
+        })
+    
+    # 5. Unused vendor credits (from debit notes)
+    unused_debit_notes = await db.finance_debit_notes.find({
+        "balance_amount": {"$gt": 0},
+        "status": {"$ne": "cancelled"}
+    }, {"_id": 0}).to_list(100)
+    
+    for dn in unused_debit_notes:
+        exceptions.append({
+            "type": "unused_vendor_credit",
+            "category": "Unused Vendor Credits",
+            "text": f"{dn.get('vendor_name', 'Unknown Vendor')} - ₹{dn.get('balance_amount', 0):,.0f}",
+            "aging": "",
+            "days_pending": 0,
+            "reference_id": dn.get("debit_note_id"),
+            "navigate_to": f"/finance/debit-notes?highlight={dn.get('debit_note_id')}"
+        })
+    
+    # 6. Unused customer credits (from credit notes)
+    unused_credit_notes = await db.finance_credit_notes.find({
+        "balance_amount": {"$gt": 0},
+        "status": {"$ne": "cancelled"}
+    }, {"_id": 0}).to_list(100)
+    
+    for cn in unused_credit_notes:
+        exceptions.append({
+            "type": "unused_customer_credit",
+            "category": "Unused Customer Credits",
+            "text": f"{cn.get('customer_name', 'Unknown Customer')} - ₹{cn.get('balance_amount', 0):,.0f}",
+            "aging": "",
+            "days_pending": 0,
+            "reference_id": cn.get("credit_note_id"),
+            "navigate_to": f"/finance/credit-notes?highlight={cn.get('credit_note_id')}"
+        })
+    
+    # Sort by priority: aging first, then by category
+    exceptions.sort(key=lambda x: (-x.get("days_pending", 0), x.get("category", "")))
+    
+    return {
+        "exceptions": exceptions,
+        "has_exceptions": len(exceptions) > 0
+    }
+
+
 # ============ PHASE 2: CREDIT NOTES, DEBIT NOTES & ENHANCED RETURNS ============
 
 class ItemLevelDisposition(BaseModel):

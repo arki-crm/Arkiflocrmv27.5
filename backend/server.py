@@ -4617,6 +4617,74 @@ async def complete_substage(project_id: str, request: Request):
         except Exception as e:
             logger.error(f"Failed to create warranty for project {project_id}: {e}")
     
+    # ============ AUTO-LOCK SIGNOFF_VALUE ON KWS SIGN-OFF COMPLETION ============
+    # When "kws_signoff" substage is completed, automatically lock the signoff_value
+    # This is the single source of truth for all financial calculations
+    if substage_id == "kws_signoff":
+        try:
+            # Get the latest quotation value as signoff_value
+            quotation_history = project.get("quotation_history", [])
+            if quotation_history:
+                # Use the most recent (approved if exists, otherwise latest) quotation
+                approved_quotations = [q for q in quotation_history if q.get("status") == "Approved"]
+                if approved_quotations:
+                    signoff_value = approved_quotations[-1].get("quoted_value", 0)
+                else:
+                    signoff_value = quotation_history[-1].get("quoted_value", 0)
+            else:
+                # Fallback to booked_value or inquiry_value
+                signoff_value = project.get("booked_value") or project.get("inquiry_value") or project.get("budget") or 0
+            
+            # Only lock if not already locked
+            if not project.get("signoff_locked"):
+                signoff_comment = {
+                    "id": f"comment_{uuid.uuid4().hex[:8]}",
+                    "user_id": "system",
+                    "user_name": "System",
+                    "role": "System",
+                    "message": f"💰 SIGNOFF VALUE LOCKED: ₹{signoff_value:,.0f} - This is now the single source of truth for all financial calculations. Triggered by KWS Sign-Off completion.",
+                    "is_system": True,
+                    "created_at": now.isoformat(),
+                    "metadata": {
+                        "type": "signoff_value_locked",
+                        "pid": pid,
+                        "signoff_value": signoff_value,
+                        "triggered_by_milestone": "kws_signoff",
+                        "completed_by": user.user_id,
+                        "completed_by_name": user.name
+                    }
+                }
+                
+                await db.projects.update_one(
+                    {"project_id": project_id},
+                    {
+                        "$set": {
+                            "signoff_value": signoff_value,
+                            "signoff_locked": True,
+                            "signoff_locked_at": now.isoformat(),
+                            "signoff_locked_by": user.user_id,
+                            "signoff_locked_by_name": user.name,
+                            # Update payment schedule based on signoff_value
+                            "contract_value": signoff_value,  # Legacy compatibility
+                            "contract_value_locked": True
+                        },
+                        "$push": {
+                            "comments": signoff_comment,
+                            "timeline": {
+                                "type": "signoff_value_locked",
+                                "signoff_value": signoff_value,
+                                "triggered_by": "kws_signoff",
+                                "locked_by": user.user_id,
+                                "locked_by_name": user.name,
+                                "timestamp": now.isoformat()
+                            }
+                        }
+                    }
+                )
+                logger.info(f"Auto-locked signoff_value for project {project_id}: {signoff_value}")
+        except Exception as e:
+            logger.error(f"Failed to auto-lock signoff_value for project {project_id}: {e}")
+    
     return {
         "success": True,
         "substage_id": substage_id,

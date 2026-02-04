@@ -6817,10 +6817,20 @@ async def confirm_booking_payment(lead_id: str, request: Request):
     }
 
 # ============ QUOTATION HISTORY (Append-Only Log) ============
+
+class QuotationLineItem(BaseModel):
+    """Line item for detailed quotation scope"""
+    scope_area: str  # e.g., "Living Room", "Kitchen", "Master Bedroom"
+    description: Optional[str] = None
+    amount: float
+    notes: Optional[str] = None
+
+
 class QuotationHistoryEntry(BaseModel):
     quoted_value: float
     status: str = "Tentative"  # Tentative, Revised, Approved, Superseded
     note: Optional[str] = None
+    line_items: Optional[List[QuotationLineItem]] = None  # Detailed breakdown
 
 
 QUOTATION_STATUSES = ["Tentative", "Revised", "Approved", "Superseded"]

@@ -8281,7 +8281,11 @@ async def add_project_quotation_history(project_id: str, entry: QuotationHistory
 
 @api_router.post("/projects/{project_id}/lock-contract-value")
 async def lock_contract_value(project_id: str, request: Request):
-    """Lock contract value after design sign-off. Once locked, only Admin/Founder can override."""
+    """
+    DEPRECATED: Use the automatic sign-off lock via KWS Sign-Off milestone.
+    This endpoint is kept for backwards compatibility.
+    Lock signoff_value after design sign-off. Once locked, only Admin/Founder can override.
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
@@ -8289,17 +8293,30 @@ async def lock_contract_value(project_id: str, request: Request):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    if project.get("contract_value_locked"):
-        raise HTTPException(status_code=400, detail="Contract value is already locked")
+    if project.get("signoff_locked") or project.get("contract_value_locked"):
+        raise HTTPException(status_code=400, detail="Sign-off value is already locked")
     
     now = datetime.now(timezone.utc)
-    contract_value = project.get("contract_value") or project.get("project_value") or 0
+    
+    # Get signoff_value from latest quotation or fallback
+    quotation_history = project.get("quotation_history", [])
+    if quotation_history:
+        approved = [q for q in quotation_history if q.get("status") == "Approved"]
+        signoff_value = approved[-1].get("quoted_value", 0) if approved else quotation_history[-1].get("quoted_value", 0)
+    else:
+        signoff_value = project.get("booked_value") or project.get("inquiry_value") or project.get("budget") or 0
     
     await db.projects.update_one(
         {"project_id": project_id},
         {
             "$set": {
-                "contract_value": contract_value,
+                "signoff_value": signoff_value,
+                "signoff_locked": True,
+                "signoff_locked_at": now.isoformat(),
+                "signoff_locked_by": user.user_id,
+                "signoff_locked_by_name": user.name,
+                # Legacy compatibility
+                "contract_value": signoff_value,
                 "contract_value_locked": True,
                 "contract_value_locked_at": now.isoformat(),
                 "contract_value_locked_by": user.user_id,
@@ -8318,15 +8335,27 @@ async def lock_contract_value(project_id: str, request: Request):
                     "id": f"comment_{uuid.uuid4().hex[:8]}",
                     "user_id": user.user_id,
                     "user_name": user.name,
-                    "message": f"🔒 Contract value locked at ₹{contract_value:,.0f}",
+                    "message": f"🔒 SIGNOFF VALUE LOCKED: ₹{signoff_value:,.0f} - Manual lock by {user.name}",
                     "is_system": True,
-                    "created_at": now.isoformat()
+                    "created_at": now.isoformat(),
+                    "metadata": {
+                        "type": "signoff_value_locked_manual",
+                        "signoff_value": signoff_value
+                    }
+                },
+                "timeline": {
+                    "type": "signoff_value_locked",
+                    "signoff_value": signoff_value,
+                    "triggered_by": "manual_lock",
+                    "locked_by": user.user_id,
+                    "locked_by_name": user.name,
+                    "timestamp": now.isoformat()
                 }
             }
         }
     )
     
-    return {"success": True, "contract_value": contract_value, "locked_at": now.isoformat()}
+    return {"success": True, "signoff_value": signoff_value, "locked_at": now.isoformat()}
 
 
 class ContractValueOverride(BaseModel):

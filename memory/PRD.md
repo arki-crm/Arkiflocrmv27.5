@@ -9,8 +9,52 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Role-Based Dashboards COMPLETE ✅
+## Current Status: Designer Assignment Tracking COMPLETE ✅
 **As of February 4, 2026**
+
+### NEW: Designer Assignment Tracking System
+
+#### Purpose
+Handle mid-project designer changes without losing accountability. Fair attribution without rewriting history.
+
+#### Data Model: `designer_assignments` Collection
+```json
+{
+  "assignment_id": "uuid",
+  "project_id": "proj_xxx",
+  "designer_id": "user_xxx",
+  "role": "Primary | Support",
+  "assigned_from": "ISO datetime",
+  "assigned_to": "null (active) | ISO datetime (ended)",
+  "assignment_reason": "initial | reassigned | resigned | escalation | workload_balance",
+  "end_reason": "reassigned | resigned | escalation | project_complete",
+  "assigned_by": "user_id",
+  "notes": "optional"
+}
+```
+
+#### Business Rules
+1. **Only one active Primary per project** at any time
+2. **Assignments are never deleted** - only ended (soft delete)
+3. **Attribution at Sign-Off**: Primary designer at time of sign-off owns KPIs
+4. **Attribution at Cancellation**: Primary designer at cancellation owns KPIs
+5. **Active Projects**: Attributed to current Primary designer
+
+#### New API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/projects/{id}/designer-assignments` | GET | Get full assignment history |
+| `/api/projects/{id}/designer-assignments` | POST | Assign/reassign designer |
+| `/api/projects/{id}/designer-assignments/{aid}/end` | PUT | End an assignment |
+| `/api/designer-assignment-options` | GET | Get roles and reasons |
+
+#### Dashboard Attribution Logic (Updated)
+- **Designer Performance Dashboard** now uses proper attribution:
+  - Sign-Off projects → Primary at sign-off time
+  - Cancelled projects → Primary at cancellation time  
+  - Active projects → Current Primary
+
+---
 
 ### Implemented: Three Role-Based, Purpose-Driven Dashboards
 
@@ -32,10 +76,10 @@ Build a full-stack CRM application for an interior design company, managing the 
 - Project-wise payment status table
 - Excludes cancelled projects
 
-#### 2. Sales & Funnel Analysis Dashboard ✅ (NEW)
+#### 2. Sales & Funnel Analysis Dashboard ✅
 **Access:** Admin, Founder, SalesManager
 **Route:** `/finance/sales-dashboard`
-**API:** `GET /api/dashboards/sales`
+**API:** `GET /api/dashboards/sales?designer_id=xxx`
 
 | Metric | Description |
 |--------|-------------|

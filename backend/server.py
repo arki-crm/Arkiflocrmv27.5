@@ -7235,15 +7235,35 @@ async def convert_to_project(lead_id: str, request: Request):
         "comments": project_comments,  # Full activity history
         "files": project_files,  # Files from lead
         "notes": [],
-        "project_value": lead.get("budget") or 0,
-        # ========== VALUE LIFECYCLE FIELDS ==========
-        "inquiry_value": lead.get("budget") or 0,  # Original inquiry value
-        "booked_value": lead.get("booked_value") or lead.get("budget") or 0,  # Value at booking (immutable)
-        "contract_value": lead.get("budget") or 0,  # Final contract value (lockable)
-        "contract_value_locked": False,
-        "contract_value_locked_at": None,
-        "contract_value_locked_by": None,
-        "quotation_history": lead.get("quotation_history", []),  # Carried from lead
+        
+        # ========== 4-STAGE VALUE LIFECYCLE (NON-NEGOTIABLE) ==========
+        # Stage 1: INQUIRY VALUE (Pre-Sales estimate, for forecasting only)
+        "inquiry_value": lead.get("budget") or 0,
+        
+        # Stage 2: BOOKED VALUE (Auto-captured at first payment, IMMUTABLE)
+        "booked_value": lead.get("booked_value") or 0,
+        "booked_value_locked": lead.get("booked_value_locked", False),
+        "booked_value_locked_at": lead.get("booked_value_locked_at"),
+        "booked_value_locked_by": lead.get("booked_value_locked_by"),
+        "booked_value_source": lead.get("booked_value_source", "inquiry"),
+        
+        # Stage 3: QUOTATION HISTORY (Versioned, append-only)
+        "quotation_history": lead.get("quotation_history", []),
+        "current_quotation_value": (lead.get("quotation_history", [{}])[-1].get("quoted_value", 0) 
+                                    if lead.get("quotation_history") else 0),
+        
+        # Stage 4: SIGNOFF VALUE (Final contract value, locked at Design Sign-Off)
+        "signoff_value": None,  # Set when Design Sign-Off milestone completes
+        "signoff_locked": False,
+        "signoff_locked_at": None,
+        "signoff_locked_by": None,
+        "signoff_locked_by_name": None,
+        
+        # Legacy fields (for backwards compatibility, will be deprecated)
+        "project_value": lead.get("budget") or 0,  # DEPRECATED: Use signoff_value for financials
+        "contract_value": None,  # DEPRECATED: Renamed to signoff_value
+        "contract_value_locked": False,  # DEPRECATED
+        
         # Discount tracking
         "discount_amount": 0,
         "discount_reason": None,

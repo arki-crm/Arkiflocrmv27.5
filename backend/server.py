@@ -28430,6 +28430,670 @@ async def get_returned_items_register(
     }
 
 
+# ============ PHASE 2: CREDIT NOTES, DEBIT NOTES & ENHANCED RETURNS ============
+
+class ItemLevelDisposition(BaseModel):
+    """Update disposition for a specific item in a return"""
+    item_index: int  # Index of the item in items_returned array
+    disposition: str  # "returned_to_vendor" | "with_company_office" | "with_company_site" | "scrapped" | "vendor_rejected" | "pending_decision" | "reused_other_project"
+    location: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class CreditNoteCreate(BaseModel):
+    """Create a Credit Note (Sales Return - we owe customer)"""
+    linked_return_id: str  # Link to sales return
+    credit_note_date: str
+    amount: float
+    gst_amount: Optional[float] = 0
+    reason: str
+    remarks: Optional[str] = None
+
+
+class DebitNoteCreate(BaseModel):
+    """Create a Debit Note (Purchase Return - vendor owes us)"""
+    linked_return_id: str  # Link to purchase return
+    debit_note_date: str
+    amount: float
+    gst_amount: Optional[float] = 0
+    reason: str
+    remarks: Optional[str] = None
+
+
+class ReplacementOrderCreate(BaseModel):
+    """Create a replacement order for a sales return"""
+    linked_return_id: str
+    replacement_items: List[dict]  # [{item_name, qty, specifications, notes}]
+    expected_dispatch_date: Optional[str] = None
+    delivery_address: Optional[str] = None
+    priority: str = "normal"  # "urgent" | "normal" | "low"
+    remarks: Optional[str] = None
+
+
+class ReplacementStatusUpdate(BaseModel):
+    """Update replacement order status"""
+    status: str  # "pending" | "processing" | "dispatched" | "delivered" | "cancelled"
+    dispatch_date: Optional[str] = None
+    delivery_date: Optional[str] = None
+    tracking_number: Optional[str] = None
+    delivered_by: Optional[str] = None
+    delivery_proof: Optional[str] = None  # File URL
+    remarks: Optional[str] = None
+
+
+@api_router.put("/finance/returns/{return_id}/item-disposition")
+async def update_item_level_disposition(
+    return_id: str,
+    updates: List[ItemLevelDisposition],
+    request: Request
+):
+    """
+    Phase 2: Update disposition for individual items in a return.
+    Allows each item to have its own disposition status.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.liabilities.create") and not has_permission(user_doc, "finance.invoices.create"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return_doc = await db.finance_returns.find_one({"return_id": return_id})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Return not found")
+    
+    items = return_doc.get("items_returned", [])
+    now = datetime.now(timezone.utc)
+    
+    for update in updates:
+        if update.item_index < 0 or update.item_index >= len(items):
+            raise HTTPException(status_code=400, detail=f"Invalid item index: {update.item_index}")
+        
+        items[update.item_index]["disposition"] = update.disposition
+        items[update.item_index]["disposition_location"] = update.location
+        items[update.item_index]["disposition_notes"] = update.notes
+        items[update.item_index]["disposition_updated_at"] = now.isoformat()
+        items[update.item_index]["disposition_updated_by"] = user.user_id
+    
+    # Update document
+    await db.finance_returns.update_one(
+        {"return_id": return_id},
+        {
+            "$set": {
+                "items_returned": items,
+                "updated_at": now.isoformat()
+            }
+        }
+    )
+    
+    return {"success": True, "message": f"Updated disposition for {len(updates)} items"}
+
+
+@api_router.post("/finance/credit-notes")
+async def create_credit_note(data: CreditNoteCreate, request: Request):
+    """
+    Phase 2: Create a Credit Note for a Sales Return.
+    Credit notes reduce the amount customer owes or create a liability to customer.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.invoices.create"):
+        raise HTTPException(status_code=403, detail="Access denied - requires finance.invoices.create permission")
+    
+    # Validate linked return
+    return_doc = await db.finance_returns.find_one({"return_id": data.linked_return_id})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Linked return not found")
+    
+    if return_doc.get("return_type") != "sales":
+        raise HTTPException(status_code=400, detail="Credit notes can only be created for sales returns")
+    
+    # Check if credit note already exists
+    existing = await db.finance_credit_notes.find_one({"linked_return_id": data.linked_return_id})
+    if existing:
+        raise HTTPException(status_code=400, detail="Credit note already exists for this return")
+    
+    now = datetime.now(timezone.utc)
+    credit_note_id = f"CN-{now.strftime('%Y%m')}-{uuid.uuid4().hex[:6].upper()}"
+    
+    credit_note_doc = {
+        "credit_note_id": credit_note_id,
+        "linked_return_id": data.linked_return_id,
+        "linked_invoice_id": return_doc.get("linked_invoice_id"),
+        "project_id": return_doc.get("project_id"),
+        "customer_id": return_doc.get("customer_id"),
+        "customer_name": return_doc.get("customer_name"),
+        "credit_note_date": data.credit_note_date,
+        "amount": data.amount,
+        "gst_amount": data.gst_amount,
+        "total_amount": data.amount + data.gst_amount,
+        "reason": data.reason,
+        "status": "issued",
+        "utilized_amount": 0,
+        "balance_amount": data.amount + data.gst_amount,
+        "remarks": data.remarks,
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", "Unknown"),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    await db.finance_credit_notes.insert_one(credit_note_doc)
+    
+    # Update the return with credit note link
+    await db.finance_returns.update_one(
+        {"return_id": data.linked_return_id},
+        {
+            "$set": {
+                "linked_credit_note_id": credit_note_id,
+                "updated_at": now.isoformat()
+            }
+        }
+    )
+    
+    # Create accounting transaction
+    txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+    await db.accounting_transactions.insert_one({
+        "transaction_id": txn_id,
+        "transaction_date": data.credit_note_date,
+        "transaction_type": "credit_note",
+        "entry_type": "credit_note_issued",
+        "amount": data.amount + data.gst_amount,
+        "description": f"Credit Note {credit_note_id} - {data.reason}",
+        "project_id": return_doc.get("project_id"),
+        "customer_id": return_doc.get("customer_id"),
+        "reference_type": "credit_note",
+        "reference_id": credit_note_id,
+        "created_by": user.user_id,
+        "created_at": now.isoformat()
+    })
+    
+    credit_note_doc.pop("_id", None)
+    return {"success": True, "credit_note": credit_note_doc}
+
+
+@api_router.get("/finance/credit-notes")
+async def get_credit_notes(
+    request: Request,
+    customer_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    status: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """Get all credit notes with optional filters"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if customer_id:
+        query["customer_id"] = customer_id
+    if project_id:
+        query["project_id"] = project_id
+    if status:
+        query["status"] = status
+    if from_date:
+        query["credit_note_date"] = {"$gte": from_date}
+    if to_date:
+        query.setdefault("credit_note_date", {})["$lte"] = to_date
+    
+    credit_notes = await db.finance_credit_notes.find(query, {"_id": 0}).sort("credit_note_date", -1).to_list(500)
+    return credit_notes
+
+
+@api_router.post("/finance/debit-notes")
+async def create_debit_note(data: DebitNoteCreate, request: Request):
+    """
+    Phase 2: Create a Debit Note for a Purchase Return.
+    Debit notes represent amount vendor owes us due to return.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.liabilities.create"):
+        raise HTTPException(status_code=403, detail="Access denied - requires finance.liabilities.create permission")
+    
+    # Validate linked return
+    return_doc = await db.finance_returns.find_one({"return_id": data.linked_return_id})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Linked return not found")
+    
+    if return_doc.get("return_type") != "purchase":
+        raise HTTPException(status_code=400, detail="Debit notes can only be created for purchase returns")
+    
+    # Check if debit note already exists
+    existing = await db.finance_debit_notes.find_one({"linked_return_id": data.linked_return_id})
+    if existing:
+        raise HTTPException(status_code=400, detail="Debit note already exists for this return")
+    
+    now = datetime.now(timezone.utc)
+    debit_note_id = f"DN-{now.strftime('%Y%m')}-{uuid.uuid4().hex[:6].upper()}"
+    
+    debit_note_doc = {
+        "debit_note_id": debit_note_id,
+        "linked_return_id": data.linked_return_id,
+        "linked_invoice_id": return_doc.get("linked_invoice_id"),
+        "project_id": return_doc.get("project_id"),
+        "vendor_id": return_doc.get("vendor_id"),
+        "vendor_name": return_doc.get("vendor_name"),
+        "debit_note_date": data.debit_note_date,
+        "amount": data.amount,
+        "gst_amount": data.gst_amount,
+        "total_amount": data.amount + data.gst_amount,
+        "reason": data.reason,
+        "status": "issued",
+        "received_amount": 0,
+        "balance_amount": data.amount + data.gst_amount,
+        "remarks": data.remarks,
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", "Unknown"),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    await db.finance_debit_notes.insert_one(debit_note_doc)
+    
+    # Update the return with debit note link
+    await db.finance_returns.update_one(
+        {"return_id": data.linked_return_id},
+        {
+            "$set": {
+                "linked_debit_note_id": debit_note_id,
+                "updated_at": now.isoformat()
+            }
+        }
+    )
+    
+    # Create accounting transaction
+    txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+    await db.accounting_transactions.insert_one({
+        "transaction_id": txn_id,
+        "transaction_date": data.debit_note_date,
+        "transaction_type": "debit_note",
+        "entry_type": "debit_note_issued",
+        "amount": data.amount + data.gst_amount,
+        "description": f"Debit Note {debit_note_id} - {data.reason}",
+        "project_id": return_doc.get("project_id"),
+        "vendor_id": return_doc.get("vendor_id"),
+        "reference_type": "debit_note",
+        "reference_id": debit_note_id,
+        "created_by": user.user_id,
+        "created_at": now.isoformat()
+    })
+    
+    debit_note_doc.pop("_id", None)
+    return {"success": True, "debit_note": debit_note_doc}
+
+
+@api_router.get("/finance/debit-notes")
+async def get_debit_notes(
+    request: Request,
+    vendor_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    status: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """Get all debit notes with optional filters"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if vendor_id:
+        query["vendor_id"] = vendor_id
+    if project_id:
+        query["project_id"] = project_id
+    if status:
+        query["status"] = status
+    if from_date:
+        query["debit_note_date"] = {"$gte": from_date}
+    if to_date:
+        query.setdefault("debit_note_date", {})["$lte"] = to_date
+    
+    debit_notes = await db.finance_debit_notes.find(query, {"_id": 0}).sort("debit_note_date", -1).to_list(500)
+    return debit_notes
+
+
+@api_router.post("/finance/replacement-orders")
+async def create_replacement_order(data: ReplacementOrderCreate, request: Request):
+    """
+    Phase 2: Create a replacement order for a sales return.
+    Tracks the full replacement workflow from creation to delivery.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.invoices.create"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Validate linked return
+    return_doc = await db.finance_returns.find_one({"return_id": data.linked_return_id})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Linked return not found")
+    
+    if return_doc.get("return_type") != "sales":
+        raise HTTPException(status_code=400, detail="Replacement orders are for sales returns only")
+    
+    # Check if replacement order already exists
+    existing = await db.finance_replacement_orders.find_one({"linked_return_id": data.linked_return_id})
+    if existing:
+        raise HTTPException(status_code=400, detail="Replacement order already exists for this return")
+    
+    now = datetime.now(timezone.utc)
+    order_id = f"RO-{now.strftime('%Y%m')}-{uuid.uuid4().hex[:6].upper()}"
+    
+    order_doc = {
+        "order_id": order_id,
+        "linked_return_id": data.linked_return_id,
+        "project_id": return_doc.get("project_id"),
+        "customer_id": return_doc.get("customer_id"),
+        "customer_name": return_doc.get("customer_name"),
+        "replacement_items": data.replacement_items,
+        "expected_dispatch_date": data.expected_dispatch_date,
+        "actual_dispatch_date": None,
+        "expected_delivery_date": None,
+        "actual_delivery_date": None,
+        "delivery_address": data.delivery_address,
+        "priority": data.priority,
+        "status": "pending",  # pending | processing | dispatched | delivered | cancelled
+        "tracking_number": None,
+        "delivered_by": None,
+        "delivery_proof": None,
+        "status_history": [{
+            "status": "pending",
+            "timestamp": now.isoformat(),
+            "updated_by": user.user_id,
+            "remarks": "Replacement order created"
+        }],
+        "remarks": data.remarks,
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", "Unknown"),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    await db.finance_replacement_orders.insert_one(order_doc)
+    
+    # Update the return with replacement order link
+    await db.finance_returns.update_one(
+        {"return_id": data.linked_return_id},
+        {
+            "$set": {
+                "linked_replacement_order_id": order_id,
+                "replacement_status": "pending",
+                "updated_at": now.isoformat()
+            }
+        }
+    )
+    
+    order_doc.pop("_id", None)
+    return {"success": True, "replacement_order": order_doc}
+
+
+@api_router.get("/finance/replacement-orders")
+async def get_replacement_orders(
+    request: Request,
+    status: Optional[str] = None,
+    project_id: Optional[str] = None,
+    priority: Optional[str] = None
+):
+    """Get all replacement orders with optional filters"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if status:
+        query["status"] = status
+    if project_id:
+        query["project_id"] = project_id
+    if priority:
+        query["priority"] = priority
+    
+    orders = await db.finance_replacement_orders.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return orders
+
+
+@api_router.put("/finance/replacement-orders/{order_id}/status")
+async def update_replacement_order_status(
+    order_id: str,
+    data: ReplacementStatusUpdate,
+    request: Request
+):
+    """
+    Update replacement order status through the workflow.
+    Status flow: pending → processing → dispatched → delivered (or cancelled)
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.invoices.create"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    order = await db.finance_replacement_orders.find_one({"order_id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Replacement order not found")
+    
+    # Validate status transition
+    valid_transitions = {
+        "pending": ["processing", "cancelled"],
+        "processing": ["dispatched", "cancelled"],
+        "dispatched": ["delivered", "cancelled"],
+        "delivered": [],
+        "cancelled": []
+    }
+    
+    current_status = order.get("status", "pending")
+    if data.status not in valid_transitions.get(current_status, []):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid status transition from '{current_status}' to '{data.status}'"
+        )
+    
+    now = datetime.now(timezone.utc)
+    
+    update_fields = {
+        "status": data.status,
+        "updated_at": now.isoformat()
+    }
+    
+    if data.dispatch_date:
+        update_fields["actual_dispatch_date"] = data.dispatch_date
+    if data.delivery_date:
+        update_fields["actual_delivery_date"] = data.delivery_date
+    if data.tracking_number:
+        update_fields["tracking_number"] = data.tracking_number
+    if data.delivered_by:
+        update_fields["delivered_by"] = data.delivered_by
+    if data.delivery_proof:
+        update_fields["delivery_proof"] = data.delivery_proof
+    
+    # Add to status history
+    history_entry = {
+        "status": data.status,
+        "timestamp": now.isoformat(),
+        "updated_by": user.user_id,
+        "remarks": data.remarks or f"Status updated to {data.status}"
+    }
+    
+    await db.finance_replacement_orders.update_one(
+        {"order_id": order_id},
+        {
+            "$set": update_fields,
+            "$push": {"status_history": history_entry}
+        }
+    )
+    
+    # Update linked return
+    await db.finance_returns.update_one(
+        {"return_id": order.get("linked_return_id")},
+        {
+            "$set": {
+                "replacement_status": data.status,
+                "updated_at": now.isoformat()
+            }
+        }
+    )
+    
+    return {"success": True, "message": f"Order status updated to {data.status}"}
+
+
+@api_router.get("/finance/returns/{return_id}/loss-summary")
+async def get_return_loss_summary(return_id: str, request: Request):
+    """
+    Phase 2: Get detailed loss summary for a return.
+    Tracks financial impact of scrapped, rejected, or no-refund items.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return_doc = await db.finance_returns.find_one({"return_id": return_id}, {"_id": 0})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Return not found")
+    
+    items = return_doc.get("items_returned", [])
+    
+    # Calculate item-level losses
+    item_losses = []
+    total_loss = 0
+    
+    for i, item in enumerate(items):
+        item_disposition = item.get("disposition", return_doc.get("item_disposition", "pending_decision"))
+        item_amount = item.get("amount", 0)
+        
+        is_loss = item_disposition in ["scrapped", "vendor_rejected"] or return_doc.get("refund_mode") == "no_refund"
+        
+        if is_loss:
+            loss_amount = item_amount
+            total_loss += loss_amount
+            item_losses.append({
+                "item_index": i,
+                "item_name": item.get("item_name", "Unknown"),
+                "original_value": item_amount,
+                "loss_amount": loss_amount,
+                "loss_reason": item_disposition,
+                "disposition": item_disposition
+            })
+    
+    # Get any recorded loss from refund update
+    recorded_loss = return_doc.get("loss_amount", 0)
+    
+    return {
+        "return_id": return_id,
+        "return_type": return_doc.get("return_type"),
+        "total_return_value": return_doc.get("total_return_value", 0),
+        "expected_refund": return_doc.get("expected_refund_amount", return_doc.get("refund_amount", 0)),
+        "actual_refund": return_doc.get("actual_refund_received", return_doc.get("refund_amount_given", 0)),
+        "item_losses": item_losses,
+        "total_item_loss": total_loss,
+        "recorded_loss": recorded_loss,
+        "total_financial_impact": max(total_loss, recorded_loss),
+        "loss_breakdown": {
+            "scrapped_items": sum(l["loss_amount"] for l in item_losses if l["loss_reason"] == "scrapped"),
+            "vendor_rejected": sum(l["loss_amount"] for l in item_losses if l["loss_reason"] == "vendor_rejected"),
+            "no_refund": sum(l["loss_amount"] for l in item_losses if l["loss_reason"] not in ["scrapped", "vendor_rejected"])
+        }
+    }
+
+
+@api_router.get("/finance/returns/loss-report")
+async def get_returns_loss_report(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    return_type: Optional[str] = None,
+    project_id: Optional[str] = None
+):
+    """
+    Phase 2: Get aggregated loss report across all returns.
+    Useful for financial analysis and reporting.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if return_type:
+        query["return_type"] = return_type
+    if project_id:
+        query["project_id"] = project_id
+    if from_date:
+        query["return_date"] = {"$gte": from_date}
+    if to_date:
+        query.setdefault("return_date", {})["$lte"] = to_date
+    
+    # Only get returns with potential losses
+    query["$or"] = [
+        {"loss_amount": {"$gt": 0}},
+        {"item_disposition": {"$in": ["scrapped", "vendor_rejected"]}},
+        {"refund_mode": "no_refund"}
+    ]
+    
+    returns = await db.finance_returns.find(query, {"_id": 0}).sort("return_date", -1).to_list(1000)
+    
+    # Aggregate losses
+    total_loss = 0
+    loss_by_reason = {}
+    loss_by_project = {}
+    loss_by_vendor = {}
+    loss_by_customer = {}
+    
+    for ret in returns:
+        loss = ret.get("loss_amount", 0)
+        if loss == 0 and ret.get("item_disposition") in ["scrapped", "vendor_rejected"]:
+            loss = ret.get("total_return_value", 0)
+        if loss == 0 and ret.get("refund_mode") == "no_refund":
+            loss = ret.get("expected_refund_amount", ret.get("refund_amount", 0))
+        
+        if loss > 0:
+            total_loss += loss
+            
+            # By reason
+            reason = ret.get("item_disposition", "other")
+            loss_by_reason[reason] = loss_by_reason.get(reason, 0) + loss
+            
+            # By project
+            proj_id = ret.get("project_id", "unknown")
+            loss_by_project[proj_id] = loss_by_project.get(proj_id, 0) + loss
+            
+            # By vendor/customer
+            if ret.get("return_type") == "purchase":
+                vendor = ret.get("vendor_name", "Unknown")
+                loss_by_vendor[vendor] = loss_by_vendor.get(vendor, 0) + loss
+            else:
+                customer = ret.get("customer_name", "Unknown")
+                loss_by_customer[customer] = loss_by_customer.get(customer, 0) + loss
+    
+    return {
+        "period": {
+            "from_date": from_date,
+            "to_date": to_date
+        },
+        "summary": {
+            "total_returns_with_loss": len(returns),
+            "total_loss_amount": total_loss
+        },
+        "loss_by_reason": loss_by_reason,
+        "loss_by_project": loss_by_project,
+        "loss_by_vendor": loss_by_vendor,
+        "loss_by_customer": loss_by_customer,
+        "returns": returns
+    }
+
+
 # Delete the old basic purchase return endpoint (replaced by new comprehensive one)
 # @api_router.post("/finance/execution-ledger/{execution_id}/return") - REMOVED, use /finance/purchase-returns instead
 

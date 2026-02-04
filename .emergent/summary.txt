@@ -1,91 +1,80 @@
 <analysis>**original_problem_statement:**
-The user's work has spanned several key areas in this session:
-1.  **Feature Implementation**: Completed the Timeline Adjustment feature.
-2.  **Bug Fix**: Resolved an issue where the BC Call Done milestone was being auto-completed incorrectly for new leads.
-3.  **System Administration**: Implemented a protected System Owner/Founder role to ensure there is always a super-user for diagnostics and recovery.
-4.  **Critical Bug Squashing**: Addressed a list of 9 critical finance and payroll bugs that were blocking the accountant.
-5.  **New Module Design & Backend Implementation**: After extensive conceptual discussion, the agent designed and implemented the backend (Phase 1 MVP) for a comprehensive Purchase & Sales Return system, including a Returned Items Register.
+The user wants to implement three role-based, purpose-driven dashboards to eliminate ambiguity in project financial tracking. The core requirements are:
+1.  **Finance Dashboard**: For accounting and management, using *only* the final  for all revenue metrics. (This has been completed).
+2.  **Sales & Funnel Analysis Dashboard**: For business decision-making, to track the value lifecycle from  ->  ->  and analyze conversions and value changes (drop/gain).
+3.  **Designer Performance Dashboard**: To understand the value contribution of each designer by tracking metrics like  handled,  achieved, and net value change.
+
+The user also mandated several data model and logic changes to enforce discipline:
+*   A  must be assigned to each project and locked after booking.
+*   An explicit Cancelled project stage must be added, requiring a reason and capturing the .
+*   Dashboards should default to a Financial Year (Apr-Mar) date range.
+*   Tooltips must be used on all dashboards to clarify the source of the value being displayed (Inquiry, Booked, or Sign-Off).
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application is a full-stack project management and finance tool. The agent has just completed a significant set of bug fixes and implemented the backend for a new Returns module.
+The application is a comprehensive interior design workflow management tool. The backend is a monolithic FastAPI server () and the frontend is built in React.
 
-Key recent additions:
--   A protected **Founder** role ( / ) with immutable, full system access.
--   Backend fixes for critical finance bugs related to liabilities, daybook entries, export permissions, and salary calculations.
--   A complete backend for **Purchase & Sales Returns (Phase 1 MVP)**, including new data models (, ), API endpoints, and business logic to handle returns against invoices. This includes separate tracking for **Refund Status** (money) and **Item Disposition** (physical item).
--   A backend endpoint for a **Returned Items Register** to provide an aggregated view of all returned goods.
+Key existing features:
+- A robust, 4-stage project value system (, , ) with automated triggers that lock values at key stages (e.g., first payment locks ).
+- A Returns Module (Phase 1 & 2) for managing purchase and sales returns, including credit/debit notes, replacement orders, and loss tracking.
+- An Exceptions Panel on the returns register to highlight actionable items.
+- A newly implemented **Finance Dashboard** that exclusively uses  for all financial metrics.
+- The data model has been updated to include  and a Cancelled project stage with associated logic.
 
 **Last working item**:
-    - Last item agent was working: Building the frontend UI for the new Purchase & Sales Return modules. The agent created the necessary placeholder files (, ) and was about to implement the UI, add routes, and update the sidebar navigation.
-    - Status: IN PROGRESS
-    - Agent Testing Done: Y (for backend APIs via script)
-    - Which testing method agent to use? frontend testing agent
+    - Last item agent was working: The agent was about to begin implementation of the **Sales & Funnel Analysis Dashboard** and the **Designer Performance Dashboard**, as per the user's approved plan. The next step is to create the backend APIs for these two dashboards.
+    - Status: NOT STARTED
+    - Agent Testing Done: N
+    - Which testing method agent to use? both
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  - Issue 1:  (P0) Implement Frontend for Purchase & Sales Return Modules.
-  - Issue 2:  (P1) User Verification Pending for Critical Finance Bug Fixes.
-
-  Issues Detail:
-  - Issue 1: 
-     - Attempted fixes: The backend APIs and data models are fully implemented and tested via script. Placeholder frontend files have been created.
-     - Next debug checklist: 
-        1.  Create a new React component  to list and create purchase returns.
-        2.  Create a new React component  to list and create sales returns.
-        3.  Create a new component  to display an aggregated view of all returned items.
-        4.  Add routes for these new pages in .
-        5.  Add links to the new pages in the  under the Finance section.
-        6.  Implement UI forms to call the  and  endpoints.
-     - Why fix this issue and what will be achieved with the fix? This will make the newly created backend functionality for managing returns accessible to users, which is a critical business process.
-     - Status:  IN PROGRESS
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? frontend
-     - Blocked on other issue: None
-  - Issue 2: 
-     - Attempted fixes: The agent has applied backend fixes for 9 distinct bugs reported by the user related to finance, payroll, and reporting.
-     - Next debug checklist: The user needs to log in with the relevant roles (Finance, Admin, Founder) and verify that the fixes have resolved the reported problems. Key areas to check: Purchase Invoice creation and its link to liability/daybook, data export for Finance users, GST project visibility in invoice creation, and salary balance calculations.
-     - Why fix this issue and what will be achieved with the fix? This will unblock the accountant and ensure the financial data in the system is correct and reliable.
-     - Status:  USER VERIFICATION PENDING
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? both
-     - Blocked on other issue: None
+There are no outstanding bugs or issues. The current work involves new feature development.
 
 **In progress Task List**:
-  - Task 1:  (P0) Implement Frontend for Purchase & Sales Return Modules.
+  - Task 1:  (P0) Implement Sales & Funnel Analysis Dashboard.
+  - Task 2:  (P1) Implement Designer Performance Dashboard.
 
  Task Detail:
   - Task 1: 
-     - Where to resume: Start by building the UI in the newly created files:  and .
-     - What will be achieved with this? A complete, user-facing interface for the Phase 1 MVP of the returns management system.
-     - Status:  IN PROGRESS
-     - Should Test frontend/backend/both after fix? frontend
+     - Where to resume: Create a new backend API endpoint in  to aggregate and calculate the required metrics for the Sales & Funnel dashboard (e.g., Total Inquiry Value, Booked Value, Sign-Off Value, Cancelled Value, and the drop/gain analysis between these stages).
+     - What will be achieved with this? A dashboard for the sales and management teams to analyze the business funnel and make strategic decisions.
+     - Status:  NOT STARTED
+     - Should Test frontend/backend/both after fix? both
      - Blocked on something: None
+  - Task 2: 
+     - Where to resume: Create a new backend API endpoint in  to provide performance metrics grouped by .
+     - What will be achieved with this? A dashboard to evaluate designer performance based on value generation and project retention.
+     - Status:  NOT STARTED
+     - Should Test frontend/backend/both after fix? both
+     - Blocked on something: Task 1 (as per user's requested implementation order).
 
 **Upcoming and Future Tasks**
 Upcoming Tasks:
--   (P1) **Data Scoping Refactor**: Refactor the remaining role-based checks in  to use a permission-based system.
--   (P1) **Historical Data Migration**: User has received conceptual guidance. An implementation plan to import running projects and structured opening financial balances may be requested.
--   (P2) **Security Hardening**: Remove  and seed data endpoints. Add Google OAuth domain restrictions.
+-   (P0) Create Frontend UI for **Sales & Funnel Analysis Dashboard**.
+-   (P1) Create Frontend UI for **Designer Performance Dashboard**.
+-   (P2) User Verification of the new dashboards.
 
 Future Tasks:
--   (P1) **Quotation Builder Module**.
--   (P2) **Phase 2 for Returns Module**: Implement advanced features like item-level tracking, credit notes, replacement workflows, and loss tracking.
--   (P2) **Backend Refactoring**: Decompose the monolithic .
--   **Finance Overview Dashboard**.
+-   Data Scoping Refactor: Migrate from role-based checks to a more granular permission-based system.
+-   Historical Data Migration: Implement a strategy for importing running projects and opening financial balances.
+-   Security Hardening: Remove setup endpoints and add Google OAuth domain restrictions.
+-   Quotation Builder UI: Build the frontend for the line-item-based quotation builder.
+-   Backend Refactoring: Decompose the monolithic .
 
 **Completed work in this session**
-- **Timeline Adjustment Feature (COMPLETE)**: Frontend integrated and feature fully tested.
-- **BC Call Done Bug Fix (COMPLETE)**: Corrected lead creation logic to use a new Lead Allocated stage.
-- **System Owner / Founder Role (COMPLETE)**: Implemented a protected Founder role.
-- **Critical Finance Bugs (FIXED - PENDING VERIFICATION)**: Addressed 9 bugs related to purchase invoices, daybook visibility, export permissions, GST toggles, and salary payments.
-- **Purchase & Sales Return Backend (COMPLETE - Phase 1 MVP)**: Implemented backend APIs and data models for creating returns and a returned items register.
-- **App Version Update (COMPLETE)**: Updated to v15.0.0.
+- **Finance Dashboard (Phase 1)**: Implemented backend and frontend for a new dashboard that strictly uses  for financial reporting.
+- **4-Stage Value Lifecycle System**: Architected and implemented the backend for a clear value tracking system (, , ), including automated locking triggers and a migration script for existing projects.
+- **Data Model Enhancements for Accountability**: Added a mandatory  field to projects and an explicit Cancelled stage with a mandatory reason.
+- **Returns Module (Phase 1 & 2)**: Completed the full frontend and backend implementation for purchase/sales returns, credit/debit notes, replacement orders, and loss tracking.
+- **Exceptions Panel**: Implemented a minimal, text-based panel on the Returns Register page to show actionable items like pending refunds and items awaiting disposition.
+- **Critical Finance Bug Fix Verification**: Successfully created and ran an automated test script () that verified all 9 critical finance bugs were resolved.
+- **Bug Fix (Founder Permissions)**: Resolved an issue in  where the New Return button was not visible to the Founder role.
 
 **Earlier issues found/mentioned but not fixed**
-   - Issue 1: The backend  file is still a monolith. This is a future refactoring task.
-   - Issue 2: Data-scoping logic in the backend still relies on role names. The user explicitly chose to defer migrating this.
+   - Issue 1: The backend  file is a monolith. This is a known technical debt item for future refactoring.
+   - Issue 2: Data-scoping logic in the backend still relies on role names rather than a permission-based system. This is a planned future refactor.
 
 **Known issue recurrence from previous fork**
   - None.
@@ -94,77 +83,79 @@ Future Tasks:
 
 
 **Key Technical Concepts**
--   **Purchase/Sales Return Logic**: A new system for handling returns as separate documents linked to original invoices. The logic distinguishes between reducing a liability (for unpaid invoices) and creating a receivable/payable (for paid invoices).
--   **Separation of Concerns**: The return models track **Refund Status** (the money) and **Item Disposition** (the physical item) as two independent states.
--   **System Owner/Founder**: A hardcoded, immutable super-user role that bypasses all permission checks, serving as a system recovery and diagnostic tool.
+-   **Role-Based Dashboards**: Designing and implementing separate, purpose-driven dashboards for different user roles (Finance, Sales, Management) with distinct, non-overlapping data sources to ensure clarity.
+-   **Financial Funnel Analysis**: Tracking and calculating conversion rates and value changes between distinct project stages (Inquiry → Booked → Sign-Off → Cancelled) to provide business insights.
+-   **Data Model for Accountability**: Enforcing business rules through the data model, such as using a  for performance attribution and an explicit Cancelled stage to prevent hiding project failures.
+-   **Automated Logic Triggers**: Using application events (e.g., first payment received, milestone completion) to automatically lock financial values (, ), enforcing data integrity and discipline.
 
 **key DB schema**
-  - ** (NEW)**: 
-  - ** (NEW)**: 
-  - ****: The  field can now be Founder. The  field is checked for the hardcoded founder email.
-  - ****: Modified to be referenced by purchase returns.
-  - ****: Now includes entries generated by purchase/sales returns.
+  - ****:
+    - Added .
+    - Added  (locked on first payment).
+    - Added  (locked on Design Sign-Off milestone).
+    - Added .
+    - Added  (mandatory, locked after booking).
+    - Added  (stores reason, date, cancelled_value).
+    - The  field now includes Cancelled.
+  - ****:
+    - Added  to support detailed scope breakdowns.
 
 **changes in tech stack**
   - None.
 
 **All files of reference**
--    (Heavily modified for bug fixes and the new Returns module)
--    (New, needs implementation)
--    (New, needs implementation)
--    (Needs modification for new routes)
--    (Needs modification for new links)
+-    (Heavily modified for new dashboards and data models)
+-    (New)
+-    (Modified for new routes)
+-    (Modified for new links)
 -    (Updated)
--    (Version updated)
 
 **Areas that need refactoring**:
--   : Still a monolith. The new Returns module has added significant code that could be moved to its own file.
+-   : The monolith continues to grow, increasing technical debt. It should be decomposed into smaller, domain-specific modules (e.g., , , ).
 
 **key api endpoints**
--    (GET, POST) (NEW)
--    (GET, POST) (NEW)
 -    (GET) (NEW)
--    (Modified to include  flag)
--   Multiple other finance and user management endpoints were modified to fix bugs and add founder protection.
+-    (POST) (NEW)
+-    (POST) (NEW - one-time use)
+-    (GET) (NEW)
+-    (GET) (NEW)
+-    (GET) (NEW)
+-    (GET) (NEW)
+-    (GET) (NEW)
 
 **Critical Info for New Agent**
--   Your primary task is to build the frontend UI for the **Purchase & Sales Return modules**. All backend APIs are implemented and ready to be used.
--   Start by creating three new pages: , , and . Wire them up in the navigation.
--   Use the **Founder** credentials ( / ) for testing full system access, especially for verifying the finance bug fixes.
--   Be prepared to coordinate with the user to verify the 9 critical bug fixes that have been applied. The user will need to test these from their end.
+-   Your immediate priority is to build the **Sales & Funnel Analysis Dashboard** and then the **Designer Performance Dashboard**, following the user's strict implementation order (Backend first, then Frontend; Sales dashboard first, then Designer dashboard).
+-   All requirements for these dashboards are clearly defined in the user's messages. Do not deviate.
+-   You will need to create new backend APIs to supply the specific data required for each dashboard. The data already exists in the  collection.
+-   Remember the core principle:  is for the Finance Dashboard ONLY. The Sales and Designer dashboards will compare , , and .
+-   All new frontend pages should be added to  for routing and linked in .
 
 **documents and test reports created in this job**
 -   
 -   
 -   
--    (Updated)
+-   
 
 **Last 10 User Messages and any pending HUMAN messages** 
- -  (LATEST) User: please proceed - to implement the Phase 1 MVP of the Returns module. (Status: IN PROGRESS - Backend is complete, Frontend is next)
- -  User: Confirming one clarification... - asking to confirm separate tracking for item status vs. refund status. (Status: RESOLVED - Agent confirmed the design supports this)
- -  User: We have created some basic purchase return endpoints, but before going deeper, I want a clear business-logic... - asking for a conceptual design of Purchase & Sales Returns. (Status: RESOLVED - Agent provided a detailed design which was approved)
- -  User: We are now in bug-fix mode only... - providing a list of 9 critical finance and payroll bugs. (Status: IN PROGRESS - Fixes have been applied, verification is pending)
- -  User: Asked for a conceptual recommendation on migrating historical finance and project data. (Status: RESOLVED - Agent provided a detailed strategy)
- -  User: Asked for a conceptual recommendation on importing historical lead/project data for analytics. (Status: RESOLVED - Agent provided a detailed strategy)
- -  User:  (Status: RESOLVED - )
- -  User: Requested the implementation of a System Owner / Founder role. (Status: COMPLETED)
- -  User: Asked for a detailed explanation of the current authentication system and recommendations for security hardening. (Status: RESOLVED - Agent provided explanation)
- -  User:  (Status: COMPLETED)
+- User requested to proceed with implementing both the Sales & Funnel Analysis Dashboard and the Designer Performance Dashboard. (Status: IN PROGRESS)
+- User approved the agent's proposal for the three role-based dashboards and provided non-negotiable rules for their implementation, data sources, and UI principles. (Status: COMPLETED)
+- User requested a comprehensive redesign of the project value system to enforce distinct financial stages (Inquiry, Booked, Sign-Off) with clear role-based permissions and an audit trail. (Status: COMPLETED)
+- User confirmed the agent's explanation and screenshots of how to create a Purchase Return. (Status: COMPLETED)
+- User requested an explanation and screenshot of how a Purchase Return is added. (Status: COMPLETED)
+- User approved the Exceptions Panel idea and provided minimal UI requirements for it. (Status: COMPLETED)
 
 **Project Health Check:**
--   **Broken**: No known broken functionality.
+-   **Broken**: None.
 -   **Mocked**: None.
--   **Technical Debt**: Medium. The  monolith is the main source of debt. The recent bug fixes have significantly improved financial data integrity.
+-   **Technical Debt**: Medium. The primary source of technical debt is the monolithic  file, which is becoming increasingly complex.
 
 **3rd Party Integrations**
 -   Direct Google Auth
 -   openpyxl
 -   apscheduler
--   Docker & Docker Compose
--   Nginx
 
 **Testing status**
-  - Testing agent used after significant changes: YES, for Timeline Adjustment and Lead Stage fixes.
+  - Testing agent used after significant changes: YES (for Returns Module)
   - Troubleshoot agent used after agent stuck in loop: NO
   - Test files created: []
   - Known regressions: None
@@ -172,8 +163,6 @@ Future Tasks:
 **Credentials to test flow:**
 -   **Founder**:  /  (Full system access)
 -   **Admin**:  / 
--   **Finance User**: To test the export permission fix, create a user with the  role and assign the  permission.
--   **Intern User**:  / 
 
 **What agent forgot to execute**
--   The agent correctly followed the user's priorities and did not forget any major tasks. The work is logically progressing from backend implementation to the required frontend implementation.</analysis>
+The agent has followed the user's explicit instructions and implementation order without missing any steps.</analysis>

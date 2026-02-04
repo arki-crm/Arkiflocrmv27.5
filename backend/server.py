@@ -8377,33 +8377,49 @@ async def override_contract_value(project_id: str, override: ContractValueOverri
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    old_value = project.get("contract_value") or project.get("project_value") or 0
+    old_value = project.get("signoff_value") or project.get("contract_value") or project.get("project_value") or 0
     now = datetime.now(timezone.utc)
     
     await db.projects.update_one(
         {"project_id": project_id},
         {
             "$set": {
-                "contract_value": override.new_value,
-                "project_value": override.new_value,  # Keep in sync
+                "signoff_value": override.new_value,
+                "contract_value": override.new_value,  # Legacy compatibility
                 "updated_at": now.isoformat()
             },
             "$push": {
-                "contract_value_overrides": {
+                "signoff_value_overrides": {
                     "old_value": old_value,
                     "new_value": override.new_value,
                     "reason": override.reason,
                     "overridden_by": user.user_id,
                     "overridden_by_name": user.name,
+                    "overridden_by_role": user_doc.get("role"),
                     "overridden_at": now.isoformat()
                 },
                 "comments": {
                     "id": f"comment_{uuid.uuid4().hex[:8]}",
                     "user_id": user.user_id,
                     "user_name": user.name,
-                    "message": f"⚠️ CONTRACT VALUE OVERRIDE: ₹{old_value:,.0f} → ₹{override.new_value:,.0f}. Reason: {override.reason}",
+                    "message": f"⚠️ ADMIN OVERRIDE - SIGNOFF VALUE: ₹{old_value:,.0f} → ₹{override.new_value:,.0f}. Reason: {override.reason}",
                     "is_system": True,
-                    "created_at": now.isoformat()
+                    "created_at": now.isoformat(),
+                    "metadata": {
+                        "type": "signoff_value_override",
+                        "old_value": old_value,
+                        "new_value": override.new_value,
+                        "reason": override.reason
+                    }
+                },
+                "timeline": {
+                    "type": "signoff_value_override",
+                    "old_value": old_value,
+                    "new_value": override.new_value,
+                    "reason": override.reason,
+                    "overridden_by": user.user_id,
+                    "overridden_by_name": user.name,
+                    "timestamp": now.isoformat()
                 }
             }
         }

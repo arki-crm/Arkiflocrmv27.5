@@ -3366,6 +3366,13 @@ async def toggle_user_status(user_id: str, request: Request):
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # FOUNDER PROTECTION: Cannot change Founder's status
+    if is_founder_email(target_user.get("email", "")):
+        raise HTTPException(
+            status_code=403, 
+            detail="Cannot change System Owner's status. This account is protected."
+        )
+    
     # Cannot deactivate yourself
     if user_id == user.user_id:
         raise HTTPException(status_code=400, detail="Cannot change your own status")
@@ -3392,6 +3399,14 @@ async def delete_user(user_id: str, request: Request):
     # Cannot delete yourself
     if user_id == user.user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    # FOUNDER PROTECTION: Cannot delete Founder
+    target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if target_user and is_founder_email(target_user.get("email", "")):
+        raise HTTPException(
+            status_code=403, 
+            detail="Cannot delete System Owner account. This account is protected."
+        )
     
     result = await db.users.delete_one({"user_id": user_id})
     

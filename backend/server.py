@@ -7316,6 +7316,16 @@ async def convert_to_project(lead_id: str, request: Request):
     if lead.get("designer_id") and lead["designer_id"] not in project_collaborator_ids:
         project_collaborator_ids.append(lead["designer_id"])
     
+    # ========== PRIMARY DESIGNER (Mandatory for KPI Attribution) ==========
+    # Primary designer is locked after booking - cannot be changed
+    # All KPIs and performance metrics stick to this person
+    primary_designer_id = lead.get("designer_id")
+    primary_designer_name = None
+    if primary_designer_id:
+        designer_doc = await db.users.find_one({"user_id": primary_designer_id})
+        if designer_doc:
+            primary_designer_name = designer_doc.get("name", "Unknown Designer")
+    
     # Create project with ALL customer details and history carried forward
     new_project = {
         "project_id": project_id,
@@ -7331,6 +7341,17 @@ async def convert_to_project(lead_id: str, request: Request):
         "budget": lead.get("budget"),
         # Project Details
         "stage": "Design Finalization",
+        
+        # ========== PRIMARY DESIGNER (LOCKED AFTER BOOKING) ==========
+        "primary_designer_id": primary_designer_id,
+        "primary_designer_name": primary_designer_name,
+        "primary_designer_locked": True,  # Cannot be changed after project creation
+        "primary_designer_locked_at": now.isoformat(),
+        
+        # ========== PRE-SALES ATTRIBUTION ==========
+        "assigned_presales_id": lead.get("assigned_to"),
+        "assigned_presales_name": lead.get("assigned_to_name"),
+        
         "collaborators": project_collaborator_ids,
         "collaborator_details": lead_collaborators,  # Full collaborator info
         "summary": f"Converted from lead {lead_id}",

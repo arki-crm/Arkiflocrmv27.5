@@ -9,10 +9,16 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Purchase Return & Sales Return Phase 1 MVP COMPLETE ✅
-**As of February 2026**
+## Current Status: Purchase Return & Sales Return Phase 1 MVP - FRONTEND COMPLETE ✅
+**As of February 4, 2026**
 
 **Implemented:** Complete Purchase Return and Sales Return system with:
+- **Backend APIs**: All CRUD operations for purchase and sales returns ✅
+- **Frontend UI**: 
+  - `PurchaseReturns.jsx` - List, filter, and create purchase returns ✅
+  - `SalesReturns.jsx` - List, filter, and create sales returns with replacement option ✅
+  - `ReturnedItemsRegister.jsx` - Aggregated view with summary cards ✅
+- **Sidebar Navigation**: Finance submenu includes all three return pages ✅
 - **Dual Tracking**: Refund status tracked INDEPENDENTLY from item disposition
 - **Refund Status**: pending → partial → completed → no_refund
 - **Item Disposition**: returned_to_vendor | with_company_office | with_company_site | scrapped | vendor_rejected | pending_decision
@@ -33,6 +39,14 @@ Build a full-stack CRM application for an interior design company, managing the 
 | `/api/finance/sales-returns/{id}/disposition` | PUT | Update item disposition |
 | `/api/finance/sales-returns/{id}/replacement` | PUT | Mark replacement delivered |
 | `/api/finance/returned-items-register` | GET | Aggregated returns view |
+| `/api/finance/execution-ledger` | GET | List all purchase invoices (NEW) |
+
+### Frontend Pages (NEW):
+| Page | Route | Description |
+|------|-------|-------------|
+| Purchase Returns | `/finance/purchase-returns` | List, filter, create purchase returns |
+| Sales Returns | `/finance/sales-returns` | List, filter, create sales returns |
+| Returned Items Register | `/finance/returned-items-register` | Aggregated view of all returns |
 
 ### New Database Collections:
 - `finance_returns` - Unified collection for both purchase and sales returns

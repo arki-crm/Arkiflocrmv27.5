@@ -285,12 +285,12 @@ export default function SalesReturns() {
           <div className="flex flex-wrap gap-4 items-end">
             <div className="w-40">
               <Label className="text-xs">Refund Status</Label>
-              <Select value={filters.refund_status} onValueChange={(v) => setFilters(prev => ({ ...prev, refund_status: v }))}>
+              <Select value={filters.refund_status || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, refund_status: v === "all" ? "" : v }))}>
                 <SelectTrigger className="h-9">
                   <SelectValue placeholder="All" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="partial">Partial</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
@@ -301,12 +301,12 @@ export default function SalesReturns() {
             </div>
             <div className="w-48">
               <Label className="text-xs">Item Disposition</Label>
-              <Select value={filters.item_disposition} onValueChange={(v) => setFilters(prev => ({ ...prev, item_disposition: v }))}>
+              <Select value={filters.item_disposition || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, item_disposition: v === "all" ? "" : v }))}>
                 <SelectTrigger className="h-9">
                   <SelectValue placeholder="All" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   {ITEM_DISPOSITIONS.map(d => (
                     <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
                   ))}

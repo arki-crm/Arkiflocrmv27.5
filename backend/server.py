@@ -27362,22 +27362,66 @@ async def delete_execution_entry(execution_id: str, request: Request):
     return {"success": True, "message": "Execution entry deleted"}
 
 
-class PurchaseReturnRequest(BaseModel):
-    """Request model for purchase return / credit note"""
-    return_amount: float
-    return_reason: str
-    return_date: Optional[str] = None
-    items_returned: Optional[List[dict]] = None  # Optional: specific items returned
+# ============ PURCHASE RETURN & SALES RETURN - PHASE 1 MVP ============
+
+class PurchaseReturnCreate(BaseModel):
+    """Create a Purchase Return against a Purchase Invoice"""
+    # Link to original invoice (MANDATORY)
+    linked_invoice_id: str  # execution_id from execution_ledger
+    
+    # Return details
+    return_date: str  # YYYY-MM-DD
+    return_reason: str  # "damaged" | "wrong_item" | "quality_issue" | "excess_quantity" | "other"
+    return_reason_notes: Optional[str] = None
+    
+    # Items being returned
+    items_returned: List[dict]  # [{item_name, qty, rate, amount, notes}]
+    total_return_value: float
+    
+    # Refund Track (Money)
+    expected_refund_amount: float
+    refund_mode: Optional[str] = None  # "cash" | "bank" | "credit_note" | "adjustment" | "no_refund"
+    
+    # Item Disposition Track (Physical) - Independent of refund
+    item_disposition: str  # "returned_to_vendor" | "with_company_office" | "with_company_site" | "scrapped" | "vendor_rejected" | "pending_decision"
+    disposition_location: Optional[str] = None  # "Office Godown" | "Site - Project X" etc.
+    disposition_notes: Optional[str] = None
+    
+    # Deductions (if any)
+    deductions: Optional[List[dict]] = None  # [{type: "transport", amount: 500, reason: "..."}]
+    
+    # General
     remarks: Optional[str] = None
 
 
-@api_router.post("/finance/execution-ledger/{execution_id}/return")
-async def record_purchase_return(execution_id: str, return_req: PurchaseReturnRequest, request: Request):
+class PurchaseReturnRefundUpdate(BaseModel):
+    """Update refund status on a Purchase Return"""
+    refund_status: str  # "pending" | "partial" | "completed" | "no_refund"
+    actual_refund_received: Optional[float] = None
+    refund_date: Optional[str] = None
+    refund_mode: Optional[str] = None
+    refund_account_id: Optional[str] = None  # Which account received the refund
+    loss_amount: Optional[float] = None  # If refund < expected, this is the loss
+    loss_reason: Optional[str] = None
+    remarks: Optional[str] = None
+
+
+class PurchaseReturnDispositionUpdate(BaseModel):
+    """Update item disposition on a Purchase Return (independent of refund)"""
+    item_disposition: str
+    disposition_date: Optional[str] = None
+    disposition_location: Optional[str] = None
+    disposition_notes: Optional[str] = None
+
+
+@api_router.post("/finance/purchase-returns")
+async def create_purchase_return(return_data: PurchaseReturnCreate, request: Request):
     """
-    Record a Purchase Return / Credit Note against an invoice.
-    - Reduces vendor liability
+    Create a Purchase Return against a Purchase Invoice.
+    - Tracks refund status separately from item disposition
+    - Auto-reduces liability or creates vendor receivable
+    - Creates Daybook entry
     - Reduces project cost
-    - Creates Daybook entry for the return
     """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
@@ -27385,112 +27429,969 @@ async def record_purchase_return(execution_id: str, return_req: PurchaseReturnRe
     if not has_permission(user_doc, "finance.liabilities.create"):
         raise HTTPException(status_code=403, detail="Access denied - requires finance.liabilities.create permission")
     
-    entry = await db.execution_ledger.find_one({"execution_id": execution_id})
-    if not entry:
-        raise HTTPException(status_code=404, detail="Execution entry not found")
+    # Validate linked invoice exists
+    invoice = await db.execution_ledger.find_one({"execution_id": return_data.linked_invoice_id})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Linked purchase invoice not found")
     
-    # Validate return amount
-    grand_total = entry.get("grand_total", 0)
-    existing_returns = entry.get("total_returns", 0)
-    max_returnable = grand_total - existing_returns
+    # Validate return amount doesn't exceed invoice
+    invoice_total = invoice.get("grand_total", 0)
+    existing_returns = invoice.get("total_returns", 0)
+    max_returnable = invoice_total - existing_returns
     
-    if return_req.return_amount <= 0:
-        raise HTTPException(status_code=400, detail="Return amount must be positive")
-    if return_req.return_amount > max_returnable:
-        raise HTTPException(status_code=400, detail=f"Return amount exceeds maximum returnable: ₹{max_returnable:,.2f}")
+    if return_data.total_return_value > max_returnable:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Return value ₹{return_data.total_return_value:,.2f} exceeds max returnable ₹{max_returnable:,.2f}"
+        )
     
     now = datetime.now(timezone.utc)
-    return_id = f"ret_{uuid.uuid4().hex[:8]}"
-    return_date = return_req.return_date or now.strftime("%Y-%m-%d")
+    return_id = f"PR-{now.strftime('%Y%m')}-{uuid.uuid4().hex[:6].upper()}"
     
-    # Create return record
-    return_record = {
-        "return_id": return_id,
-        "return_date": return_date,
-        "amount": return_req.return_amount,
-        "reason": return_req.return_reason,
-        "items_returned": return_req.items_returned,
-        "remarks": return_req.remarks,
-        "created_by": user.user_id,
-        "created_by_name": user.name,
-        "created_at": now.isoformat()
-    }
+    # Determine if liability exists and its status
+    liability_id = invoice.get("linked_liability_id")
+    liability = None
+    liability_remaining = 0
+    creates_receivable = False
     
-    # Update execution entry
-    new_total_returns = existing_returns + return_req.return_amount
-    new_net_payable = grand_total - new_total_returns
-    
-    await db.execution_ledger.update_one(
-        {"execution_id": execution_id},
-        {
-            "$set": {
-                "total_returns": new_total_returns,
-                "net_payable": new_net_payable,
-                "amount_remaining": max(0, new_net_payable - entry.get("total_paid", 0)),
-                "updated_at": now.isoformat()
-            },
-            "$push": {"returns": return_record}
-        }
-    )
-    
-    # Reduce liability if exists
-    liability_id = entry.get("linked_liability_id")
     if liability_id:
         liability = await db.finance_liabilities.find_one({"liability_id": liability_id})
         if liability:
-            new_liability_amount = max(0, liability.get("amount_remaining", 0) - return_req.return_amount)
-            new_status = "settled" if new_liability_amount == 0 else liability.get("status", "open")
-            
-            await db.finance_liabilities.update_one(
-                {"liability_id": liability_id},
-                {"$set": {
-                    "amount_remaining": new_liability_amount,
-                    "status": new_status,
+            liability_remaining = liability.get("amount_remaining", 0)
+    
+    # If liability is already paid (remaining = 0), return creates a receivable
+    if liability_remaining == 0 and return_data.expected_refund_amount > 0:
+        creates_receivable = True
+    
+    # Calculate loss if expected refund > 0 but mode is no_refund
+    loss_amount = 0
+    if return_data.refund_mode == "no_refund" and return_data.expected_refund_amount > 0:
+        loss_amount = return_data.expected_refund_amount
+    
+    # Calculate total deductions
+    total_deductions = sum(d.get("amount", 0) for d in (return_data.deductions or []))
+    
+    # Create the return document
+    return_doc = {
+        "return_id": return_id,
+        "return_type": "purchase",
+        "linked_invoice_id": return_data.linked_invoice_id,
+        "project_id": invoice.get("project_id"),
+        "vendor_id": invoice.get("vendor_id"),
+        "vendor_name": invoice.get("vendor_name"),
+        
+        # Return details
+        "return_date": return_data.return_date,
+        "return_reason": return_data.return_reason,
+        "return_reason_notes": return_data.return_reason_notes,
+        "items_returned": return_data.items_returned,
+        "total_return_value": return_data.total_return_value,
+        
+        # Refund Track (Money)
+        "expected_refund_amount": return_data.expected_refund_amount,
+        "actual_refund_received": 0,
+        "refund_status": "pending" if return_data.refund_mode != "no_refund" else "no_refund",
+        "refund_mode": return_data.refund_mode,
+        "refund_date": None,
+        "deductions": return_data.deductions or [],
+        "total_deductions": total_deductions,
+        "loss_amount": loss_amount,
+        "loss_reason": None,
+        
+        # Item Disposition Track (Physical) - INDEPENDENT
+        "item_disposition": return_data.item_disposition,
+        "disposition_date": return_data.return_date,
+        "disposition_location": return_data.disposition_location,
+        "disposition_notes": return_data.disposition_notes,
+        
+        # Accounting flags
+        "reduces_liability": liability_remaining > 0,
+        "creates_receivable": creates_receivable,
+        "reduces_project_cost": return_data.refund_mode != "no_refund",
+        "is_loss_entry": loss_amount > 0,
+        
+        # Links
+        "linked_liability_id": liability_id,
+        "linked_receivable_id": None,  # Will be set if creates receivable
+        
+        # Audit
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", "Unknown"),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "status": "open",
+        
+        "remarks": return_data.remarks
+    }
+    
+    await db.finance_returns.insert_one(return_doc)
+    
+    # Update the original invoice
+    new_total_returns = existing_returns + return_data.total_return_value
+    await db.execution_ledger.update_one(
+        {"execution_id": return_data.linked_invoice_id},
+        {
+            "$set": {
+                "total_returns": new_total_returns,
+                "net_payable": invoice_total - new_total_returns,
+                "updated_at": now.isoformat()
+            },
+            "$push": {"return_ids": return_id}
+        }
+    )
+    
+    # Handle liability reduction or receivable creation
+    if liability and liability_remaining > 0:
+        # Reduce liability
+        reduction = min(return_data.expected_refund_amount, liability_remaining)
+        new_remaining = liability_remaining - reduction
+        
+        await db.finance_liabilities.update_one(
+            {"liability_id": liability_id},
+            {
+                "$set": {
+                    "amount_remaining": new_remaining,
+                    "status": "settled" if new_remaining == 0 else "open",
                     "updated_at": now.isoformat()
                 },
-                "$push": {"settlements": {
-                    "settlement_id": return_id,
+                "$push": {"adjustments": {
+                    "adjustment_id": return_id,
                     "type": "purchase_return",
-                    "amount": return_req.return_amount,
-                    "date": return_date,
-                    "remarks": f"Purchase Return: {return_req.return_reason}",
+                    "amount": reduction,
+                    "date": return_data.return_date,
+                    "remarks": f"Purchase Return: {return_data.return_reason}",
                     "created_by": user.user_id,
                     "created_at": now.isoformat()
-                }}}
-            )
+                }}
+            }
+        )
+    elif creates_receivable and return_data.expected_refund_amount > 0:
+        # Create vendor receivable (they owe us)
+        receivable_id = f"VR-{uuid.uuid4().hex[:8]}"
+        receivable_doc = {
+            "receivable_id": receivable_id,
+            "receivable_type": "vendor",
+            "vendor_id": invoice.get("vendor_id"),
+            "vendor_name": invoice.get("vendor_name"),
+            "project_id": invoice.get("project_id"),
+            "amount": return_data.expected_refund_amount,
+            "amount_received": 0,
+            "amount_remaining": return_data.expected_refund_amount,
+            "source": "purchase_return",
+            "source_reference_id": return_id,
+            "due_date": return_data.return_date,
+            "status": "open",
+            "created_by": user.user_id,
+            "created_at": now.isoformat()
+        }
+        await db.finance_vendor_receivables.insert_one(receivable_doc)
+        
+        # Update return with receivable link
+        await db.finance_returns.update_one(
+            {"return_id": return_id},
+            {"$set": {"linked_receivable_id": receivable_id}}
+        )
+        return_doc["linked_receivable_id"] = receivable_id
     
-    # Create Daybook entry for the return (credit/inflow)
-    daybook_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
-    daybook_entry = {
-        "transaction_id": daybook_txn_id,
-        "transaction_date": return_date,
-        "transaction_type": "inflow",  # Return reduces our payable, so it's effectively an inflow
-        "entry_type": "purchase_return",
-        "amount": return_req.return_amount,
-        "description": f"Purchase Return: {entry.get('vendor_name', 'Unknown')} - {return_req.return_reason}",
-        "account_id": None,
-        "category_id": None,
-        "project_id": entry.get("project_id"),
-        "vendor_id": entry.get("vendor_id"),
-        "reference_type": "execution_ledger_return",
-        "reference_id": execution_id,
-        "return_id": return_id,
-        "remarks": return_req.remarks,
-        "created_by": user.user_id,
-        "created_by_name": user.name,
-        "created_at": now.isoformat()
-    }
-    await db.accounting_transactions.insert_one(daybook_entry)
+    # Create Daybook entry (only if not no_refund)
+    if return_data.refund_mode != "no_refund":
+        daybook_entry = {
+            "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+            "transaction_date": return_data.return_date,
+            "transaction_type": "adjustment",
+            "entry_type": "purchase_return",
+            "amount": return_data.expected_refund_amount,
+            "description": f"Purchase Return: {invoice.get('vendor_name', 'Unknown')} - {return_data.return_reason}",
+            "project_id": invoice.get("project_id"),
+            "vendor_id": invoice.get("vendor_id"),
+            "reference_type": "purchase_return",
+            "reference_id": return_id,
+            "refund_status": "pending",
+            "created_by": user.user_id,
+            "created_by_name": user_doc.get("name", "Unknown"),
+            "created_at": now.isoformat()
+        }
+        await db.accounting_transactions.insert_one(daybook_entry)
     
-    updated_entry = await db.execution_ledger.find_one({"execution_id": execution_id}, {"_id": 0})
-    
+    return_doc.pop("_id", None)
     return {
         "success": True,
-        "message": f"Purchase return of ₹{return_req.return_amount:,.2f} recorded",
-        "return_id": return_id,
-        "entry": updated_entry,
-        "liability_updated": liability_id is not None
+        "message": f"Purchase Return {return_id} created",
+        "return": return_doc,
+        "liability_reduced": liability_remaining > 0,
+        "receivable_created": creates_receivable
     }
+
+
+@api_router.get("/finance/purchase-returns")
+async def list_purchase_returns(
+    request: Request,
+    project_id: Optional[str] = None,
+    vendor_id: Optional[str] = None,
+    refund_status: Optional[str] = None,
+    item_disposition: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """List purchase returns with filters"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {"return_type": "purchase"}
+    
+    if project_id:
+        query["project_id"] = project_id
+    if vendor_id:
+        query["vendor_id"] = vendor_id
+    if refund_status:
+        query["refund_status"] = refund_status
+    if item_disposition:
+        query["item_disposition"] = item_disposition
+    if from_date:
+        query["return_date"] = {"$gte": from_date}
+    if to_date:
+        query.setdefault("return_date", {})["$lte"] = to_date
+    
+    returns = await db.finance_returns.find(query, {"_id": 0}).sort("return_date", -1).to_list(500)
+    
+    return returns
+
+
+@api_router.get("/finance/purchase-returns/{return_id}")
+async def get_purchase_return(return_id: str, request: Request):
+    """Get a specific purchase return"""
+    user = await get_current_user(request)
+    
+    return_doc = await db.finance_returns.find_one(
+        {"return_id": return_id, "return_type": "purchase"},
+        {"_id": 0}
+    )
+    
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Purchase return not found")
+    
+    return return_doc
+
+
+@api_router.put("/finance/purchase-returns/{return_id}/refund")
+async def update_purchase_return_refund(
+    return_id: str,
+    update: PurchaseReturnRefundUpdate,
+    request: Request
+):
+    """
+    Update refund status on a purchase return.
+    - Track actual refund received
+    - Book loss if refund < expected
+    - Create cashbook entry when refund received
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.liabilities.settle"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return_doc = await db.finance_returns.find_one({"return_id": return_id, "return_type": "purchase"})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Purchase return not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    update_data = {
+        "refund_status": update.refund_status,
+        "updated_at": now.isoformat()
+    }
+    
+    if update.actual_refund_received is not None:
+        update_data["actual_refund_received"] = update.actual_refund_received
+    if update.refund_date:
+        update_data["refund_date"] = update.refund_date
+    if update.refund_mode:
+        update_data["refund_mode"] = update.refund_mode
+    if update.loss_amount is not None:
+        update_data["loss_amount"] = update.loss_amount
+        update_data["is_loss_entry"] = update.loss_amount > 0
+    if update.loss_reason:
+        update_data["loss_reason"] = update.loss_reason
+    if update.remarks:
+        update_data["remarks"] = update.remarks
+    
+    await db.finance_returns.update_one(
+        {"return_id": return_id},
+        {"$set": update_data}
+    )
+    
+    # If refund received, create cashbook entry
+    if update.refund_status in ["partial", "completed"] and update.actual_refund_received and update.actual_refund_received > 0:
+        if update.refund_account_id:
+            # Create cashbook inflow entry
+            txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+            cashbook_entry = {
+                "transaction_id": txn_id,
+                "transaction_date": update.refund_date or now.strftime("%Y-%m-%d"),
+                "transaction_type": "inflow",
+                "entry_type": "purchase_return_refund",
+                "amount": update.actual_refund_received,
+                "description": f"Refund received: Purchase Return {return_id}",
+                "account_id": update.refund_account_id,
+                "project_id": return_doc.get("project_id"),
+                "vendor_id": return_doc.get("vendor_id"),
+                "reference_type": "purchase_return",
+                "reference_id": return_id,
+                "created_by": user.user_id,
+                "created_by_name": user_doc.get("name", "Unknown"),
+                "created_at": now.isoformat()
+            }
+            await db.accounting_transactions.insert_one(cashbook_entry)
+            
+            # Update account balance
+            await db.accounting_accounts.update_one(
+                {"account_id": update.refund_account_id},
+                {"$inc": {"current_balance": update.actual_refund_received}}
+            )
+        
+        # Clear vendor receivable if exists
+        receivable_id = return_doc.get("linked_receivable_id")
+        if receivable_id:
+            await db.finance_vendor_receivables.update_one(
+                {"receivable_id": receivable_id},
+                {
+                    "$inc": {"amount_received": update.actual_refund_received},
+                    "$set": {"updated_at": now.isoformat()}
+                }
+            )
+            # Check if fully settled
+            receivable = await db.finance_vendor_receivables.find_one({"receivable_id": receivable_id})
+            if receivable and receivable.get("amount_received", 0) >= receivable.get("amount", 0):
+                await db.finance_vendor_receivables.update_one(
+                    {"receivable_id": receivable_id},
+                    {"$set": {"status": "settled", "amount_remaining": 0}}
+                )
+    
+    updated = await db.finance_returns.find_one({"return_id": return_id}, {"_id": 0})
+    return {"success": True, "return": updated}
+
+
+@api_router.put("/finance/purchase-returns/{return_id}/disposition")
+async def update_purchase_return_disposition(
+    return_id: str,
+    update: PurchaseReturnDispositionUpdate,
+    request: Request
+):
+    """
+    Update item disposition on a purchase return.
+    This is INDEPENDENT of refund status.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return_doc = await db.finance_returns.find_one({"return_id": return_id, "return_type": "purchase"})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Purchase return not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    update_data = {
+        "item_disposition": update.item_disposition,
+        "disposition_date": update.disposition_date or now.strftime("%Y-%m-%d"),
+        "updated_at": now.isoformat()
+    }
+    
+    if update.disposition_location:
+        update_data["disposition_location"] = update.disposition_location
+    if update.disposition_notes:
+        update_data["disposition_notes"] = update.disposition_notes
+    
+    await db.finance_returns.update_one(
+        {"return_id": return_id},
+        {"$set": update_data}
+    )
+    
+    updated = await db.finance_returns.find_one({"return_id": return_id}, {"_id": 0})
+    return {"success": True, "return": updated}
+
+
+# ============ SALES RETURN ============
+
+class SalesReturnCreate(BaseModel):
+    """Create a Sales Return against a Customer Invoice"""
+    # Link to original invoice (MANDATORY)
+    linked_invoice_id: str  # invoice_id from customer_invoices
+    
+    # Return details
+    return_date: str  # YYYY-MM-DD
+    return_reason: str  # "damaged" | "wrong_item" | "customer_change" | "quality_issue" | "other"
+    return_reason_notes: Optional[str] = None
+    
+    # Items being returned
+    items_returned: List[dict]  # [{item_name, qty, rate, amount, notes}]
+    total_return_value: float
+    
+    # Refund Track (Money)
+    refund_amount: float
+    refund_mode: Optional[str] = None  # "cash" | "bank" | "adjustment" | "no_refund"
+    
+    # Item Disposition Track (Physical) - Independent of refund
+    item_disposition: str  # "returned_to_vendor" | "with_company_office" | "with_company_site" | "scrapped" | "vendor_rejected" | "pending_decision" | "reused_other_project"
+    disposition_location: Optional[str] = None
+    disposition_notes: Optional[str] = None
+    
+    # Replacement (if applicable)
+    requires_replacement: bool = False
+    replacement_item: Optional[str] = None
+    replacement_notes: Optional[str] = None
+    
+    # General
+    remarks: Optional[str] = None
+
+
+class SalesReturnRefundUpdate(BaseModel):
+    """Update refund status on a Sales Return"""
+    refund_status: str  # "pending" | "partial" | "completed" | "no_refund" | "adjusted"
+    refund_amount_given: Optional[float] = None
+    refund_date: Optional[str] = None
+    refund_mode: Optional[str] = None
+    refund_account_id: Optional[str] = None  # Which account the refund was paid from
+    adjustment_invoice_id: Optional[str] = None  # If adjusted against another invoice
+    remarks: Optional[str] = None
+
+
+@api_router.post("/finance/sales-returns")
+async def create_sales_return(return_data: SalesReturnCreate, request: Request):
+    """
+    Create a Sales Return against a Customer Invoice.
+    - Tracks refund status separately from item disposition
+    - Auto-reduces receivable or creates customer payable
+    - Creates Daybook entry
+    - Reduces project revenue
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.invoices.create"):
+        raise HTTPException(status_code=403, detail="Access denied - requires finance.invoices.create permission")
+    
+    # Validate linked invoice exists
+    invoice = await db.customer_invoices.find_one({"invoice_id": return_data.linked_invoice_id})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Linked customer invoice not found")
+    
+    # Validate return amount doesn't exceed invoice
+    invoice_total = invoice.get("total_amount", 0)
+    existing_returns = invoice.get("total_returns", 0)
+    max_returnable = invoice_total - existing_returns
+    
+    if return_data.total_return_value > max_returnable:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Return value ₹{return_data.total_return_value:,.2f} exceeds max returnable ₹{max_returnable:,.2f}"
+        )
+    
+    now = datetime.now(timezone.utc)
+    return_id = f"SR-{now.strftime('%Y%m')}-{uuid.uuid4().hex[:6].upper()}"
+    
+    # Determine receivable status
+    amount_paid = invoice.get("amount_paid", 0)
+    amount_pending = invoice.get("amount_pending", invoice_total - amount_paid)
+    creates_payable = False
+    
+    # If invoice is fully paid, return creates a payable (we owe customer)
+    if amount_pending == 0 and return_data.refund_amount > 0:
+        creates_payable = True
+    
+    # Calculate loss if any
+    loss_amount = 0
+    if return_data.refund_mode == "no_refund" and return_data.refund_amount > 0:
+        loss_amount = return_data.refund_amount
+    
+    # Create the return document
+    return_doc = {
+        "return_id": return_id,
+        "return_type": "sales",
+        "linked_invoice_id": return_data.linked_invoice_id,
+        "project_id": invoice.get("project_id"),
+        "customer_id": invoice.get("customer_id"),
+        "customer_name": invoice.get("customer_name"),
+        
+        # Return details
+        "return_date": return_data.return_date,
+        "return_reason": return_data.return_reason,
+        "return_reason_notes": return_data.return_reason_notes,
+        "items_returned": return_data.items_returned,
+        "total_return_value": return_data.total_return_value,
+        
+        # Refund Track (Money)
+        "refund_amount": return_data.refund_amount,
+        "refund_amount_given": 0,
+        "refund_status": "pending" if return_data.refund_mode != "no_refund" else "no_refund",
+        "refund_mode": return_data.refund_mode,
+        "refund_date": None,
+        "loss_amount": loss_amount,
+        "loss_reason": None,
+        
+        # Item Disposition Track (Physical) - INDEPENDENT
+        "item_disposition": return_data.item_disposition,
+        "disposition_date": return_data.return_date,
+        "disposition_location": return_data.disposition_location,
+        "disposition_notes": return_data.disposition_notes,
+        
+        # Replacement
+        "requires_replacement": return_data.requires_replacement,
+        "replacement_item": return_data.replacement_item,
+        "replacement_notes": return_data.replacement_notes,
+        "replacement_status": "pending" if return_data.requires_replacement else None,
+        "replacement_delivered_date": None,
+        
+        # Accounting flags
+        "reduces_receivable": amount_pending > 0,
+        "creates_payable": creates_payable,
+        "reduces_revenue": return_data.refund_mode != "no_refund",
+        "is_loss_entry": loss_amount > 0,
+        
+        # Links
+        "linked_payable_id": None,  # Will be set if creates payable
+        
+        # Audit
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", "Unknown"),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "status": "open",
+        
+        "remarks": return_data.remarks
+    }
+    
+    await db.finance_returns.insert_one(return_doc)
+    
+    # Update the original invoice
+    new_total_returns = existing_returns + return_data.total_return_value
+    new_amount_pending = max(0, amount_pending - return_data.refund_amount)
+    
+    await db.customer_invoices.update_one(
+        {"invoice_id": return_data.linked_invoice_id},
+        {
+            "$set": {
+                "total_returns": new_total_returns,
+                "amount_pending": new_amount_pending,
+                "updated_at": now.isoformat()
+            },
+            "$push": {"return_ids": return_id}
+        }
+    )
+    
+    # Handle receivable reduction or payable creation
+    if amount_pending > 0 and return_data.refund_amount > 0:
+        # Reduce receivable (customer owes us less)
+        reduction = min(return_data.refund_amount, amount_pending)
+        # This is handled by updating amount_pending above
+    elif creates_payable:
+        # Create customer payable (we owe them)
+        payable_id = f"CP-{uuid.uuid4().hex[:8]}"
+        payable_doc = {
+            "payable_id": payable_id,
+            "payable_type": "customer_refund",
+            "customer_id": invoice.get("customer_id"),
+            "customer_name": invoice.get("customer_name"),
+            "project_id": invoice.get("project_id"),
+            "amount": return_data.refund_amount,
+            "amount_paid": 0,
+            "amount_remaining": return_data.refund_amount,
+            "source": "sales_return",
+            "source_reference_id": return_id,
+            "due_date": return_data.return_date,
+            "status": "open",
+            "created_by": user.user_id,
+            "created_at": now.isoformat()
+        }
+        await db.finance_customer_payables.insert_one(payable_doc)
+        
+        # Update return with payable link
+        await db.finance_returns.update_one(
+            {"return_id": return_id},
+            {"$set": {"linked_payable_id": payable_id}}
+        )
+        return_doc["linked_payable_id"] = payable_id
+    
+    # Create Daybook entry (only if not no_refund)
+    if return_data.refund_mode != "no_refund":
+        daybook_entry = {
+            "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+            "transaction_date": return_data.return_date,
+            "transaction_type": "adjustment",
+            "entry_type": "sales_return",
+            "amount": return_data.refund_amount,
+            "description": f"Sales Return: {invoice.get('customer_name', 'Unknown')} - {return_data.return_reason}",
+            "project_id": invoice.get("project_id"),
+            "customer_id": invoice.get("customer_id"),
+            "reference_type": "sales_return",
+            "reference_id": return_id,
+            "refund_status": "pending",
+            "created_by": user.user_id,
+            "created_by_name": user_doc.get("name", "Unknown"),
+            "created_at": now.isoformat()
+        }
+        await db.accounting_transactions.insert_one(daybook_entry)
+    
+    return_doc.pop("_id", None)
+    return {
+        "success": True,
+        "message": f"Sales Return {return_id} created",
+        "return": return_doc,
+        "receivable_reduced": amount_pending > 0,
+        "payable_created": creates_payable
+    }
+
+
+@api_router.get("/finance/sales-returns")
+async def list_sales_returns(
+    request: Request,
+    project_id: Optional[str] = None,
+    customer_id: Optional[str] = None,
+    refund_status: Optional[str] = None,
+    item_disposition: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """List sales returns with filters"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {"return_type": "sales"}
+    
+    if project_id:
+        query["project_id"] = project_id
+    if customer_id:
+        query["customer_id"] = customer_id
+    if refund_status:
+        query["refund_status"] = refund_status
+    if item_disposition:
+        query["item_disposition"] = item_disposition
+    if from_date:
+        query["return_date"] = {"$gte": from_date}
+    if to_date:
+        query.setdefault("return_date", {})["$lte"] = to_date
+    
+    returns = await db.finance_returns.find(query, {"_id": 0}).sort("return_date", -1).to_list(500)
+    
+    return returns
+
+
+@api_router.get("/finance/sales-returns/{return_id}")
+async def get_sales_return(return_id: str, request: Request):
+    """Get a specific sales return"""
+    user = await get_current_user(request)
+    
+    return_doc = await db.finance_returns.find_one(
+        {"return_id": return_id, "return_type": "sales"},
+        {"_id": 0}
+    )
+    
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Sales return not found")
+    
+    return return_doc
+
+
+@api_router.put("/finance/sales-returns/{return_id}/refund")
+async def update_sales_return_refund(
+    return_id: str,
+    update: SalesReturnRefundUpdate,
+    request: Request
+):
+    """
+    Update refund status on a sales return.
+    - Track refund given to customer
+    - Create cashbook outflow entry when refund is given
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return_doc = await db.finance_returns.find_one({"return_id": return_id, "return_type": "sales"})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Sales return not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    update_data = {
+        "refund_status": update.refund_status,
+        "updated_at": now.isoformat()
+    }
+    
+    if update.refund_amount_given is not None:
+        update_data["refund_amount_given"] = update.refund_amount_given
+    if update.refund_date:
+        update_data["refund_date"] = update.refund_date
+    if update.refund_mode:
+        update_data["refund_mode"] = update.refund_mode
+    if update.adjustment_invoice_id:
+        update_data["adjustment_invoice_id"] = update.adjustment_invoice_id
+    if update.remarks:
+        update_data["remarks"] = update.remarks
+    
+    await db.finance_returns.update_one(
+        {"return_id": return_id},
+        {"$set": update_data}
+    )
+    
+    # If refund given, create cashbook outflow entry
+    if update.refund_status in ["partial", "completed"] and update.refund_amount_given and update.refund_amount_given > 0:
+        if update.refund_account_id:
+            # Create cashbook outflow entry
+            txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+            cashbook_entry = {
+                "transaction_id": txn_id,
+                "transaction_date": update.refund_date or now.strftime("%Y-%m-%d"),
+                "transaction_type": "outflow",
+                "entry_type": "sales_return_refund",
+                "amount": update.refund_amount_given,
+                "description": f"Refund to customer: Sales Return {return_id}",
+                "account_id": update.refund_account_id,
+                "project_id": return_doc.get("project_id"),
+                "customer_id": return_doc.get("customer_id"),
+                "reference_type": "sales_return",
+                "reference_id": return_id,
+                "created_by": user.user_id,
+                "created_by_name": user_doc.get("name", "Unknown"),
+                "created_at": now.isoformat()
+            }
+            await db.accounting_transactions.insert_one(cashbook_entry)
+            
+            # Update account balance
+            await db.accounting_accounts.update_one(
+                {"account_id": update.refund_account_id},
+                {"$inc": {"current_balance": -update.refund_amount_given}}
+            )
+        
+        # Clear customer payable if exists
+        payable_id = return_doc.get("linked_payable_id")
+        if payable_id:
+            await db.finance_customer_payables.update_one(
+                {"payable_id": payable_id},
+                {
+                    "$inc": {"amount_paid": update.refund_amount_given},
+                    "$set": {"updated_at": now.isoformat()}
+                }
+            )
+            # Check if fully settled
+            payable = await db.finance_customer_payables.find_one({"payable_id": payable_id})
+            if payable and payable.get("amount_paid", 0) >= payable.get("amount", 0):
+                await db.finance_customer_payables.update_one(
+                    {"payable_id": payable_id},
+                    {"$set": {"status": "settled", "amount_remaining": 0}}
+                )
+    
+    updated = await db.finance_returns.find_one({"return_id": return_id}, {"_id": 0})
+    return {"success": True, "return": updated}
+
+
+@api_router.put("/finance/sales-returns/{return_id}/disposition")
+async def update_sales_return_disposition(
+    return_id: str,
+    update: PurchaseReturnDispositionUpdate,  # Reuse same model
+    request: Request
+):
+    """
+    Update item disposition on a sales return.
+    This is INDEPENDENT of refund status.
+    """
+    user = await get_current_user(request)
+    
+    return_doc = await db.finance_returns.find_one({"return_id": return_id, "return_type": "sales"})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Sales return not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    update_data = {
+        "item_disposition": update.item_disposition,
+        "disposition_date": update.disposition_date or now.strftime("%Y-%m-%d"),
+        "updated_at": now.isoformat()
+    }
+    
+    if update.disposition_location:
+        update_data["disposition_location"] = update.disposition_location
+    if update.disposition_notes:
+        update_data["disposition_notes"] = update.disposition_notes
+    
+    await db.finance_returns.update_one(
+        {"return_id": return_id},
+        {"$set": update_data}
+    )
+    
+    updated = await db.finance_returns.find_one({"return_id": return_id}, {"_id": 0})
+    return {"success": True, "return": updated}
+
+
+@api_router.put("/finance/sales-returns/{return_id}/replacement")
+async def update_sales_return_replacement(
+    return_id: str,
+    request: Request,
+    replacement_status: str = "delivered",
+    replacement_delivered_date: Optional[str] = None,
+    replacement_cost: Optional[float] = None,
+    notes: Optional[str] = None
+):
+    """Mark replacement as delivered for a sales return"""
+    user = await get_current_user(request)
+    
+    return_doc = await db.finance_returns.find_one({"return_id": return_id, "return_type": "sales"})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Sales return not found")
+    
+    if not return_doc.get("requires_replacement"):
+        raise HTTPException(status_code=400, detail="This return does not require replacement")
+    
+    now = datetime.now(timezone.utc)
+    
+    update_data = {
+        "replacement_status": replacement_status,
+        "replacement_delivered_date": replacement_delivered_date or now.strftime("%Y-%m-%d"),
+        "updated_at": now.isoformat()
+    }
+    
+    if replacement_cost is not None:
+        update_data["replacement_cost"] = replacement_cost
+    if notes:
+        update_data["replacement_notes"] = notes
+    
+    await db.finance_returns.update_one(
+        {"return_id": return_id},
+        {"$set": update_data}
+    )
+    
+    updated = await db.finance_returns.find_one({"return_id": return_id}, {"_id": 0})
+    return {"success": True, "return": updated}
+
+
+# ============ RETURNED ITEMS REGISTER ============
+
+@api_router.get("/finance/returned-items-register")
+async def get_returned_items_register(
+    request: Request,
+    return_type: Optional[str] = None,  # "purchase" | "sales" | None for all
+    item_disposition: Optional[str] = None,
+    refund_status: Optional[str] = None,
+    project_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
+):
+    """
+    Returned Items Register - Aggregated view of all returns (Purchase + Sales).
+    Tracks both refund status and item disposition independently.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    
+    if return_type:
+        query["return_type"] = return_type
+    if item_disposition:
+        query["item_disposition"] = item_disposition
+    if refund_status:
+        query["refund_status"] = refund_status
+    if project_id:
+        query["project_id"] = project_id
+    if from_date:
+        query["return_date"] = {"$gte": from_date}
+    if to_date:
+        query.setdefault("return_date", {})["$lte"] = to_date
+    
+    returns = await db.finance_returns.find(query, {"_id": 0}).sort("return_date", -1).to_list(1000)
+    
+    # Flatten items for register view
+    register_items = []
+    for ret in returns:
+        items = ret.get("items_returned", [])
+        for item in items:
+            register_items.append({
+                "return_id": ret.get("return_id"),
+                "return_date": ret.get("return_date"),
+                "return_type": ret.get("return_type"),
+                "project_id": ret.get("project_id"),
+                "vendor_id": ret.get("vendor_id"),
+                "vendor_name": ret.get("vendor_name"),
+                "customer_id": ret.get("customer_id"),
+                "customer_name": ret.get("customer_name"),
+                "item_name": item.get("item_name"),
+                "qty": item.get("qty"),
+                "rate": item.get("rate"),
+                "amount": item.get("amount"),
+                "item_disposition": ret.get("item_disposition"),
+                "disposition_location": ret.get("disposition_location"),
+                "refund_status": ret.get("refund_status"),
+                "refund_mode": ret.get("refund_mode"),
+                "return_reason": ret.get("return_reason"),
+                "remarks": ret.get("remarks")
+            })
+    
+    # Calculate summary
+    total_with_company = sum(
+        r.get("total_return_value", 0) for r in returns 
+        if r.get("item_disposition") in ["with_company_office", "with_company_site", "pending_decision"]
+    )
+    total_returned_to_vendor = sum(
+        r.get("total_return_value", 0) for r in returns 
+        if r.get("item_disposition") == "returned_to_vendor"
+    )
+    total_scrapped = sum(
+        r.get("total_return_value", 0) for r in returns 
+        if r.get("item_disposition") in ["scrapped", "vendor_rejected"]
+    )
+    total_pending_refund = sum(
+        r.get("expected_refund_amount", r.get("refund_amount", 0)) for r in returns 
+        if r.get("refund_status") == "pending"
+    )
+    total_loss = sum(r.get("loss_amount", 0) for r in returns if r.get("is_loss_entry"))
+    
+    return {
+        "items": register_items,
+        "summary": {
+            "total_returns": len(returns),
+            "total_items": len(register_items),
+            "items_with_company": {
+                "count": len([r for r in returns if r.get("item_disposition") in ["with_company_office", "with_company_site", "pending_decision"]]),
+                "value": total_with_company
+            },
+            "items_returned_to_vendor": {
+                "count": len([r for r in returns if r.get("item_disposition") == "returned_to_vendor"]),
+                "value": total_returned_to_vendor
+            },
+            "items_scrapped": {
+                "count": len([r for r in returns if r.get("item_disposition") in ["scrapped", "vendor_rejected"]]),
+                "value": total_scrapped
+            },
+            "pending_refunds": total_pending_refund,
+            "total_loss": total_loss
+        },
+        "filters_applied": {
+            "return_type": return_type,
+            "item_disposition": item_disposition,
+            "refund_status": refund_status,
+            "project_id": project_id,
+            "from_date": from_date,
+            "to_date": to_date
+        }
+    }
+
+
+# Delete the old basic purchase return endpoint (replaced by new comprehensive one)
+# @api_router.post("/finance/execution-ledger/{execution_id}/return") - REMOVED, use /finance/purchase-returns instead
 
 
 @api_router.post("/finance/execution-ledger/{execution_id}/record-payment")

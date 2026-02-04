@@ -2339,6 +2339,16 @@ def has_permission(user_doc: dict, permission: str) -> bool:
     return permission in permissions
 
 
+def is_founder(user_doc: dict) -> bool:
+    """Check if user is the system owner/founder"""
+    return user_doc.get("email") == FOUNDER_EMAIL
+
+
+def is_founder_email(email: str) -> bool:
+    """Check if an email belongs to the system owner/founder"""
+    return email == FOUNDER_EMAIL
+
+
 # Role categories for permission checks
 DESIGN_ROLES = ["Designer", "DesignManager"]
 SALES_ROLES = ["PreSales", "SalesManager", "Designer"]  # Designer handles sales stages too

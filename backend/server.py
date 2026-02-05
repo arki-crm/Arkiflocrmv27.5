@@ -2830,6 +2830,7 @@ async def create_local_user(user_data: LocalUserCreate, request: Request):
         "name": user_data.name,
         "picture": f"https://ui-avatars.com/api/?name={user_data.name.replace(' ', '+')}&background=2563eb&color=fff",
         "role": user_data.role,
+        "skill_level": user_data.skill_level or "intermediate",  # For designer roles
         "phone": user_data.phone,
         "status": "Active",
         "local_password": hash_password(user_data.password),  # Hash password

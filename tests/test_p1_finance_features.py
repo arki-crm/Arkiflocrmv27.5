@@ -9,7 +9,7 @@ import requests
 import os
 from datetime import datetime
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://sales-tracker-584.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://workflow-audit-2.preview.emergentagent.com').rstrip('/')
 
 class TestP1FinanceFeatures:
     """Test P1 Finance & Payment Core Features"""

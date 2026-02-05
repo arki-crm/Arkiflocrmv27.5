@@ -26,6 +26,18 @@ from timeline_engine import (
     create_override_version,
     get_customer_facing_milestones
 )
+from design_approval_gate import (
+    GATED_MILESTONES,
+    SUBMISSION_CHECKLIST,
+    SUBMISSION_STATUSES,
+    is_gated_milestone,
+    get_gated_milestone_info,
+    get_checklist_template,
+    create_submission_document,
+    calculate_deadline_status,
+    DesignSubmissionCreate,
+    DesignSubmissionReview
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')

@@ -279,6 +279,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         ...commonItems,
         financeParentItem,
+        { path: '/design-review-queue', label: 'Review Queue', icon: ClipboardCheck },
         { path: '/ceo-dashboard', label: 'CEO View', icon: Crown },
         { path: '/reports', label: 'Reports', icon: BarChart3 },
         { path: '/admin/audit-trail', label: 'Audit Trail', icon: History }

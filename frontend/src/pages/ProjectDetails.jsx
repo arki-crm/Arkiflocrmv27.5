@@ -1103,6 +1103,14 @@ const ProjectDetails = () => {
             canManage={canChangeStage() || user?.role === 'Admin' || user?.role === 'Founder' || project?.primary_designer_id === user?.user_id}
             isManager={user?.role === 'DesignManager' || user?.role === 'Admin' || user?.role === 'Founder' || user?.role === 'Manager'}
           />
+
+          {/* Design Approval Gate Panel */}
+          <DesignApprovalPanel
+            projectId={id}
+            canSubmit={canChangeStage() || project?.primary_designer_id === user?.user_id}
+            isManager={user?.role === 'DesignManager' || user?.role === 'Admin' || user?.role === 'Founder' || user?.role === 'Manager'}
+            onStatusChange={fetchProject}
+          />
         </div>
       )}
 

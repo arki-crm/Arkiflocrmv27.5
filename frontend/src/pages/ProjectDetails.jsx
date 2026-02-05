@@ -420,15 +420,27 @@ const ProjectDetails = () => {
       ? project.quotation_history[project.quotation_history.length - 1].quoted_value
       : 0;
 
-    // BOQ milestones - require quotation value entry
-    if (BOQ_MILESTONES.some(m => substageName.includes(m) || groupName.includes(m))) {
-      setPendingMilestone({ substageId, substageName, groupName });
-      setShowQuotationPrompt(true);
-      return true;
+    // Helper to check if any milestone pattern matches
+    const matchesMilestone = (patterns) => {
+      return patterns.some(m => {
+        const mLower = m.toLowerCase();
+        return substageId.toLowerCase().includes(mLower) || 
+               substageName.toLowerCase().includes(mLower) || 
+               groupName.toLowerCase().includes(mLower);
+      });
+    };
+
+    // BOQ milestones - require quotation value entry (only if no quotation exists)
+    if (matchesMilestone(BOQ_MILESTONES)) {
+      if (currentQuotationValue <= 0) {
+        setPendingMilestone({ substageId, substageName, groupName });
+        setShowQuotationPrompt(true);
+        return true;
+      }
     }
 
-    // Revision milestones - ask if value changed
-    if (REVISION_MILESTONES.some(m => substageName.includes(m) || groupName.includes(m))) {
+    // Revision milestones - ask if value changed (only if quotation exists)
+    if (matchesMilestone(REVISION_MILESTONES)) {
       if (currentQuotationValue > 0) {
         setPendingMilestone({ substageId, substageName, groupName });
         setShowValueChangePrompt(true);
@@ -437,7 +449,7 @@ const ProjectDetails = () => {
     }
 
     // Sign-off milestones - require confirmation before locking
-    if (SIGNOFF_MILESTONES.some(m => substageName.includes(m) || groupName.includes(m))) {
+    if (matchesMilestone(SIGNOFF_MILESTONES)) {
       if (!project?.signoff_locked) {
         setPendingMilestone({ substageId, substageName, groupName });
         setShowSignOffConfirmation(true);

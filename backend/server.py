@@ -2783,6 +2783,7 @@ class LocalUserCreate(BaseModel):
     password: str
     role: str
     phone: Optional[str] = None
+    skill_level: Optional[str] = "intermediate"  # For Designer roles
 
 class PasswordChange(BaseModel):
     """Password change request"""

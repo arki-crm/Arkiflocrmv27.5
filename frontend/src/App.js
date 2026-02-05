@@ -148,6 +148,7 @@ const AppRouter = () => {
         {/* V1 Simplified Role-Based Routes */}
         <Route path="/design-board" element={<DesignBoard />} />
         <Route path="/design-manager" element={<DesignManagerDashboard />} />
+        <Route path="/design-review-queue" element={<DesignReviewQueue />} />
         <Route path="/validation-pipeline" element={<ValidationPipeline />} />
         <Route path="/operations" element={<OperationsDashboard />} />
         <Route path="/sales-manager" element={<SalesManagerDashboard />} />

@@ -8468,6 +8468,85 @@ async def add_project_quotation_history(project_id: str, entry: QuotationHistory
     return {"success": True, "entry": new_entry}
 
 
+class ConfirmSignoffValueRequest(BaseModel):
+    signoff_value: float
+
+
+@api_router.post("/projects/{project_id}/confirm-signoff-value")
+async def confirm_signoff_value(project_id: str, data: ConfirmSignoffValueRequest, request: Request):
+    """
+    Confirm and lock sign-off value with user-provided amount.
+    This endpoint is called when KWS Sign-Off milestone is completed,
+    allowing user to review/adjust the value before final lock.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if project.get("signoff_locked"):
+        raise HTTPException(status_code=400, detail="Sign-off value is already locked")
+    
+    if data.signoff_value <= 0:
+        raise HTTPException(status_code=400, detail="Sign-off value must be greater than 0")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$set": {
+                "signoff_value": data.signoff_value,
+                "signoff_locked": True,
+                "signoff_locked_at": now.isoformat(),
+                "signoff_locked_by": user.user_id,
+                "signoff_locked_by_name": user.name,
+                # Legacy compatibility
+                "contract_value": data.signoff_value,
+                "contract_value_locked": True,
+                "contract_value_locked_at": now.isoformat(),
+                "contract_value_locked_by": user.user_id,
+                "contract_value_locked_by_name": user.name,
+                "updated_at": now.isoformat()
+            }
+        }
+    )
+    
+    # Add audit comment
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$push": {
+                "comments": {
+                    "id": str(uuid.uuid4()),
+                    "user_id": "system",
+                    "user_name": "System",
+                    "role": "System",
+                    "message": f"💰 SIGN-OFF VALUE CONFIRMED: ₹{data.signoff_value:,.0f} - Locked by {user.name}. This is now the single source of truth for all financial calculations.",
+                    "is_system": True,
+                    "created_at": now.isoformat()
+                },
+                "timeline": {
+                    "type": "signoff_value_confirmed",
+                    "signoff_value": data.signoff_value,
+                    "confirmed_by": user.user_id,
+                    "confirmed_by_name": user.name,
+                    "timestamp": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    return {
+        "success": True,
+        "signoff_value": data.signoff_value,
+        "locked_at": now.isoformat(),
+        "locked_by": user.name
+    }
+
+
 @api_router.post("/projects/{project_id}/lock-contract-value")
 async def lock_contract_value(project_id: str, request: Request):
     """

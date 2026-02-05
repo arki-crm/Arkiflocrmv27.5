@@ -15399,6 +15399,737 @@ async def get_design_manager_dashboard(request: Request):
         "bottlenecks": bottlenecks
     }
 
+# ============ TIMELINE INTELLIGENCE ENGINE ============
+
+@api_router.get("/timeline-config")
+async def get_timeline_config(request: Request):
+    """Get timeline configuration (Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    config = await db.timeline_config.find_one({"config_id": "default"}, {"_id": 0})
+    if not config:
+        # Initialize with defaults
+        await db.timeline_config.insert_one(DEFAULT_TIMELINE_CONFIG)
+        config = DEFAULT_TIMELINE_CONFIG
+    
+    return config
+
+
+@api_router.put("/timeline-config")
+async def update_timeline_config(config_update: dict, request: Request):
+    """Update timeline configuration (Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.system_settings"):
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    config_update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.timeline_config.update_one(
+        {"config_id": "default"},
+        {"$set": config_update},
+        upsert=True
+    )
+    
+    return {"message": "Timeline configuration updated"}
+
+
+@api_router.get("/timeline-config/options")
+async def get_timeline_options(request: Request):
+    """Get all timeline dropdown options (scope types, tiers, priorities, skill levels)"""
+    await get_current_user(request)
+    
+    config = await db.timeline_config.find_one({"config_id": "default"}, {"_id": 0})
+    if not config:
+        config = DEFAULT_TIMELINE_CONFIG
+    
+    return {
+        "scope_types": [
+            {"value": k, "label": v["label"], "complexity": v["complexity_factor"]}
+            for k, v in config.get("scope_types", DEFAULT_TIMELINE_CONFIG["scope_types"]).items()
+        ],
+        "project_tiers": [
+            {"value": k, "label": v["label"], "revision_buffer": v["revision_probability_buffer"]}
+            for k, v in config.get("project_tiers", DEFAULT_TIMELINE_CONFIG["project_tiers"]).items()
+        ],
+        "priority_tags": [
+            {"value": k, "label": v["label"], "compression": v["timeline_compression"]}
+            for k, v in config.get("priority_tags", DEFAULT_TIMELINE_CONFIG["priority_tags"]).items()
+        ],
+        "skill_levels": [
+            {"value": k, "label": v["label"], "multiplier": v["productivity_multiplier"]}
+            for k, v in config.get("designer_skill_levels", DEFAULT_TIMELINE_CONFIG["designer_skill_levels"]).items()
+        ]
+    }
+
+
+async def _generate_project_timeline(
+    project_id: str,
+    scope_type: str,
+    project_tier: str,
+    priority_tag: str,
+    designer_id: str,
+    created_by: str,
+    created_by_name: str,
+    design_project_id: str = None
+) -> dict:
+    """Internal function to generate a timeline for a project"""
+    
+    # Get timeline config
+    config = await db.timeline_config.find_one({"config_id": "default"}, {"_id": 0})
+    if not config:
+        config = DEFAULT_TIMELINE_CONFIG
+    
+    # Get designer info
+    designer = await db.users.find_one({"user_id": designer_id}, {"_id": 0})
+    if not designer:
+        raise HTTPException(status_code=404, detail="Designer not found")
+    
+    designer_name = designer.get("name", "Unknown")
+    designer_skill_level = designer.get("skill_level", "intermediate")
+    
+    # Count designer's active projects
+    designer_active_projects = await db.design_projects.count_documents({
+        "designer_id": designer_id,
+        "status": "active"
+    })
+    
+    # Count pending timeline reviews for manager capacity
+    manager_pending_reviews = await db.project_timelines.count_documents({
+        "versions": {
+            "$elemMatch": {
+                "status": "pending_approval"
+            }
+        }
+    })
+    
+    # Get project for booking date
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    booking_date_str = project.get("created_at", datetime.now(timezone.utc).isoformat())
+    booking_date = datetime.fromisoformat(booking_date_str.replace('Z', '+00:00'))
+    
+    # Generate timeline
+    milestones, calculation_inputs = generate_system_timeline(
+        booking_date=booking_date,
+        scope_type=scope_type,
+        project_tier=project_tier,
+        priority_tag=priority_tag,
+        designer_id=designer_id,
+        designer_name=designer_name,
+        designer_skill_level=designer_skill_level,
+        designer_active_projects=designer_active_projects,
+        manager_pending_reviews=manager_pending_reviews,
+        config=config
+    )
+    
+    # Create timeline document
+    timeline_doc = create_timeline_document(
+        project_id=project_id,
+        design_project_id=design_project_id,
+        scope_type=scope_type,
+        project_tier=project_tier,
+        priority_tag=priority_tag,
+        milestones=milestones,
+        calculation_inputs=calculation_inputs,
+        created_by=created_by,
+        created_by_name=created_by_name
+    )
+    
+    return timeline_doc
+
+
+@api_router.post("/projects/{project_id}/timeline/generate")
+async def generate_project_timeline(
+    project_id: str, 
+    gen_request: TimelineGenerateRequest,
+    request: Request
+):
+    """Generate a system timeline for a project"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check permission - Designer (own projects), DesignManager, Admin
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    designer_id = project.get("primary_designer_id")
+    if not designer_id:
+        raise HTTPException(status_code=400, detail="No designer assigned to project")
+    
+    is_own_project = designer_id == user.user_id
+    is_manager = has_permission(user_doc, "admin.view_reports") or user.role in ["Admin", "DesignManager"]
+    
+    if not is_own_project and not is_manager:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Check if timeline already exists
+    existing_timeline = await db.project_timelines.find_one(
+        {"project_id": project_id},
+        {"_id": 0}
+    )
+    
+    if existing_timeline:
+        raise HTTPException(
+            status_code=400, 
+            detail="Timeline already exists. Use override endpoint to propose changes."
+        )
+    
+    # Get design_project_id if exists
+    design_project = await db.design_projects.find_one(
+        {"project_id": project_id},
+        {"_id": 0, "id": 1}
+    )
+    design_project_id = design_project.get("id") if design_project else None
+    
+    # Generate timeline
+    timeline_doc = await _generate_project_timeline(
+        project_id=project_id,
+        scope_type=gen_request.scope_type,
+        project_tier=gen_request.project_tier,
+        priority_tag=gen_request.priority_tag,
+        designer_id=designer_id,
+        created_by="system",
+        created_by_name="System",
+        design_project_id=design_project_id
+    )
+    
+    # Store timeline
+    await db.project_timelines.insert_one(timeline_doc)
+    
+    # Update project with classification
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "scope_type": gen_request.scope_type,
+            "project_tier": gen_request.project_tier,
+            "priority_tag": gen_request.priority_tag,
+            "timeline_id": timeline_doc["timeline_id"],
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Notify design managers
+    await notify_design_managers(
+        design_project_id or project_id,
+        f"New timeline generated for project {project.get('project_name', project_id)} - Awaiting approval",
+        f"/projects/{project_id}"
+    )
+    
+    # Remove _id for response
+    timeline_doc.pop("_id", None)
+    
+    return {
+        "message": "Timeline generated successfully",
+        "timeline": timeline_doc
+    }
+
+
+@api_router.get("/projects/{project_id}/timeline")
+async def get_project_timeline(project_id: str, request: Request):
+    """Get timeline for a project"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check project access
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Access check - own project, collaborator, or manager
+    is_own_project = project.get("primary_designer_id") == user.user_id
+    is_collaborator = user.user_id in project.get("collaborators", [])
+    is_manager = has_permission(user_doc, "projects.view_all") or user.role in ["Admin", "DesignManager", "Manager"]
+    
+    if not is_own_project and not is_collaborator and not is_manager:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    timeline = await db.project_timelines.find_one(
+        {"project_id": project_id},
+        {"_id": 0}
+    )
+    
+    if not timeline:
+        return {
+            "exists": False,
+            "message": "No timeline generated for this project",
+            "timeline": None
+        }
+    
+    # Get active version milestones
+    active_version = timeline.get("active_version")
+    active_milestones = None
+    pending_milestones = None
+    
+    for v in timeline.get("versions", []):
+        if v["version"] == active_version:
+            active_milestones = v["milestones"]
+        if v["status"] == "pending_approval":
+            pending_milestones = v
+    
+    return {
+        "exists": True,
+        "timeline": timeline,
+        "active_milestones": active_milestones,
+        "pending_approval": pending_milestones,
+        "is_shared_with_customer": timeline.get("is_shared_with_customer", False)
+    }
+
+
+@api_router.post("/projects/{project_id}/timeline/override")
+async def request_timeline_override(
+    project_id: str,
+    override_request: TimelineOverrideRequest,
+    request: Request
+):
+    """Request an override to the current timeline (Designer/Manager)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Get timeline
+    timeline = await db.project_timelines.find_one(
+        {"project_id": project_id},
+        {"_id": 0}
+    )
+    
+    if not timeline:
+        raise HTTPException(status_code=404, detail="No timeline exists. Generate one first.")
+    
+    # Check if there's already a pending override
+    if timeline.get("pending_override_version"):
+        raise HTTPException(
+            status_code=400,
+            detail="An override request is already pending. Wait for it to be reviewed before submitting another."
+        )
+    
+    # Check project access
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    is_own_project = project.get("primary_designer_id") == user.user_id
+    is_manager = has_permission(user_doc, "admin.view_reports") or user.role in ["Admin", "DesignManager"]
+    
+    if not is_own_project and not is_manager:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Create new override version
+    new_version, new_version_num = create_override_version(
+        existing_timeline=timeline,
+        new_milestones=override_request.milestones,
+        override_reason=override_request.override_reason,
+        created_by=user.user_id,
+        created_by_name=user.name,
+        notes=override_request.notes
+    )
+    
+    now = datetime.now(timezone.utc)
+    
+    # Update timeline with new version
+    await db.project_timelines.update_one(
+        {"project_id": project_id},
+        {
+            "$push": {"versions": new_version},
+            "$set": {
+                "latest_version": new_version_num,
+                "pending_override_version": new_version_num,
+                "updated_at": now.isoformat()
+            }
+        }
+    )
+    
+    # Log to approval history
+    await db.timeline_approval_history.insert_one({
+        "approval_id": f"TA-{uuid.uuid4().hex[:12]}",
+        "timeline_id": timeline["timeline_id"],
+        "project_id": project_id,
+        "version": new_version_num,
+        "action": "override_requested",
+        "actor_id": user.user_id,
+        "actor_name": user.name,
+        "actor_role": user.role,
+        "notes": override_request.override_reason,
+        "created_at": now.isoformat()
+    })
+    
+    # Notify design managers
+    design_project = await db.design_projects.find_one({"project_id": project_id}, {"_id": 0})
+    await notify_design_managers(
+        design_project.get("id") if design_project else project_id,
+        f"Timeline override requested for {project.get('project_name', project_id)} by {user.name}",
+        f"/projects/{project_id}"
+    )
+    
+    return {
+        "message": "Override request submitted for approval",
+        "version": new_version_num
+    }
+
+
+@api_router.put("/projects/{project_id}/timeline/review")
+async def review_timeline(
+    project_id: str,
+    review_request: TimelineReviewRequest,
+    request: Request
+):
+    """Review (approve/reject) a timeline version (DesignManager/Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Design Managers and Admins can approve timelines
+    if not has_permission(user_doc, "admin.view_reports") and user.role not in ["Admin", "DesignManager"]:
+        raise HTTPException(status_code=403, detail="Only Design Managers can review timelines")
+    
+    timeline = await db.project_timelines.find_one({"project_id": project_id}, {"_id": 0})
+    if not timeline:
+        raise HTTPException(status_code=404, detail="Timeline not found")
+    
+    # Find the pending version
+    pending_version_num = timeline.get("pending_override_version")
+    versions = timeline.get("versions", [])
+    
+    # If no pending override, review the latest pending_approval version
+    version_to_review = None
+    for v in versions:
+        if pending_version_num and v["version"] == pending_version_num:
+            version_to_review = v
+            break
+        elif not pending_version_num and v["status"] == "pending_approval":
+            version_to_review = v
+            pending_version_num = v["version"]
+    
+    if not version_to_review:
+        raise HTTPException(status_code=400, detail="No pending timeline to review")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Determine new status and milestones
+    if review_request.approved:
+        new_status = "approved"
+        final_milestones = review_request.adjusted_milestones or version_to_review["milestones"]
+        
+        # Mark previous active version as superseded
+        old_active = timeline.get("active_version")
+        if old_active:
+            await db.project_timelines.update_one(
+                {"project_id": project_id, "versions.version": old_active},
+                {"$set": {"versions.$.status": "superseded"}}
+            )
+        
+        # Update the approved version and set as active
+        await db.project_timelines.update_one(
+            {"project_id": project_id, "versions.version": pending_version_num},
+            {"$set": {
+                "versions.$.status": new_status,
+                "versions.$.milestones": final_milestones,
+                "versions.$.reviewed_by": user.user_id,
+                "versions.$.reviewed_by_name": user.name,
+                "versions.$.reviewed_at": now.isoformat(),
+                "versions.$.review_notes": review_request.review_notes
+            }}
+        )
+        
+        await db.project_timelines.update_one(
+            {"project_id": project_id},
+            {"$set": {
+                "active_version": pending_version_num,
+                "pending_override_version": None,
+                "updated_at": now.isoformat()
+            }}
+        )
+        
+        message = "Timeline approved and activated"
+    else:
+        new_status = "rejected"
+        
+        # Update the rejected version
+        await db.project_timelines.update_one(
+            {"project_id": project_id, "versions.version": pending_version_num},
+            {"$set": {
+                "versions.$.status": new_status,
+                "versions.$.reviewed_by": user.user_id,
+                "versions.$.reviewed_by_name": user.name,
+                "versions.$.reviewed_at": now.isoformat(),
+                "versions.$.review_notes": review_request.review_notes
+            }}
+        )
+        
+        await db.project_timelines.update_one(
+            {"project_id": project_id},
+            {"$set": {
+                "pending_override_version": None,
+                "updated_at": now.isoformat()
+            }}
+        )
+        
+        message = "Timeline rejected"
+    
+    # Log to approval history
+    await db.timeline_approval_history.insert_one({
+        "approval_id": f"TA-{uuid.uuid4().hex[:12]}",
+        "timeline_id": timeline["timeline_id"],
+        "project_id": project_id,
+        "version": pending_version_num,
+        "action": "approved" if review_request.approved else "rejected",
+        "actor_id": user.user_id,
+        "actor_name": user.name,
+        "actor_role": user.role,
+        "notes": review_request.review_notes,
+        "created_at": now.isoformat()
+    })
+    
+    # Notify the timeline creator
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    creator_id = version_to_review.get("created_by")
+    if creator_id and creator_id != "system":
+        await create_notification(
+            user_id=creator_id,
+            title="Timeline Review Complete",
+            message=f"Your timeline {'was approved' if review_request.approved else 'was rejected'} for {project.get('project_name', project_id)}. {review_request.review_notes or ''}",
+            notif_type="system",
+            link_url=f"/projects/{project_id}"
+        )
+    
+    return {"message": message, "status": new_status}
+
+
+@api_router.post("/projects/{project_id}/timeline/share")
+async def share_timeline_with_customer(
+    project_id: str,
+    share_request: TimelineShareRequest,
+    request: Request
+):
+    """Mark timeline as shared with customer (DesignManager/Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Design Managers and Admins can share timelines
+    if not has_permission(user_doc, "admin.view_reports") and user.role not in ["Admin", "DesignManager"]:
+        raise HTTPException(status_code=403, detail="Only Design Managers can share timelines with customers")
+    
+    timeline = await db.project_timelines.find_one({"project_id": project_id}, {"_id": 0})
+    if not timeline:
+        raise HTTPException(status_code=404, detail="Timeline not found")
+    
+    # Must have an approved active version
+    if not timeline.get("active_version"):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot share timeline - no approved version exists. Approve a timeline first."
+        )
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.project_timelines.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "is_shared_with_customer": True,
+            "shared_at": now.isoformat(),
+            "shared_by": user.user_id,
+            "shared_by_name": user.name,
+            "share_notes": share_request.notes,
+            "updated_at": now.isoformat()
+        }}
+    )
+    
+    # Log sharing event
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$push": {"comments": {
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": user.user_id,
+            "user_name": user.name,
+            "role": user.role,
+            "message": f"Timeline shared with customer by {user.name}",
+            "is_system": True,
+            "created_at": now.isoformat()
+        }}}
+    )
+    
+    return {
+        "message": "Timeline marked as shared with customer",
+        "shared_at": now.isoformat()
+    }
+
+
+@api_router.get("/projects/{project_id}/timeline/customer-view")
+async def get_customer_timeline_view(project_id: str, request: Request):
+    """Get customer-facing timeline (only customer-facing milestones)"""
+    user = await get_current_user(request)
+    
+    timeline = await db.project_timelines.find_one({"project_id": project_id}, {"_id": 0})
+    if not timeline:
+        raise HTTPException(status_code=404, detail="Timeline not found")
+    
+    if not timeline.get("is_shared_with_customer"):
+        raise HTTPException(status_code=403, detail="Timeline not shared with customer yet")
+    
+    # Get active version
+    active_version = timeline.get("active_version")
+    active_milestones = None
+    
+    for v in timeline.get("versions", []):
+        if v["version"] == active_version:
+            active_milestones = v["milestones"]
+            break
+    
+    if not active_milestones:
+        raise HTTPException(status_code=400, detail="No active timeline version")
+    
+    # Filter to customer-facing milestones only
+    customer_milestones = get_customer_facing_milestones(active_milestones)
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    
+    return {
+        "project_name": project.get("project_name", "Project"),
+        "client_name": project.get("client_name"),
+        "shared_at": timeline.get("shared_at"),
+        "milestones": customer_milestones
+    }
+
+
+@api_router.get("/projects/{project_id}/timeline/history")
+async def get_timeline_history(project_id: str, request: Request):
+    """Get full timeline version history (Manager+ only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.view_reports") and user.role not in ["Admin", "DesignManager", "Manager"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    timeline = await db.project_timelines.find_one({"project_id": project_id}, {"_id": 0})
+    if not timeline:
+        raise HTTPException(status_code=404, detail="Timeline not found")
+    
+    # Get approval history
+    approval_history = await db.timeline_approval_history.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return {
+        "timeline": timeline,
+        "approval_history": approval_history
+    }
+
+
+@api_router.put("/projects/{project_id}/classification")
+async def update_project_classification(
+    project_id: str,
+    classification: ProjectClassificationUpdate,
+    request: Request
+):
+    """Update project classification (scope, tier, priority) - triggers timeline recalculation"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Permission check
+    is_own_project = project.get("primary_designer_id") == user.user_id
+    is_manager = has_permission(user_doc, "admin.view_reports") or user.role in ["Admin", "DesignManager"]
+    
+    if not is_own_project and not is_manager:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if classification.scope_type:
+        valid_scopes = list(DEFAULT_TIMELINE_CONFIG["scope_types"].keys())
+        if classification.scope_type not in valid_scopes:
+            raise HTTPException(status_code=400, detail=f"Invalid scope type. Must be one of: {valid_scopes}")
+        update_dict["scope_type"] = classification.scope_type
+    
+    if classification.project_tier:
+        valid_tiers = list(DEFAULT_TIMELINE_CONFIG["project_tiers"].keys())
+        if classification.project_tier not in valid_tiers:
+            raise HTTPException(status_code=400, detail=f"Invalid project tier. Must be one of: {valid_tiers}")
+        update_dict["project_tier"] = classification.project_tier
+    
+    if classification.priority_tag:
+        valid_priorities = list(DEFAULT_TIMELINE_CONFIG["priority_tags"].keys())
+        if classification.priority_tag not in valid_priorities:
+            raise HTTPException(status_code=400, detail=f"Invalid priority tag. Must be one of: {valid_priorities}")
+        update_dict["priority_tag"] = classification.priority_tag
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": update_dict}
+    )
+    
+    # Also update timeline if exists
+    await db.project_timelines.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            k: v for k, v in update_dict.items() 
+            if k in ["scope_type", "project_tier", "priority_tag", "updated_at"]
+        }}
+    )
+    
+    return {"message": "Project classification updated", "updates": update_dict}
+
+
+@api_router.get("/timelines/pending-approvals")
+async def get_pending_timeline_approvals(request: Request):
+    """Get all timelines pending approval (DesignManager/Admin)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.view_reports") and user.role not in ["Admin", "DesignManager"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Find timelines with pending approval versions
+    pending_timelines = await db.project_timelines.find(
+        {"versions.status": "pending_approval"},
+        {"_id": 0}
+    ).to_list(100)
+    
+    # Enrich with project info
+    result = []
+    for timeline in pending_timelines:
+        project = await db.projects.find_one(
+            {"project_id": timeline["project_id"]},
+            {"_id": 0, "project_name": 1, "client_name": 1, "primary_designer_id": 1, "primary_designer_name": 1}
+        )
+        
+        # Get the pending version
+        pending_version = None
+        for v in timeline.get("versions", []):
+            if v["status"] == "pending_approval":
+                pending_version = v
+                break
+        
+        if pending_version:
+            result.append({
+                "timeline_id": timeline["timeline_id"],
+                "project_id": timeline["project_id"],
+                "project_name": project.get("project_name") if project else "Unknown",
+                "client_name": project.get("client_name") if project else "Unknown",
+                "designer_name": project.get("primary_designer_name") if project else "Unknown",
+                "version": pending_version["version"],
+                "type": pending_version["type"],
+                "created_by_name": pending_version.get("created_by_name"),
+                "created_at": pending_version.get("created_at"),
+                "scope_type": timeline.get("scope_type"),
+                "project_tier": timeline.get("project_tier"),
+                "priority_tag": timeline.get("priority_tag")
+            })
+    
+    return {
+        "pending_count": len(result),
+        "timelines": result
+    }
+
+
 # ============ CEO DASHBOARD ============
 
 @api_router.get("/ceo/dashboard")

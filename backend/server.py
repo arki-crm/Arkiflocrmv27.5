@@ -3456,6 +3456,13 @@ async def update_user(user_id: str, update_data: UserUpdate, request: Request):
             raise HTTPException(status_code=403, detail="Permission denied: admin.system_settings required for senior_manager_view")
         update_dict["senior_manager_view"] = update_data.senior_manager_view
     
+    # Skill level for designer roles
+    if update_data.skill_level is not None:
+        valid_skill_levels = ["junior", "intermediate", "senior", "architect"]
+        if update_data.skill_level not in valid_skill_levels:
+            raise HTTPException(status_code=400, detail=f"Invalid skill level. Must be one of: {valid_skill_levels}")
+        update_dict["skill_level"] = update_data.skill_level
+    
     await db.users.update_one(
         {"user_id": user_id},
         {"$set": update_dict}

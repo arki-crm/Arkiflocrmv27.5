@@ -58,6 +58,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import {
+  QuotationValuePrompt,
+  ValueChangePrompt
+} from '../components/MilestoneValuePrompts';
 import MeetingModal from '../components/MeetingModal';
 import MeetingCard from '../components/MeetingCard';
 import CustomerDetailsSection from '../components/CustomerDetailsSection';

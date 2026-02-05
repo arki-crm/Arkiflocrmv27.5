@@ -119,7 +119,8 @@ const UserEdit = () => {
     phone: '',
     role: '',
     status: '',
-    picture: ''
+    picture: '',
+    skill_level: 'intermediate'
   });
   const [errors, setErrors] = useState({});
   

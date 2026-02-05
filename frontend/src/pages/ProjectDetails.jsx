@@ -413,8 +413,42 @@ const ProjectDetails = () => {
     }
   };
 
-  // Complete a sub-stage (new sub-stage progression system)
-  const handleSubStageComplete = async (substageId, substageName, groupName) => {
+  // Check if milestone requires value prompt before completion
+  const checkMilestoneValuePrompt = (substageId, substageName, groupName) => {
+    const currentQuotationValue = project?.quotation_history?.length > 0
+      ? project.quotation_history[project.quotation_history.length - 1].quoted_value
+      : 0;
+
+    // BOQ milestones - require quotation value entry
+    if (BOQ_MILESTONES.some(m => substageName.includes(m) || groupName.includes(m))) {
+      setPendingMilestone({ substageId, substageName, groupName });
+      setShowQuotationPrompt(true);
+      return true;
+    }
+
+    // Revision milestones - ask if value changed
+    if (REVISION_MILESTONES.some(m => substageName.includes(m) || groupName.includes(m))) {
+      if (currentQuotationValue > 0) {
+        setPendingMilestone({ substageId, substageName, groupName });
+        setShowValueChangePrompt(true);
+        return true;
+      }
+    }
+
+    // Sign-off milestones - require confirmation before locking
+    if (SIGNOFF_MILESTONES.some(m => substageName.includes(m) || groupName.includes(m))) {
+      if (!project?.signoff_locked) {
+        setPendingMilestone({ substageId, substageName, groupName });
+        setShowSignOffConfirmation(true);
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  // Actually complete the milestone (called after value prompt)
+  const executeSubStageComplete = async (substageId, substageName, groupName) => {
     try {
       setIsUpdatingStage(true);
       const response = await axios.post(`${API}/projects/${id}/substage/complete`,
@@ -444,23 +478,75 @@ const ProjectDetails = () => {
         toast.success(`✅ "${substageName}" completed`);
       }
       
-      // Refetch to get updated comments (but preserve our substages)
-      const commentsResponse = await axios.get(`${API}/projects/${id}`, {
-        withCredentials: true
-      });
-      if (commentsResponse.data) {
-        setProject(prev => prev ? {
-          ...prev,
-          comments: commentsResponse.data.comments || [],
-          completed_substages: newCompletedSubStages // Keep our updated substages
-        } : prev);
-      }
+      // Refetch to get updated comments and quotation history
+      await fetchProject();
     } catch (err) {
       console.error('Failed to complete sub-stage:', err);
       toast.error(err.response?.data?.detail || 'Failed to complete step');
     } finally {
       setIsUpdatingStage(false);
     }
+  };
+
+  // Complete a sub-stage (new sub-stage progression system)
+  const handleSubStageComplete = async (substageId, substageName, groupName) => {
+    // Check if this milestone requires a value prompt
+    if (checkMilestoneValuePrompt(substageId, substageName, groupName)) {
+      return; // Prompt will handle completion
+    }
+
+    // No prompt needed - complete directly
+    await executeSubStageComplete(substageId, substageName, groupName);
+  };
+
+  // Handle quotation prompt completion
+  const handleQuotationPromptComplete = async (quotationValue) => {
+    setShowQuotationPrompt(false);
+    if (pendingMilestone) {
+      await executeSubStageComplete(
+        pendingMilestone.substageId,
+        pendingMilestone.substageName,
+        pendingMilestone.groupName
+      );
+      setPendingMilestone(null);
+    }
+  };
+
+  // Handle value change prompt completion
+  const handleValueChangePromptComplete = async (quotationValue) => {
+    setShowValueChangePrompt(false);
+    if (pendingMilestone) {
+      await executeSubStageComplete(
+        pendingMilestone.substageId,
+        pendingMilestone.substageName,
+        pendingMilestone.groupName
+      );
+      setPendingMilestone(null);
+    }
+  };
+
+  // Handle sign-off confirmation completion
+  const handleSignOffConfirmationComplete = async (signoffValue) => {
+    setShowSignOffConfirmation(false);
+    if (pendingMilestone) {
+      await executeSubStageComplete(
+        pendingMilestone.substageId,
+        pendingMilestone.substageName,
+        pendingMilestone.groupName
+      );
+      setPendingMilestone(null);
+    }
+    // Refresh to show locked value
+    await fetchProject();
+  };
+
+  // Cancel any value prompt
+  const handleValuePromptCancel = () => {
+    setShowQuotationPrompt(false);
+    setShowValueChangePrompt(false);
+    setShowSignOffConfirmation(false);
+    setPendingMilestone(null);
+    toast.info('Milestone completion cancelled');
   };
 
   // Update a percentage-based sub-stage (Non-Modular Dependency Works)

@@ -5,11 +5,96 @@ Build a full-stack CRM application for an interior design company, managing the 
 
 ## Architecture
 - **Frontend**: React 19 + TailwindCSS + Shadcn UI
-- **Backend**: FastAPI (Python) - Currently monolithic server.py (~17,000+ lines)
+- **Backend**: FastAPI (Python) - Currently monolithic server.py (~18,000+ lines)
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Timeline Intelligence Engine COMPLETE ✅
+## Current Status: Design Approval Gate Phase 1 COMPLETE ✅
+**As of February 5, 2026**
+
+### NEW: Design Approval Gate (Phase 1)
+
+#### Purpose
+Mandatory manager approval workflow before client presentations. Ensures quality control and governance over design deliverables.
+
+#### Gated Milestones
+| Milestone Key | Display Name | Stage |
+|---------------|--------------|-------|
+| `design_meeting_2` | Design Meeting 2 (3D Concept Freeze) | 3D Design |
+| `design_meeting_3_final` | Design Meeting 3 (Final Design Freeze) | Final Design |
+| `pre_production_signoff` | Pre-Production Sign-Off | Production Handover |
+
+**Note:** Design Meeting 1 (Floor Plan Discussion) does NOT require approval.
+
+#### Submission Structure
+Each submission includes:
+- **Files**: Renders, drawings, PDFs (stored with file_id, name, url, type)
+- **Checklist**: 6 required items per milestone (budget alignment, materials, scope, etc.)
+- **Design Notes**: Concept explanation and key decisions (required)
+- **Concept Summary**: Client-facing summary (optional)
+- **Constraints Notes**: Limitations and special considerations (optional)
+
+#### Data Model: `design_submissions` Collection
+```json
+{
+  "submission_id": "DS-xxx",
+  "project_id": "proj_xxx",
+  "milestone_key": "design_meeting_2",
+  "version": 1,
+  "status": "pending_review | approved | revision_required | rejected | withdrawn",
+  "is_locked": true,
+  "files": [...],
+  "checklist": [...],
+  "design_notes": "...",
+  "submitted_by": "user_id",
+  "submitted_at": "datetime",
+  "deadline": "2026-02-10",
+  "is_overdue": false,
+  "reviewed_by": "user_id",
+  "reviewed_at": "datetime",
+  "review_notes": "...",
+  "improvement_areas": []
+}
+```
+
+#### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/design-approval/gated-milestones` | GET | Get list of gated milestones |
+| `/api/design-approval/checklist/{key}` | GET | Get checklist template |
+| `/api/projects/{id}/design-submissions` | POST | Create submission |
+| `/api/projects/{id}/design-submissions` | GET | List submissions |
+| `/api/projects/{id}/design-submissions/{sid}` | GET | Get submission details |
+| `/api/projects/{id}/design-submissions/{sid}/review` | PUT | Approve/reject |
+| `/api/design-submissions/pending-approvals` | GET | Manager queue |
+| `/api/projects/{id}/design-approval-status` | GET | Status for all gates |
+
+#### Milestone Gate Integration
+- Completion of gated milestones blocked until approved submission exists
+- Clear error messages: "pending review" vs "not submitted"
+- Admin/Founder can override with logging
+- Rejection returns to "revision_required" status with mandatory notes
+
+#### Frontend Components
+| Component | Location | Features |
+|-----------|----------|----------|
+| `DesignApprovalPanel` | ProjectDetails.jsx | Milestone cards, submit modal, review for managers |
+| `DesignSubmissionsQueue` | DesignManagerDashboard.jsx | Pending queue with deadline tracking |
+
+#### Workflow
+```
+Designer submits → Status: pending_review, Milestone: locked
+                        ↓
+Manager reviews:
+  - Approve → Status: approved, Milestone: can_complete
+  - Reject → Status: revision_required, Milestone: unlocked for resubmission
+```
+
+**Testing:** ✅ All tests passed (iteration_44.json) - Backend 100%, Frontend 100%
+
+---
+
+## Previous Status: Timeline Intelligence Engine COMPLETE ✅
 **As of February 5, 2026**
 
 ### NEW: Timeline Intelligence Engine

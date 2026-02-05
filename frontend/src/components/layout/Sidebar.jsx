@@ -19,6 +19,7 @@ import {
   BarChart3,
   Palette,
   ClipboardCheck,
+  FileCheck,
   Crown,
   Truck,
   Target,

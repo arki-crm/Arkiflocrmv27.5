@@ -263,6 +263,36 @@ class DesignerAssignmentResponse(BaseModel):
     notes: Optional[str]
     is_active: bool
 
+# ============ TIMELINE INTELLIGENCE MODELS ============
+
+class TimelineGenerateRequest(BaseModel):
+    """Request to generate or regenerate a project timeline"""
+    scope_type: str = "3bhk"  # studio, 1bhk, 2bhk, 3bhk, 4bhk, 5bhk_plus, villa, luxury_villa, commercial
+    project_tier: str = "standard"  # standard, premium, luxury
+    priority_tag: str = "normal"  # normal, fast_track, vip, referral
+
+class TimelineOverrideRequest(BaseModel):
+    """Designer request to override timeline milestones"""
+    milestones: List[dict]  # List of milestone overrides with new dates
+    override_reason: str
+    notes: Optional[str] = None
+
+class TimelineReviewRequest(BaseModel):
+    """Manager review of a timeline (approve/reject)"""
+    approved: bool
+    review_notes: Optional[str] = None
+    adjusted_milestones: Optional[List[dict]] = None  # Manager can adjust during approval
+
+class TimelineShareRequest(BaseModel):
+    """Mark timeline as shared with customer"""
+    notes: Optional[str] = None
+
+class ProjectClassificationUpdate(BaseModel):
+    """Update project classification for timeline factors"""
+    scope_type: Optional[str] = None
+    project_tier: Optional[str] = None
+    priority_tag: Optional[str] = None
+
 # ============ FINANCIAL GATES MODELS ============
 
 class GateOverrideRequest(BaseModel):

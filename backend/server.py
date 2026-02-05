@@ -88,6 +88,7 @@ class User(BaseModel):
     name: str
     picture: Optional[str] = None
     role: str = "Designer"  # Admin, PreSales, Designer, Manager, Trainee
+    skill_level: Optional[str] = "intermediate"  # junior, intermediate, senior, architect (for Designers)
     phone: Optional[str] = None
     status: str = "Active"  # Active, Inactive
     created_at: datetime
@@ -100,6 +101,7 @@ class UserResponse(BaseModel):
     name: str
     picture: Optional[str] = None
     role: str
+    skill_level: Optional[str] = "intermediate"
     phone: Optional[str] = None
     status: str = "Active"
     created_at: Optional[str] = None
@@ -111,6 +113,7 @@ class UserInvite(BaseModel):
     email: str
     role: str
     phone: Optional[str] = None
+    skill_level: Optional[str] = "intermediate"  # For Designer roles
     senior_manager_view: Optional[bool] = False  # V1 permission toggle
 
 class UserUpdate(BaseModel):
@@ -119,6 +122,7 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     status: Optional[str] = None
     picture: Optional[str] = None
+    skill_level: Optional[str] = None  # junior, intermediate, senior, architect
     senior_manager_view: Optional[bool] = None  # V1 permission toggle
 
 class ProfileUpdate(BaseModel):

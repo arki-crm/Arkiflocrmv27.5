@@ -63,6 +63,7 @@ import { Switch } from '../components/ui/switch';
 import CustomerDetailsSection from '../components/CustomerDetailsSection';
 import DesignerAssignmentPanel from '../components/DesignerAssignmentPanel';
 import TimelineIntelligencePanel from '../components/TimelineIntelligencePanel';
+import DesignApprovalPanel from '../components/DesignApprovalPanel';
 import {
   QuotationValuePrompt,
   ValueChangePrompt,

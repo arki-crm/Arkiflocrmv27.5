@@ -364,7 +364,7 @@ export function BookedValueConfirmation({
             Confirm Booked Value
           </DialogTitle>
           <DialogDescription>
-            This value will be locked as the "Booked Value" when booking is confirmed.
+            This value will be locked as the &ldquo;Booked Value&rdquo; when booking is confirmed.
           </DialogDescription>
         </DialogHeader>
 

@@ -36,6 +36,7 @@ import DelayReport from './pages/DelayReport';
 // V1 Simplified Design Workflow Pages
 import DesignBoard from './pages/DesignBoard';
 import DesignManagerDashboard from './pages/DesignManagerDashboard';
+import DesignReviewQueue from './pages/DesignReviewQueue';
 import ValidationPipeline from './pages/ValidationPipeline';
 import CEODashboard from './pages/CEODashboard';
 import OperationsDashboard from './pages/OperationsDashboard';

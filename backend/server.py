@@ -2754,6 +2754,7 @@ async def invite_user(invite_data: UserInvite, request: Request):
         "name": invite_data.name,
         "picture": None,  # Will be set when user logs in with Google
         "role": invite_data.role,
+        "skill_level": invite_data.skill_level or "intermediate",  # For designer roles
         "phone": invite_data.phone,
         "status": "Active",
         "senior_manager_view": invite_data.senior_manager_view or False,  # V1 permission

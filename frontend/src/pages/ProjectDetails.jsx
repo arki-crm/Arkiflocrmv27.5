@@ -91,9 +91,10 @@ import TimelineAdjustmentModal, { TimelineHistoryModal } from '../components/Tim
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 // Milestones that require quotation value entry
-const BOQ_MILESTONES = ['First BOQ Sent', 'BOQ Shared'];
-const REVISION_MILESTONES = ['Revised BOQ Shared', 'Revised BOQ Sent', 'Design Revision'];
-const SIGNOFF_MILESTONES = ['KWS Sign-Off', 'Design Sign-Off'];
+// These match substage names OR substage IDs in MILESTONE_GROUPS
+const BOQ_MILESTONES = ['first_boq', 'boq_shared', 'First BOQ', 'BOQ Shared', 'Quotation'];
+const REVISION_MILESTONES = ['revised_boq', 'Revised BOQ', 'Design Revision', 'design_revision'];
+const SIGNOFF_MILESTONES = ['kws_signoff', 'KWS Sign-Off', 'design_signoff', 'Design Sign-Off'];
 
 const ProjectDetails = () => {
   const { id } = useParams();

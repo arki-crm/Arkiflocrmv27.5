@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import TimelineApprovalsPanel from '../components/TimelineApprovalsPanel';
+import DesignSubmissionsQueue from '../components/DesignSubmissionsQueue';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 

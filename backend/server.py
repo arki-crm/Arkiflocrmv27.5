@@ -16800,6 +16800,419 @@ async def withdraw_design_submission(project_id: str, submission_id: str, reques
     return {"message": "Submission withdrawn successfully"}
 
 
+# ============ DESIGN MANAGER REVIEW QUEUE (Phase 3) ============
+
+@api_router.get("/design-manager/review-queue")
+async def get_design_manager_review_queue(request: Request):
+    """
+    Comprehensive Review Queue for Design Managers
+    Combines: Pending Approvals, Overdue Reviews, Upcoming Meetings Awaiting Approval
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.view_reports") and user.role not in ["Admin", "DesignManager", "Manager"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    now = datetime.now(timezone.utc)
+    
+    # ========== 1. PENDING DESIGN SUBMISSIONS ==========
+    pending_submissions = await db.design_submissions.find(
+        {"status": "pending_review"},
+        {"_id": 0}
+    ).sort("submitted_at", 1).to_list(100)
+    
+    pending_designs = []
+    for sub in pending_submissions:
+        project = await db.projects.find_one(
+            {"project_id": sub["project_id"]},
+            {"_id": 0, "project_name": 1, "client_name": 1, "primary_designer_name": 1}
+        )
+        
+        deadline_status = calculate_deadline_status(sub.get("deadline"))
+        
+        pending_designs.append({
+            "type": "design_submission",
+            "submission_id": sub["submission_id"],
+            "project_id": sub["project_id"],
+            "project_name": project.get("project_name") if project else "Unknown",
+            "client_name": project.get("client_name") if project else "Unknown",
+            "designer_name": sub["submitted_by_name"],
+            "milestone_key": sub["milestone_key"],
+            "milestone_name": sub["milestone_name"],
+            "version": sub["version"],
+            "submitted_at": sub["submitted_at"],
+            "deadline": sub.get("deadline"),
+            "is_overdue": deadline_status.get("is_overdue", False),
+            "is_due_soon": deadline_status.get("is_due_soon", False),
+            "days_remaining": deadline_status.get("days_remaining"),
+            "priority": "high" if deadline_status.get("is_overdue") else "medium" if deadline_status.get("is_due_soon") else "normal"
+        })
+    
+    # ========== 2. PENDING TIMELINE APPROVALS ==========
+    pending_timelines_cursor = await db.project_timelines.find(
+        {"versions.status": "pending_approval"},
+        {"_id": 0}
+    ).to_list(100)
+    
+    pending_timelines = []
+    for timeline in pending_timelines_cursor:
+        project = await db.projects.find_one(
+            {"project_id": timeline["project_id"]},
+            {"_id": 0, "project_name": 1, "client_name": 1, "primary_designer_name": 1}
+        )
+        
+        pending_version = None
+        for v in timeline.get("versions", []):
+            if v["status"] == "pending_approval":
+                pending_version = v
+                break
+        
+        if pending_version:
+            pending_timelines.append({
+                "type": "timeline_approval",
+                "timeline_id": timeline["timeline_id"],
+                "project_id": timeline["project_id"],
+                "project_name": project.get("project_name") if project else "Unknown",
+                "client_name": project.get("client_name") if project else "Unknown",
+                "designer_name": project.get("primary_designer_name") if project else "Unknown",
+                "version": pending_version["version"],
+                "version_type": pending_version["type"],
+                "submitted_at": pending_version["created_at"],
+                "submitted_by": pending_version.get("created_by_name", "System"),
+                "priority": "medium"
+            })
+    
+    # ========== 3. UPCOMING MEETINGS AWAITING APPROVAL ==========
+    # Find projects with upcoming client meetings that don't have approved designs
+    
+    # Get all active projects
+    active_projects = await db.projects.find(
+        {"status": {"$nin": ["Completed", "Cancelled", "Deactivated"]}},
+        {"_id": 0}
+    ).to_list(500)
+    
+    upcoming_meetings_needing_approval = []
+    
+    for project in active_projects:
+        project_id = project.get("project_id")
+        
+        # Get project timeline
+        timeline = await db.project_timelines.find_one(
+            {"project_id": project_id},
+            {"_id": 0}
+        )
+        
+        if not timeline or not timeline.get("active_version"):
+            continue
+        
+        # Get active milestones
+        active_milestones = None
+        for v in timeline.get("versions", []):
+            if v["version"] == timeline["active_version"]:
+                active_milestones = v.get("milestones", [])
+                break
+        
+        if not active_milestones:
+            continue
+        
+        # Check each gated milestone
+        for gated_key, gated_info in GATED_MILESTONES.items():
+            # Find the milestone in timeline
+            milestone_date = None
+            for m in active_milestones:
+                if m["milestone_key"] == gated_key:
+                    milestone_date = m.get("planned_date")
+                    break
+            
+            if not milestone_date:
+                continue
+            
+            # Parse date
+            try:
+                meeting_date = datetime.strptime(milestone_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            except:
+                continue
+            
+            # Check if meeting is in next 14 days
+            days_until_meeting = (meeting_date - now).days
+            if days_until_meeting < 0 or days_until_meeting > 14:
+                continue
+            
+            # Check if there's an approved submission for this milestone
+            approved_submission = await db.design_submissions.find_one({
+                "project_id": project_id,
+                "milestone_key": gated_key,
+                "status": "approved"
+            })
+            
+            if approved_submission:
+                continue  # Already approved, no action needed
+            
+            # Check if there's a pending submission
+            pending_submission = await db.design_submissions.find_one({
+                "project_id": project_id,
+                "milestone_key": gated_key,
+                "status": "pending_review"
+            })
+            
+            status = "pending_review" if pending_submission else "not_submitted"
+            
+            upcoming_meetings_needing_approval.append({
+                "type": "upcoming_meeting",
+                "project_id": project_id,
+                "project_name": project.get("project_name", "Unknown"),
+                "client_name": project.get("client_name", "Unknown"),
+                "designer_name": project.get("primary_designer_name", "Unknown"),
+                "milestone_key": gated_key,
+                "milestone_name": gated_info["name"],
+                "meeting_date": milestone_date,
+                "days_until_meeting": days_until_meeting,
+                "approval_status": status,
+                "submission_id": pending_submission.get("submission_id") if pending_submission else None,
+                "priority": "critical" if days_until_meeting <= 3 else "high" if days_until_meeting <= 7 else "medium"
+            })
+    
+    # Sort upcoming meetings by days_until_meeting
+    upcoming_meetings_needing_approval.sort(key=lambda x: x["days_until_meeting"])
+    
+    # ========== COMPILE STATISTICS ==========
+    stats = {
+        "pending_designs": {
+            "total": len(pending_designs),
+            "overdue": sum(1 for d in pending_designs if d["is_overdue"]),
+            "due_soon": sum(1 for d in pending_designs if d["is_due_soon"])
+        },
+        "pending_timelines": {
+            "total": len(pending_timelines)
+        },
+        "upcoming_meetings": {
+            "total": len(upcoming_meetings_needing_approval),
+            "critical": sum(1 for m in upcoming_meetings_needing_approval if m["priority"] == "critical"),
+            "not_submitted": sum(1 for m in upcoming_meetings_needing_approval if m["approval_status"] == "not_submitted"),
+            "pending_review": sum(1 for m in upcoming_meetings_needing_approval if m["approval_status"] == "pending_review")
+        },
+        "total_action_items": len(pending_designs) + len(pending_timelines) + len(upcoming_meetings_needing_approval)
+    }
+    
+    return {
+        "stats": stats,
+        "pending_designs": pending_designs,
+        "pending_timelines": pending_timelines,
+        "upcoming_meetings": upcoming_meetings_needing_approval
+    }
+
+
+@api_router.get("/design-manager/upcoming-meetings")
+async def get_upcoming_meetings_awaiting_approval(
+    days_ahead: int = 14,
+    request: Request = None
+):
+    """
+    Get upcoming client meetings that are awaiting design approval
+    Shows meetings in the next N days that don't have approved designs
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.view_reports") and user.role not in ["Admin", "DesignManager", "Manager"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    now = datetime.now(timezone.utc)
+    cutoff_date = now + timedelta(days=days_ahead)
+    
+    # Get all active projects with timelines
+    active_projects = await db.projects.find(
+        {"status": {"$nin": ["Completed", "Cancelled", "Deactivated"]}},
+        {"_id": 0, "project_id": 1, "project_name": 1, "client_name": 1, "primary_designer_id": 1, "primary_designer_name": 1}
+    ).to_list(500)
+    
+    meetings = []
+    
+    for project in active_projects:
+        project_id = project.get("project_id")
+        
+        # Get timeline
+        timeline = await db.project_timelines.find_one(
+            {"project_id": project_id},
+            {"_id": 0}
+        )
+        
+        if not timeline or not timeline.get("active_version"):
+            continue
+        
+        # Get active milestones
+        active_milestones = None
+        for v in timeline.get("versions", []):
+            if v["version"] == timeline["active_version"]:
+                active_milestones = v.get("milestones", [])
+                break
+        
+        if not active_milestones:
+            continue
+        
+        # Check each gated milestone that requires a meeting
+        for gated_key, gated_info in GATED_MILESTONES.items():
+            # Find milestone in timeline
+            milestone_data = None
+            for m in active_milestones:
+                if m["milestone_key"] == gated_key:
+                    milestone_data = m
+                    break
+            
+            if not milestone_data or not milestone_data.get("planned_date"):
+                continue
+            
+            # Parse date
+            try:
+                meeting_date = datetime.strptime(milestone_data["planned_date"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            except:
+                continue
+            
+            # Check if in range
+            if meeting_date < now or meeting_date > cutoff_date:
+                continue
+            
+            days_until = (meeting_date - now).days
+            
+            # Get approval status
+            approved = await db.design_submissions.find_one({
+                "project_id": project_id,
+                "milestone_key": gated_key,
+                "status": "approved"
+            })
+            
+            pending = await db.design_submissions.find_one({
+                "project_id": project_id,
+                "milestone_key": gated_key,
+                "status": "pending_review"
+            })
+            
+            revision_required = await db.design_submissions.find_one({
+                "project_id": project_id,
+                "milestone_key": gated_key,
+                "status": "revision_required"
+            })
+            
+            if approved:
+                status = "approved"
+                status_label = "Ready"
+                action_required = False
+            elif pending:
+                status = "pending_review"
+                status_label = "Needs Review"
+                action_required = True
+            elif revision_required:
+                status = "revision_required"
+                status_label = "Awaiting Revision"
+                action_required = False
+            else:
+                status = "not_submitted"
+                status_label = "Not Submitted"
+                action_required = False
+            
+            meetings.append({
+                "project_id": project_id,
+                "project_name": project.get("project_name"),
+                "client_name": project.get("client_name"),
+                "designer_id": project.get("primary_designer_id"),
+                "designer_name": project.get("primary_designer_name"),
+                "milestone_key": gated_key,
+                "milestone_name": gated_info["name"],
+                "meeting_date": milestone_data["planned_date"],
+                "days_until_meeting": days_until,
+                "status": status,
+                "status_label": status_label,
+                "action_required": action_required,
+                "submission_id": pending.get("submission_id") if pending else None,
+                "is_ready": status == "approved",
+                "urgency": "critical" if days_until <= 2 else "high" if days_until <= 5 else "medium" if days_until <= 10 else "low"
+            })
+    
+    # Sort by meeting date
+    meetings.sort(key=lambda x: x["meeting_date"])
+    
+    # Group by urgency
+    critical = [m for m in meetings if m["urgency"] == "critical"]
+    high = [m for m in meetings if m["urgency"] == "high"]
+    medium = [m for m in meetings if m["urgency"] == "medium"]
+    low = [m for m in meetings if m["urgency"] == "low"]
+    
+    return {
+        "total_meetings": len(meetings),
+        "ready_count": sum(1 for m in meetings if m["is_ready"]),
+        "needs_review_count": sum(1 for m in meetings if m["status"] == "pending_review"),
+        "not_submitted_count": sum(1 for m in meetings if m["status"] == "not_submitted"),
+        "by_urgency": {
+            "critical": critical,
+            "high": high,
+            "medium": medium,
+            "low": low
+        },
+        "all_meetings": meetings
+    }
+
+
+@api_router.get("/design-manager/overdue-reviews")
+async def get_overdue_reviews(request: Request):
+    """Get all overdue design submissions that need review"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.view_reports") and user.role not in ["Admin", "DesignManager", "Manager"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Get pending submissions
+    pending = await db.design_submissions.find(
+        {"status": "pending_review"},
+        {"_id": 0}
+    ).to_list(200)
+    
+    overdue = []
+    for sub in pending:
+        deadline = sub.get("deadline")
+        if not deadline:
+            continue
+        
+        try:
+            deadline_dt = datetime.strptime(deadline, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except:
+            continue
+        
+        if deadline_dt < now:
+            days_overdue = (now - deadline_dt).days
+            
+            project = await db.projects.find_one(
+                {"project_id": sub["project_id"]},
+                {"_id": 0, "project_name": 1, "client_name": 1}
+            )
+            
+            overdue.append({
+                "submission_id": sub["submission_id"],
+                "project_id": sub["project_id"],
+                "project_name": project.get("project_name") if project else "Unknown",
+                "client_name": project.get("client_name") if project else "Unknown",
+                "milestone_name": sub["milestone_name"],
+                "version": sub["version"],
+                "submitted_by_name": sub["submitted_by_name"],
+                "submitted_at": sub["submitted_at"],
+                "deadline": deadline,
+                "days_overdue": days_overdue,
+                "urgency": "critical" if days_overdue > 5 else "high" if days_overdue > 2 else "medium"
+            })
+    
+    # Sort by days overdue (most overdue first)
+    overdue.sort(key=lambda x: -x["days_overdue"])
+    
+    return {
+        "total_overdue": len(overdue),
+        "critical_count": sum(1 for o in overdue if o["urgency"] == "critical"),
+        "overdue_reviews": overdue
+    }
+
+
 # ============ CEO DASHBOARD ============
 
 @api_router.get("/ceo/dashboard")

@@ -521,6 +521,31 @@ const UserEdit = () => {
                   )}
                 </div>
 
+                {/* Skill Level - Only for Designer roles */}
+                {['Designer', 'SeniorDesigner', 'DesignManager', 'HybridDesigner'].includes(formData.role) && (
+                  <div className="space-y-2">
+                    <Label htmlFor="skill_level" className="text-sm font-medium text-slate-700">Skill Level</Label>
+                    <Select 
+                      value={formData.skill_level} 
+                      onValueChange={(value) => handleChange('skill_level', value)}
+                      disabled={!canEditField('skill_level')}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Select skill level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="junior">Junior Designer (×1.4 timeline)</SelectItem>
+                        <SelectItem value="intermediate">Intermediate Designer (×1.15)</SelectItem>
+                        <SelectItem value="senior">Senior Designer (×1.0)</SelectItem>
+                        <SelectItem value="architect">Architect (×0.85 faster)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-slate-500">
+                      Skill level affects project timeline calculations
+                    </p>
+                  </div>
+                )}
+
                 {/* Status */}
                 <div className="space-y-2">
                   <Label htmlFor="status" className="text-sm font-medium text-slate-700">Status</Label>

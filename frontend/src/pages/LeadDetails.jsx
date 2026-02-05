@@ -878,9 +878,39 @@ const LeadDetails = () => {
   };
 
   // Update stage
-  const handleStageChange = async (newStage) => {
-    if (newStage === lead?.stage) return;
-    
+  // Lead stages that require quotation prompts
+  const BOQ_STAGES = ['First BOQ Sent', 'BOQ Shared'];
+  const REVISION_STAGES = ['Revised BOQ Shared', 'Revised BOQ Sent'];
+
+  // Check if stage change requires value prompt
+  const checkStageValuePrompt = (newStage) => {
+    const currentQuotationValue = lead?.quotation_history?.length > 0
+      ? lead.quotation_history[lead.quotation_history.length - 1].quoted_value
+      : 0;
+
+    // BOQ stages - require quotation value entry if no quotation exists
+    if (BOQ_STAGES.includes(newStage)) {
+      if (currentQuotationValue <= 0) {
+        setPendingStage(newStage);
+        setShowQuotationPrompt(true);
+        return true;
+      }
+    }
+
+    // Revision stages - ask if value changed (only if quotation exists)
+    if (REVISION_STAGES.includes(newStage)) {
+      if (currentQuotationValue > 0) {
+        setPendingStage(newStage);
+        setShowValueChangePrompt(true);
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  // Actually execute the stage change
+  const executeStageChange = async (newStage) => {
     try {
       setIsUpdatingStage(true);
       await axios.put(`${API}/leads/${id}/stage`,
@@ -896,6 +926,44 @@ const LeadDetails = () => {
     } finally {
       setIsUpdatingStage(false);
     }
+  };
+
+  const handleStageChange = async (newStage) => {
+    if (newStage === lead?.stage) return;
+    
+    // Check if this stage requires a value prompt
+    if (checkStageValuePrompt(newStage)) {
+      return; // Prompt will handle the stage change
+    }
+
+    // No prompt needed - change directly
+    await executeStageChange(newStage);
+  };
+
+  // Handle quotation prompt completion (for BOQ stages)
+  const handleQuotationPromptComplete = async (quotationValue) => {
+    setShowQuotationPrompt(false);
+    if (pendingStage) {
+      await executeStageChange(pendingStage);
+      setPendingStage(null);
+    }
+  };
+
+  // Handle value change prompt completion (for Revision stages)
+  const handleValueChangePromptComplete = async (quotationValue) => {
+    setShowValueChangePrompt(false);
+    if (pendingStage) {
+      await executeStageChange(pendingStage);
+      setPendingStage(null);
+    }
+  };
+
+  // Cancel value prompt
+  const handleValuePromptCancel = () => {
+    setShowQuotationPrompt(false);
+    setShowValueChangePrompt(false);
+    setPendingStage(null);
+    toast.info('Stage change cancelled');
   };
 
   // Fetch designers

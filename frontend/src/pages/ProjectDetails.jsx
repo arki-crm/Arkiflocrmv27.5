@@ -142,6 +142,12 @@ const ProjectDetails = () => {
   const [holdReason, setHoldReason] = useState('');
   const [isUpdatingHoldStatus, setIsUpdatingHoldStatus] = useState(false);
   
+  // Milestone Value Prompts state
+  const [showQuotationPrompt, setShowQuotationPrompt] = useState(false);
+  const [showValueChangePrompt, setShowValueChangePrompt] = useState(false);
+  const [showSignOffConfirmation, setShowSignOffConfirmation] = useState(false);
+  const [pendingMilestone, setPendingMilestone] = useState(null); // { substageId, substageName, groupName }
+  
   // Timeline Adjustment state
   const [showTimelineAdjustmentModal, setShowTimelineAdjustmentModal] = useState(false);
   const [showTimelineHistoryModal, setShowTimelineHistoryModal] = useState(false);

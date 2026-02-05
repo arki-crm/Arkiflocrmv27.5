@@ -285,6 +285,16 @@ export function ValueChangePrompt({
                   className="bg-white"
                 />
               </div>
+
+              {currentQuotationValue > 0 && newValue && parseFloat(newValue) !== currentQuotationValue && (
+                <div className="p-2 bg-slate-100 rounded text-sm">
+                  <span className="text-slate-600">Change: </span>
+                  <span className={parseFloat(newValue) > currentQuotationValue ? 'text-green-600' : 'text-red-600'}>
+                    {parseFloat(newValue) > currentQuotationValue ? '+' : ''}
+                    ₹{(parseFloat(newValue) - currentQuotationValue).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

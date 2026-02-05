@@ -1756,6 +1756,48 @@ const ProjectDetails = () => {
         history={timelineHistory}
         entityType="project"
       />
+
+      {/* Milestone Value Prompts */}
+      <QuotationValuePrompt
+        open={showQuotationPrompt}
+        onOpenChange={setShowQuotationPrompt}
+        entityType="project"
+        entityId={id}
+        milestoneName={pendingMilestone?.substageName || pendingMilestone?.groupName || ''}
+        currentQuotationValue={
+          project?.quotation_history?.length > 0
+            ? project.quotation_history[project.quotation_history.length - 1].quoted_value
+            : 0
+        }
+        onComplete={handleQuotationPromptComplete}
+        onCancel={handleValuePromptCancel}
+      />
+
+      <ValueChangePrompt
+        open={showValueChangePrompt}
+        onOpenChange={setShowValueChangePrompt}
+        entityType="project"
+        entityId={id}
+        milestoneName={pendingMilestone?.substageName || pendingMilestone?.groupName || ''}
+        currentQuotationValue={
+          project?.quotation_history?.length > 0
+            ? project.quotation_history[project.quotation_history.length - 1].quoted_value
+            : 0
+        }
+        onComplete={handleValueChangePromptComplete}
+        onCancel={handleValuePromptCancel}
+      />
+
+      <SignOffConfirmation
+        open={showSignOffConfirmation}
+        onOpenChange={setShowSignOffConfirmation}
+        projectId={id}
+        quotationHistory={project?.quotation_history || []}
+        bookedValue={project?.booked_value}
+        inquiryValue={project?.inquiry_value}
+        onConfirm={handleSignOffConfirmationComplete}
+        onCancel={handleValuePromptCancel}
+      />
     </div>
   );
 };

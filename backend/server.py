@@ -7594,6 +7594,48 @@ async def convert_to_project(lead_id: str, request: Request):
         }
     )
     
+    # ========== AUTO-GENERATE TIMELINE INTELLIGENCE ==========
+    # Generate system timeline if designer is assigned
+    if primary_designer_id:
+        try:
+            # Get project classification from lead or use defaults
+            scope_type = lead.get("scope_type", "3bhk")
+            project_tier = lead.get("project_tier", "standard")
+            priority_tag = lead.get("priority_tag", "normal")
+            
+            # Check if lead was from referral
+            if lead.get("source", "").lower() in ["referral", "word of mouth"]:
+                priority_tag = "referral"
+            
+            timeline_doc = await _generate_project_timeline(
+                project_id=project_id,
+                scope_type=scope_type,
+                project_tier=project_tier,
+                priority_tag=priority_tag,
+                designer_id=primary_designer_id,
+                created_by="system",
+                created_by_name="System (Auto-Generated)",
+                design_project_id=None
+            )
+            
+            await db.project_timelines.insert_one(timeline_doc)
+            
+            # Update project with timeline reference
+            await db.projects.update_one(
+                {"project_id": project_id},
+                {"$set": {
+                    "timeline_id": timeline_doc["timeline_id"],
+                    "scope_type": scope_type,
+                    "project_tier": project_tier,
+                    "priority_tag": priority_tag
+                }}
+            )
+            
+            logger.info(f"Auto-generated timeline {timeline_doc['timeline_id']} for project {project_id}")
+        except Exception as e:
+            # Log error but don't fail the conversion
+            logger.error(f"Failed to auto-generate timeline for project {project_id}: {e}")
+    
     return {
         "message": "Lead converted to project successfully",
         "project_id": project_id,

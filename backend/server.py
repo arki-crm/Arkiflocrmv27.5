@@ -2583,6 +2583,7 @@ def format_user_response(user_doc):
         "name": user_doc.get("name"),
         "picture": user_doc.get("picture"),
         "role": user_doc.get("role", "Designer"),
+        "skill_level": user_doc.get("skill_level", "intermediate"),  # Designer skill level
         "phone": user_doc.get("phone"),
         "status": user_doc.get("status", "Active"),
         "senior_manager_view": user_doc.get("senior_manager_view", False),  # V1 permission toggle

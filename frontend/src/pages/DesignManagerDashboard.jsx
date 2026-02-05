@@ -169,6 +169,9 @@ const DesignManagerDashboard = () => {
       {/* Timeline Approvals Panel */}
       <TimelineApprovalsPanel onUpdate={fetchData} />
 
+      {/* Design Submissions Approval Queue */}
+      <DesignSubmissionsQueue onUpdate={fetchData} />
+
       {/* Projects by Stage & Bottlenecks */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Projects by Stage */}

@@ -879,8 +879,9 @@ const LeadDetails = () => {
 
   // Update stage
   // Lead stages that require quotation prompts
-  const BOQ_STAGES = ['First BOQ Sent', 'BOQ Shared'];
-  const REVISION_STAGES = ['Revised BOQ Shared', 'Revised BOQ Sent'];
+  // Stage names from LEAD_STAGES: "BOQ Shared", "Revised BOQ Shared"
+  const BOQ_STAGES = ['BOQ Shared'];
+  const REVISION_STAGES = ['Revised BOQ Shared'];
 
   // Check if stage change requires value prompt
   const checkStageValuePrompt = (newStage) => {

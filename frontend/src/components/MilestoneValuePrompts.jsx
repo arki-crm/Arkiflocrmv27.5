@@ -90,7 +90,7 @@ export function QuotationValuePrompt({
             Enter Quotation Value
           </DialogTitle>
           <DialogDescription>
-            Before completing "{milestoneName}", please enter the quotation value.
+            Before completing &ldquo;{milestoneName}&rdquo;, please enter the quotation value.
           </DialogDescription>
         </DialogHeader>
 

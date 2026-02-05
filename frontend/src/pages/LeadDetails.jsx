@@ -689,6 +689,11 @@ const LeadDetails = () => {
   const [holdReason, setHoldReason] = useState('');
   const [isUpdatingHoldStatus, setIsUpdatingHoldStatus] = useState(false);
   
+  // Milestone Value Prompts state (for BOQ and Revision stages)
+  const [showQuotationPrompt, setShowQuotationPrompt] = useState(false);
+  const [showValueChangePrompt, setShowValueChangePrompt] = useState(false);
+  const [pendingStage, setPendingStage] = useState(null);
+  
   // Timeline Adjustment state
   const [showTimelineAdjustmentModal, setShowTimelineAdjustmentModal] = useState(false);
   const [showTimelineHistoryModal, setShowTimelineHistoryModal] = useState(false);

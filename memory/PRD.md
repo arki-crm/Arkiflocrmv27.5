@@ -5,11 +5,108 @@ Build a full-stack CRM application for an interior design company, managing the 
 
 ## Architecture
 - **Frontend**: React 19 + TailwindCSS + Shadcn UI
-- **Backend**: FastAPI (Python) - Currently monolithic server.py (~15,000+ lines)
+- **Backend**: FastAPI (Python) - Currently monolithic server.py (~17,000+ lines)
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Designer Assignment Tracking COMPLETE ✅
+## Current Status: Timeline Intelligence Engine COMPLETE ✅
+**As of February 5, 2026**
+
+### NEW: Timeline Intelligence Engine
+
+#### Purpose
+System-generated tentative timeline engine for interior design projects. Replaces manual timeline creation with intelligent, factor-based calculations.
+
+#### Key Features
+1. **Auto-Generation**: System generates timeline when project is booked
+2. **7 Calculation Factors**: Scope, skill, workload, tier, priority, manager capacity, client buffer
+3. **11 Milestones**: Including 2 internal review checkpoints
+4. **Override Workflow**: Designer proposes → Manager approves/rejects
+5. **Customer Sharing**: Only approved timelines can be shared externally
+6. **Sequential Control**: Only one pending override at a time
+
+#### Data Model: `project_timelines` Collection
+```json
+{
+  "timeline_id": "TL-xxx",
+  "project_id": "proj_xxx",
+  "scope_type": "3bhk",
+  "project_tier": "premium",
+  "priority_tag": "vip",
+  "versions": [{
+    "version": 1,
+    "type": "system_generated | manual_override",
+    "status": "pending_approval | approved | rejected | superseded",
+    "milestones": [...],
+    "calculation_inputs": {...},
+    "created_by": "system | user_id",
+    "reviewed_by": "user_id (manager)",
+    "reviewed_at": "datetime"
+  }],
+  "active_version": 1,
+  "is_shared_with_customer": true/false
+}
+```
+
+#### Calculation Factors
+| Factor | Range | Impact |
+|--------|-------|--------|
+| Scope Complexity | Studio (×0.6) → Luxury Villa (×1.8) | Project size |
+| Designer Skill | Junior (×1.4) → Architect (×0.85) | Productivity |
+| Designer Workload | Low (×1.0) → Overloaded (×1.5) | Capacity |
+| Project Tier | Standard (×1.0) → Luxury (×1.5) | Revision buffer |
+| Priority Tag | Normal (×1.0) → Fast-Track (×0.75) | Timeline compression |
+| Manager Capacity | Light (+1 day) → Overloaded (+5 days) | Review buffer |
+| Client Buffer | +2 days | Meeting coordination |
+
+**Combined Multiplier** = scope × skill × workload × tier × priority
+
+#### 11 Milestones
+| # | Milestone | Customer-Facing |
+|---|-----------|-----------------|
+| 1 | Site Measurement | ✅ |
+| 2 | Internal Design Review 1 | ❌ |
+| 3 | Design Meeting 1 | ✅ |
+| 4 | Internal Design Review 2 | ❌ |
+| 5 | Design Meeting 2 | ✅ |
+| 6 | Design Meeting 3 (Final) | ✅ |
+| 7 | Material Selection & Confirmation | ✅ |
+| 8 | Payment & Order Confirmation | ✅ |
+| 9 | Site Validation | ✅ |
+| 10 | GFC Approval (Internal) | ❌ |
+| 11 | Order Sign-Off Meeting | ✅ |
+
+#### New API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/timeline-config/options` | GET | Get dropdown options (scopes, tiers, priorities, skills) |
+| `/api/projects/{id}/timeline/generate` | POST | Generate system timeline |
+| `/api/projects/{id}/timeline` | GET | Get current timeline with active/pending versions |
+| `/api/projects/{id}/timeline/override` | POST | Request timeline override |
+| `/api/projects/{id}/timeline/review` | PUT | Approve/reject timeline (Manager) |
+| `/api/projects/{id}/timeline/share` | POST | Mark as shared with customer |
+| `/api/projects/{id}/timeline/customer-view` | GET | Get customer-facing milestones only |
+| `/api/projects/{id}/timeline/history` | GET | Get full version history |
+| `/api/timelines/pending-approvals` | GET | Get all pending approvals (Manager) |
+
+#### Frontend Components
+| Component | Location | Features |
+|-----------|----------|----------|
+| `TimelineIntelligencePanel` | ProjectDetails.jsx | Milestones display, calculation modal, override request |
+| `TimelineApprovalsPanel` | DesignManagerDashboard.jsx | Pending queue, review modal, approve/reject |
+
+#### User Skill Level
+Added `skill_level` field to users:
+- `junior` - Junior Designer (×1.4 timeline multiplier)
+- `intermediate` - Intermediate Designer (×1.15)
+- `senior` - Senior Designer (×1.0)
+- `architect` - Architect (×0.85 faster)
+
+**Testing:** ✅ All tests passed (iteration_43.json) - Backend 100%, Frontend 100%
+
+---
+
+## Previous Status: Designer Assignment Tracking COMPLETE ✅
 **As of February 4, 2026**
 
 ### NEW: Designer Assignment Tracking System

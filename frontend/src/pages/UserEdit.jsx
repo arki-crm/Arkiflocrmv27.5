@@ -164,7 +164,8 @@ const UserEdit = () => {
         phone: response.data.phone || '',
         role: response.data.role || 'Designer',
         status: response.data.status || 'Active',
-        picture: response.data.picture || ''
+        picture: response.data.picture || '',
+        skill_level: response.data.skill_level || 'intermediate'
       });
       setUserPermissions(response.data.permissions || []);
       setCustomPermissions(response.data.custom_permissions || false);

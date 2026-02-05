@@ -1095,6 +1095,13 @@ const ProjectDetails = () => {
               onHistoryUpdated={fetchProject}
             />
           </div>
+
+          {/* Timeline Intelligence Panel */}
+          <TimelineIntelligencePanel
+            projectId={id}
+            canManage={canChangeStage() || user?.role === 'Admin' || user?.role === 'Founder' || project?.primary_designer_id === user?.user_id}
+            isManager={user?.role === 'DesignManager' || user?.role === 'Admin' || user?.role === 'Founder' || user?.role === 'Manager'}
+          />
         </div>
       )}
 

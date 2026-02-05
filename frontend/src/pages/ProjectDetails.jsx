@@ -62,6 +62,11 @@ import { Textarea } from '../components/ui/textarea';
 import { Switch } from '../components/ui/switch';
 import CustomerDetailsSection from '../components/CustomerDetailsSection';
 import DesignerAssignmentPanel from '../components/DesignerAssignmentPanel';
+import {
+  QuotationValuePrompt,
+  ValueChangePrompt,
+  SignOffConfirmation
+} from '../components/MilestoneValuePrompts';
 
 // Import extracted components
 import { 
@@ -84,6 +89,11 @@ import MeetingCard from '../components/MeetingCard';
 import TimelineAdjustmentModal, { TimelineHistoryModal } from '../components/TimelineAdjustmentModal';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Milestones that require quotation value entry
+const BOQ_MILESTONES = ['First BOQ Sent', 'BOQ Shared'];
+const REVISION_MILESTONES = ['Revised BOQ Shared', 'Revised BOQ Sent', 'Design Revision'];
+const SIGNOFF_MILESTONES = ['KWS Sign-Off', 'Design Sign-Off'];
 
 const ProjectDetails = () => {
   const { id } = useParams();

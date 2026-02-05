@@ -41,7 +41,7 @@ import { cn } from '../lib/utils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-const TimelinePanel = ({ projectId, canManage = false, isManager = false }) => {
+const TimelineIntelligencePanel = ({ projectId, canManage = false, isManager = false }) => {
   const [loading, setLoading] = useState(true);
   const [timeline, setTimeline] = useState(null);
   const [options, setOptions] = useState(null);
@@ -668,4 +668,4 @@ const TimelinePanel = ({ projectId, canManage = false, isManager = false }) => {
   );
 };
 
-export default TimelinePanel;
+export default TimelineIntelligencePanel;

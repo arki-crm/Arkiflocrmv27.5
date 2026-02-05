@@ -203,6 +203,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
     case 'DesignManager':
       return [
         { path: '/design-manager', label: 'My Dashboard', icon: LayoutDashboard },
+        { path: '/design-review-queue', label: 'Review Queue', icon: ClipboardCheck },
         ...commonItems,
         { path: '/projects', label: 'All Projects', icon: FolderKanban },
         { path: '/design-board', label: 'Design Board', icon: Palette },

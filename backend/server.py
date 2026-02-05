@@ -16185,6 +16185,531 @@ async def get_pending_timeline_approvals(request: Request):
     }
 
 
+# ============ DESIGN APPROVAL GATE (Phase 1) ============
+
+@api_router.get("/design-approval/gated-milestones")
+async def get_gated_milestones(request: Request):
+    """Get list of milestones that require design approval"""
+    await get_current_user(request)
+    
+    return {
+        "gated_milestones": [
+            {
+                "key": key,
+                "name": info["name"],
+                "description": info["description"],
+                "stage": info["stage"],
+                "checklist_items": len(SUBMISSION_CHECKLIST.get(key, []))
+            }
+            for key, info in GATED_MILESTONES.items()
+        ],
+        "statuses": SUBMISSION_STATUSES
+    }
+
+
+@api_router.get("/design-approval/checklist/{milestone_key}")
+async def get_submission_checklist(milestone_key: str, request: Request):
+    """Get checklist template for a specific milestone"""
+    await get_current_user(request)
+    
+    if milestone_key not in GATED_MILESTONES:
+        raise HTTPException(status_code=400, detail=f"Invalid milestone key: {milestone_key}")
+    
+    return {
+        "milestone_key": milestone_key,
+        "milestone_name": GATED_MILESTONES[milestone_key]["name"],
+        "checklist": get_checklist_template(milestone_key)
+    }
+
+
+@api_router.post("/projects/{project_id}/design-submissions")
+async def create_design_submission(
+    project_id: str,
+    submission_data: DesignSubmissionCreate,
+    request: Request
+):
+    """Create a new design submission for manager approval"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Verify project exists
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check permission - Designer assigned to project or manager
+    is_assigned = project.get("primary_designer_id") == user.user_id
+    is_collaborator = user.user_id in project.get("collaborators", [])
+    is_manager = has_permission(user_doc, "admin.view_reports") or user.role in ["Admin", "DesignManager", "Manager"]
+    
+    if not is_assigned and not is_collaborator and not is_manager:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Validate milestone key
+    if submission_data.milestone_key not in GATED_MILESTONES:
+        raise HTTPException(status_code=400, detail=f"Invalid gated milestone: {submission_data.milestone_key}")
+    
+    # Check if there's already a pending submission for this milestone
+    existing_pending = await db.design_submissions.find_one({
+        "project_id": project_id,
+        "milestone_key": submission_data.milestone_key,
+        "status": "pending_review"
+    })
+    
+    if existing_pending:
+        raise HTTPException(
+            status_code=400, 
+            detail="A submission is already pending review for this milestone. Wait for review or withdraw the existing submission."
+        )
+    
+    # Get version number (count previous submissions for this milestone)
+    previous_count = await db.design_submissions.count_documents({
+        "project_id": project_id,
+        "milestone_key": submission_data.milestone_key
+    })
+    version = previous_count + 1
+    
+    # Get previous submission ID if this is a resubmission
+    previous_submission = await db.design_submissions.find_one(
+        {
+            "project_id": project_id,
+            "milestone_key": submission_data.milestone_key,
+            "status": {"$in": ["rejected", "revision_required"]}
+        },
+        sort=[("version", -1)]
+    )
+    previous_submission_id = previous_submission.get("submission_id") if previous_submission else None
+    
+    # Get deadline from timeline if available
+    deadline = None
+    timeline = await db.project_timelines.find_one({"project_id": project_id}, {"_id": 0})
+    if timeline and timeline.get("active_version"):
+        for v in timeline.get("versions", []):
+            if v["version"] == timeline["active_version"]:
+                for m in v.get("milestones", []):
+                    if m["milestone_key"] == submission_data.milestone_key:
+                        deadline = m.get("planned_date")
+                        break
+                break
+    
+    # Create submission document
+    submission_doc = create_submission_document(
+        project_id=project_id,
+        milestone_key=submission_data.milestone_key,
+        files=submission_data.files,
+        checklist=submission_data.checklist,
+        design_notes=submission_data.design_notes,
+        concept_summary=submission_data.concept_summary,
+        constraints_notes=submission_data.constraints_notes,
+        submitted_by=user.user_id,
+        submitted_by_name=user.name,
+        version=version,
+        deadline=deadline,
+        previous_submission_id=previous_submission_id
+    )
+    
+    await db.design_submissions.insert_one(submission_doc)
+    
+    # Add project comment
+    now = datetime.now(timezone.utc)
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$push": {"comments": {
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": user.user_id,
+            "user_name": user.name,
+            "role": user.role,
+            "message": f"Design submission v{version} created for {GATED_MILESTONES[submission_data.milestone_key]['name']} - Awaiting approval",
+            "is_system": True,
+            "created_at": now.isoformat()
+        }}}
+    )
+    
+    # Notify design managers
+    design_project = await db.design_projects.find_one({"project_id": project_id}, {"_id": 0})
+    await notify_design_managers(
+        design_project.get("id") if design_project else project_id,
+        f"New design submission for {project.get('project_name', project_id)} - {GATED_MILESTONES[submission_data.milestone_key]['name']} (v{version})",
+        f"/projects/{project_id}"
+    )
+    
+    # Remove _id for response
+    submission_doc.pop("_id", None)
+    
+    return {
+        "message": "Design submission created successfully",
+        "submission": submission_doc
+    }
+
+
+@api_router.get("/projects/{project_id}/design-submissions")
+async def get_project_design_submissions(
+    project_id: str,
+    milestone_key: Optional[str] = None,
+    request: Request = None
+):
+    """Get all design submissions for a project"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Verify project exists and user has access
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    is_assigned = project.get("primary_designer_id") == user.user_id
+    is_collaborator = user.user_id in project.get("collaborators", [])
+    is_manager = has_permission(user_doc, "projects.view_all") or user.role in ["Admin", "DesignManager", "Manager"]
+    
+    if not is_assigned and not is_collaborator and not is_manager:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Build query
+    query = {"project_id": project_id}
+    if milestone_key:
+        query["milestone_key"] = milestone_key
+    
+    submissions = await db.design_submissions.find(
+        query, {"_id": 0}
+    ).sort("submitted_at", -1).to_list(100)
+    
+    # Calculate deadline status for each
+    for sub in submissions:
+        sub["deadline_status"] = calculate_deadline_status(sub.get("deadline"))
+    
+    # Group by milestone
+    by_milestone = {}
+    for sub in submissions:
+        key = sub["milestone_key"]
+        if key not in by_milestone:
+            by_milestone[key] = {
+                "milestone_key": key,
+                "milestone_name": sub["milestone_name"],
+                "latest_submission": None,
+                "total_versions": 0,
+                "has_pending": False,
+                "has_approved": False,
+                "submissions": []
+            }
+        by_milestone[key]["submissions"].append(sub)
+        by_milestone[key]["total_versions"] += 1
+        
+        if sub["status"] == "pending_review":
+            by_milestone[key]["has_pending"] = True
+        if sub["status"] == "approved":
+            by_milestone[key]["has_approved"] = True
+    
+    # Set latest submission for each milestone
+    for key in by_milestone:
+        if by_milestone[key]["submissions"]:
+            by_milestone[key]["latest_submission"] = by_milestone[key]["submissions"][0]
+    
+    return {
+        "project_id": project_id,
+        "total_submissions": len(submissions),
+        "by_milestone": list(by_milestone.values()),
+        "all_submissions": submissions
+    }
+
+
+@api_router.get("/projects/{project_id}/design-submissions/{submission_id}")
+async def get_design_submission(project_id: str, submission_id: str, request: Request):
+    """Get a specific design submission"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    submission = await db.design_submissions.find_one(
+        {"submission_id": submission_id, "project_id": project_id},
+        {"_id": 0}
+    )
+    
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    # Calculate deadline status
+    submission["deadline_status"] = calculate_deadline_status(submission.get("deadline"))
+    
+    # Get previous submissions for comparison
+    previous_submissions = await db.design_submissions.find(
+        {
+            "project_id": project_id,
+            "milestone_key": submission["milestone_key"],
+            "version": {"$lt": submission["version"]}
+        },
+        {"_id": 0}
+    ).sort("version", -1).to_list(10)
+    
+    return {
+        "submission": submission,
+        "previous_submissions": previous_submissions
+    }
+
+
+@api_router.put("/projects/{project_id}/design-submissions/{submission_id}/review")
+async def review_design_submission(
+    project_id: str,
+    submission_id: str,
+    review_data: DesignSubmissionReview,
+    request: Request
+):
+    """Review (approve/reject) a design submission - Manager only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Design Managers and Admins can review
+    if not has_permission(user_doc, "admin.view_reports") and user.role not in ["Admin", "DesignManager", "Manager"]:
+        raise HTTPException(status_code=403, detail="Only Design Managers can review submissions")
+    
+    submission = await db.design_submissions.find_one(
+        {"submission_id": submission_id, "project_id": project_id},
+        {"_id": 0}
+    )
+    
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    if submission["status"] != "pending_review":
+        raise HTTPException(status_code=400, detail=f"Submission is not pending review. Current status: {submission['status']}")
+    
+    now = datetime.now(timezone.utc)
+    
+    if review_data.approved:
+        new_status = "approved"
+        message = "Design submission approved"
+    else:
+        new_status = "revision_required"
+        message = "Design submission requires revision"
+        
+        # Validate rejection notes
+        if not review_data.review_notes or len(review_data.review_notes.strip()) < 10:
+            raise HTTPException(status_code=400, detail="Rejection requires detailed review notes (minimum 10 characters)")
+    
+    # Update submission
+    await db.design_submissions.update_one(
+        {"submission_id": submission_id},
+        {"$set": {
+            "status": new_status,
+            "is_locked": review_data.approved,  # Keep locked if approved, unlock if rejected
+            "reviewed_by": user.user_id,
+            "reviewed_by_name": user.name,
+            "reviewed_at": now.isoformat(),
+            "review_notes": review_data.review_notes,
+            "improvement_areas": review_data.improvement_areas or [],
+            "updated_at": now.isoformat()
+        }}
+    )
+    
+    # Add project comment
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    status_emoji = "✅" if review_data.approved else "🔄"
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$push": {"comments": {
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": user.user_id,
+            "user_name": user.name,
+            "role": user.role,
+            "message": f"{status_emoji} Design submission v{submission['version']} for {submission['milestone_name']} - {new_status.replace('_', ' ').title()}",
+            "is_system": True,
+            "created_at": now.isoformat()
+        }}}
+    )
+    
+    # Notify the designer
+    await create_notification(
+        user_id=submission["submitted_by"],
+        title="Design Review Complete",
+        message=f"Your design submission for {submission['milestone_name']} has been {'approved ✅' if review_data.approved else 'returned for revision 🔄'}. {review_data.review_notes[:100] if review_data.review_notes else ''}",
+        notif_type="system",
+        link_url=f"/projects/{project_id}"
+    )
+    
+    return {
+        "message": message,
+        "status": new_status,
+        "reviewed_at": now.isoformat()
+    }
+
+
+@api_router.get("/design-submissions/pending-approvals")
+async def get_pending_design_submissions(request: Request):
+    """Get all design submissions pending approval - Manager only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.view_reports") and user.role not in ["Admin", "DesignManager", "Manager"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Get pending submissions
+    pending = await db.design_submissions.find(
+        {"status": "pending_review"},
+        {"_id": 0}
+    ).sort("submitted_at", 1).to_list(100)  # Oldest first
+    
+    # Enrich with project info
+    result = []
+    for sub in pending:
+        project = await db.projects.find_one(
+            {"project_id": sub["project_id"]},
+            {"_id": 0, "project_name": 1, "client_name": 1, "primary_designer_name": 1}
+        )
+        
+        deadline_status = calculate_deadline_status(sub.get("deadline"))
+        
+        result.append({
+            "submission_id": sub["submission_id"],
+            "project_id": sub["project_id"],
+            "project_name": project.get("project_name") if project else "Unknown",
+            "client_name": project.get("client_name") if project else "Unknown",
+            "milestone_key": sub["milestone_key"],
+            "milestone_name": sub["milestone_name"],
+            "version": sub["version"],
+            "submitted_by_name": sub["submitted_by_name"],
+            "submitted_at": sub["submitted_at"],
+            "deadline": sub.get("deadline"),
+            "is_overdue": deadline_status.get("is_overdue", False),
+            "is_due_soon": deadline_status.get("is_due_soon", False),
+            "days_remaining": deadline_status.get("days_remaining"),
+            "files_count": len(sub.get("files", [])),
+            "checklist_completion": sum(1 for c in sub.get("checklist", []) if c.get("checked")) / max(len(sub.get("checklist", [])), 1) * 100
+        })
+    
+    # Sort: overdue first, then due soon, then by submitted_at
+    result.sort(key=lambda x: (
+        not x["is_overdue"],
+        not x["is_due_soon"],
+        x["submitted_at"]
+    ))
+    
+    return {
+        "pending_count": len(result),
+        "overdue_count": sum(1 for r in result if r["is_overdue"]),
+        "due_soon_count": sum(1 for r in result if r["is_due_soon"]),
+        "submissions": result
+    }
+
+
+@api_router.get("/projects/{project_id}/design-approval-status")
+async def get_project_design_approval_status(project_id: str, request: Request):
+    """Get design approval status for all gated milestones in a project"""
+    user = await get_current_user(request)
+    
+    # Verify project exists
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    result = []
+    for milestone_key, milestone_info in GATED_MILESTONES.items():
+        # Get latest submission for this milestone
+        latest_submission = await db.design_submissions.find_one(
+            {"project_id": project_id, "milestone_key": milestone_key},
+            {"_id": 0},
+            sort=[("version", -1)]
+        )
+        
+        # Get approved submission if exists
+        approved_submission = await db.design_submissions.find_one(
+            {"project_id": project_id, "milestone_key": milestone_key, "status": "approved"},
+            {"_id": 0}
+        )
+        
+        # Get pending submission if exists
+        pending_submission = await db.design_submissions.find_one(
+            {"project_id": project_id, "milestone_key": milestone_key, "status": "pending_review"},
+            {"_id": 0}
+        )
+        
+        # Get deadline from timeline
+        deadline = None
+        timeline = await db.project_timelines.find_one({"project_id": project_id}, {"_id": 0})
+        if timeline and timeline.get("active_version"):
+            for v in timeline.get("versions", []):
+                if v["version"] == timeline["active_version"]:
+                    for m in v.get("milestones", []):
+                        if m["milestone_key"] == milestone_key:
+                            deadline = m.get("planned_date")
+                            break
+                    break
+        
+        deadline_status = calculate_deadline_status(deadline)
+        
+        status = "not_submitted"
+        can_complete_milestone = False
+        
+        if approved_submission:
+            status = "approved"
+            can_complete_milestone = True
+        elif pending_submission:
+            status = "pending_review"
+        elif latest_submission:
+            status = latest_submission["status"]  # revision_required, rejected
+        
+        result.append({
+            "milestone_key": milestone_key,
+            "milestone_name": milestone_info["name"],
+            "description": milestone_info["description"],
+            "stage": milestone_info["stage"],
+            "status": status,
+            "can_complete_milestone": can_complete_milestone,
+            "latest_submission": {
+                "submission_id": latest_submission["submission_id"],
+                "version": latest_submission["version"],
+                "status": latest_submission["status"],
+                "submitted_at": latest_submission["submitted_at"]
+            } if latest_submission else None,
+            "approved_submission_id": approved_submission["submission_id"] if approved_submission else None,
+            "pending_submission_id": pending_submission["submission_id"] if pending_submission else None,
+            "total_submissions": await db.design_submissions.count_documents({
+                "project_id": project_id, 
+                "milestone_key": milestone_key
+            }),
+            "deadline": deadline,
+            "deadline_status": deadline_status
+        })
+    
+    return {
+        "project_id": project_id,
+        "milestones": result,
+        "all_approved": all(m["status"] == "approved" for m in result),
+        "any_pending": any(m["status"] == "pending_review" for m in result)
+    }
+
+
+@api_router.delete("/projects/{project_id}/design-submissions/{submission_id}")
+async def withdraw_design_submission(project_id: str, submission_id: str, request: Request):
+    """Withdraw a pending design submission - Designer only"""
+    user = await get_current_user(request)
+    
+    submission = await db.design_submissions.find_one(
+        {"submission_id": submission_id, "project_id": project_id},
+        {"_id": 0}
+    )
+    
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    # Only submitter can withdraw
+    if submission["submitted_by"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Only the submitter can withdraw a submission")
+    
+    # Can only withdraw pending submissions
+    if submission["status"] != "pending_review":
+        raise HTTPException(status_code=400, detail="Only pending submissions can be withdrawn")
+    
+    # Update status to withdrawn
+    await db.design_submissions.update_one(
+        {"submission_id": submission_id},
+        {"$set": {
+            "status": "withdrawn",
+            "is_locked": False,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"message": "Submission withdrawn successfully"}
+
+
 # ============ CEO DASHBOARD ============
 
 @api_router.get("/ceo/dashboard")

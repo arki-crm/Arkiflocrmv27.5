@@ -1846,6 +1846,37 @@ const LeadDetails = () => {
         history={timelineHistory}
         entityType="lead"
       />
+
+      {/* Milestone Value Prompts */}
+      <QuotationValuePrompt
+        open={showQuotationPrompt}
+        onOpenChange={setShowQuotationPrompt}
+        entityType="lead"
+        entityId={id}
+        milestoneName={pendingStage || 'BOQ'}
+        currentQuotationValue={
+          lead?.quotation_history?.length > 0
+            ? lead.quotation_history[lead.quotation_history.length - 1].quoted_value
+            : 0
+        }
+        onComplete={handleQuotationPromptComplete}
+        onCancel={handleValuePromptCancel}
+      />
+
+      <ValueChangePrompt
+        open={showValueChangePrompt}
+        onOpenChange={setShowValueChangePrompt}
+        entityType="lead"
+        entityId={id}
+        milestoneName={pendingStage || 'Revised BOQ'}
+        currentQuotationValue={
+          lead?.quotation_history?.length > 0
+            ? lead.quotation_history[lead.quotation_history.length - 1].quoted_value
+            : 0
+        }
+        onComplete={handleValueChangePromptComplete}
+        onCancel={handleValuePromptCancel}
+      />
     </div>
   );
 };

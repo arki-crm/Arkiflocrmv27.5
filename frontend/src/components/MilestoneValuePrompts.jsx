@@ -223,7 +223,7 @@ export function ValueChangePrompt({
             Quotation Value Check
           </DialogTitle>
           <DialogDescription>
-            Before completing "{milestoneName}", please confirm if the quotation value has changed.
+            Before completing &ldquo;{milestoneName}&rdquo;, please confirm if the quotation value has changed.
           </DialogDescription>
         </DialogHeader>
 

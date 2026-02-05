@@ -4549,6 +4549,51 @@ async def complete_substage(project_id: str, request: Request):
     if not has_perm:
         raise HTTPException(status_code=403, detail=perm_error)
     
+    # ============ DESIGN APPROVAL GATE (Phase 1) ============
+    # These milestones require Design Manager approval before completion
+    DESIGN_APPROVAL_GATED_MILESTONES = {
+        "design_meeting_2": "design_meeting_2",  # Maps substage_id to gated_milestone_key
+        "design_meeting_3": "design_meeting_3_final",
+        "final_design_presentation": "pre_production_signoff"
+    }
+    
+    if substage_id in DESIGN_APPROVAL_GATED_MILESTONES:
+        gated_key = DESIGN_APPROVAL_GATED_MILESTONES[substage_id]
+        milestone_display_name = GATED_MILESTONES.get(gated_key, {}).get("name", substage_id)
+        
+        # Check if there's an approved design submission for this milestone
+        approved_submission = await db.design_submissions.find_one({
+            "project_id": project_id,
+            "milestone_key": gated_key,
+            "status": "approved"
+        })
+        
+        # Check for pending submission
+        pending_submission = await db.design_submissions.find_one({
+            "project_id": project_id,
+            "milestone_key": gated_key,
+            "status": "pending_review"
+        })
+        
+        # Admin/Founder can override
+        if user_doc.get("role") in ["Admin", "Founder"]:
+            if not approved_submission:
+                # Log the override
+                logger.warning(f"ADMIN OVERRIDE: {user.name} completing {milestone_display_name} without design approval for project {project_id}")
+        else:
+            if pending_submission:
+                # There's a submission pending review - wait for it
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Design submission for '{milestone_display_name}' is pending manager review. Please wait for approval before completing this milestone."
+                )
+            elif not approved_submission:
+                # No submission exists - must submit first
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Design approval required. Please submit design for '{milestone_display_name}' and get manager approval before completing this milestone."
+                )
+    
     # ============ PAYMENT GATE CHECK (Milestones with Payment Confirmation) ============
     # These milestones require Accounts confirmation, exactly like Booking Payment Confirmation
     PAYMENT_GATED_MILESTONES = {
@@ -4916,6 +4961,51 @@ async def update_percentage_substage(project_id: str, request: Request):
     has_perm, perm_error = check_milestone_permission(user_doc, substage_id)
     if not has_perm:
         raise HTTPException(status_code=403, detail=perm_error)
+    
+    # ============ DESIGN APPROVAL GATE (Phase 1) ============
+    # These milestones require Design Manager approval before completion
+    DESIGN_APPROVAL_GATED_MILESTONES = {
+        "design_meeting_2": "design_meeting_2",  # Maps substage_id to gated_milestone_key
+        "design_meeting_3": "design_meeting_3_final",
+        "final_design_presentation": "pre_production_signoff"
+    }
+    
+    if substage_id in DESIGN_APPROVAL_GATED_MILESTONES:
+        gated_key = DESIGN_APPROVAL_GATED_MILESTONES[substage_id]
+        milestone_display_name = GATED_MILESTONES.get(gated_key, {}).get("name", substage_id)
+        
+        # Check if there's an approved design submission for this milestone
+        approved_submission = await db.design_submissions.find_one({
+            "project_id": project_id,
+            "milestone_key": gated_key,
+            "status": "approved"
+        })
+        
+        # Check for pending submission
+        pending_submission = await db.design_submissions.find_one({
+            "project_id": project_id,
+            "milestone_key": gated_key,
+            "status": "pending_review"
+        })
+        
+        # Admin/Founder can override
+        if user_doc.get("role") in ["Admin", "Founder"]:
+            if not approved_submission:
+                # Log the override
+                logger.warning(f"ADMIN OVERRIDE: {user.name} completing {milestone_display_name} without design approval for project {project_id}")
+        else:
+            if pending_submission:
+                # There's a submission pending review - wait for it
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Design submission for '{milestone_display_name}' is pending manager review. Please wait for approval before completing this milestone."
+                )
+            elif not approved_submission:
+                # No submission exists - must submit first
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Design approval required. Please submit design for '{milestone_display_name}' and get manager approval before completing this milestone."
+                )
     
     # ============ PAYMENT GATE CHECK (Milestones with Payment Confirmation) ============
     # These milestones require Accounts confirmation, exactly like Booking Payment Confirmation

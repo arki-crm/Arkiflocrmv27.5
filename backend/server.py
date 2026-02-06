@@ -20359,14 +20359,18 @@ async def list_transactions(
     query = {}
     
     # P0-FIX: Exclude non-cashbook entries (like unpaid credit purchases) from cashbook view
-    # These entries have is_cashbook_entry=False or account_id=None with entry_type starting with purchase_invoice
+    # Cashbook should only show entries with actual cash movement (has account_id)
+    # Credit purchases create daybook entries without account_id until payment is made
     if not include_non_cashbook:
-        query["$or"] = [
-            {"is_cashbook_entry": {"$ne": False}},  # Include entries without the flag or with True
-            {"account_id": {"$ne": None}}  # Include entries with a valid account (actual cash movement)
+        # Filter out entries that are explicitly marked as non-cashbook
+        # OR entries that have no account_id (meaning no actual cash movement)
+        query["$and"] = [
+            {"is_cashbook_entry": {"$ne": False}},  # Not explicitly marked as non-cashbook
+            {"$or": [
+                {"account_id": {"$ne": None}},  # Has account = real transaction
+                {"entry_type": {"$nin": ["purchase_invoice_credit", "purchase_invoice"]}}  # Not a credit purchase
+            ]}
         ]
-        # Also exclude entries that are explicitly marked as non-cashbook
-        query["is_cashbook_entry"] = {"$ne": False}
     
     if date:
         query["transaction_date"] = {"$regex": f"^{date}"}

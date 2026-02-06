@@ -85,21 +85,15 @@ const formatCurrency = (amount) => {
   }).format(amount || 0);
 };
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-};
-
-const formatTime = (dateStr) => {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-};
+// P2-FIX: Use imported utility functions for consistent date handling
+// formatDate and formatTime are now imported from utils.js as formatDateLocal and formatTimeLocal
+const formatDate = formatDateLocal;
+const formatTime = formatTimeLocal;
 
 const CashBook = () => {
   const { user, hasPermission } = useAuth();
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // P2-FIX: Use getLocalDateString instead of toISOString to get correct local date
+  const [selectedDate, setSelectedDate] = useState(getLocalDateString());
   const [transactions, setTransactions] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -116,12 +110,12 @@ const CashBook = () => {
   const [viewTransaction, setViewTransaction] = useState(null); // For viewing transaction details with attachments
   const [pendingFiles, setPendingFiles] = useState([]); // Files to upload after transaction creation
   
-  // Self-transfer form
+  // Self-transfer form - P2-FIX: Use getLocalDateString
   const [transferForm, setTransferForm] = useState({
     from_account_id: '',
     to_account_id: '',
     amount: '',
-    transfer_date: new Date().toISOString().split('T')[0],
+    transfer_date: getLocalDateString(),
     notes: ''
   });
   

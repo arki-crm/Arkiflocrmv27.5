@@ -242,7 +242,9 @@ class TestFinanceP0P1Fixes:
         )
         assert update_response.status_code == 200, f"Status update failed: {update_response.text}"
         
-        updated_refund = update_response.json()
+        update_result = update_response.json()
+        # Response structure is {"success": True, "refund": {...}}
+        updated_refund = update_result.get("refund", update_result)
         
         # Verify transaction_id is now set
         assert updated_refund.get("transaction_id") is not None, \
@@ -254,13 +256,15 @@ class TestFinanceP0P1Fixes:
     def test_p1_5_account_duplicate_name_rejected(self):
         """P1-5: Creating account with duplicate name should be rejected"""
         unique_name = f"Test Account {uuid.uuid4().hex[:8]}"
+        unique_bank = f"Bank {uuid.uuid4().hex[:6]}"
+        unique_branch = f"Branch {uuid.uuid4().hex[:6]}"
         
-        # Create first account
+        # Create first account with unique bank/branch to avoid bank duplicate check
         account_data = {
             "account_name": unique_name,
             "account_type": "bank",
-            "bank_name": "Test Bank",
-            "branch": "Test Branch",
+            "bank_name": unique_bank,
+            "branch": unique_branch,
             "category": "operations",
             "opening_balance": 0,
             "is_active": True
@@ -269,10 +273,12 @@ class TestFinanceP0P1Fixes:
         response1 = self.session.post(f"{BASE_URL}/api/accounting/accounts", json=account_data)
         assert response1.status_code in [200, 201], f"First account creation failed: {response1.text}"
         
-        # Try to create duplicate
+        # Try to create duplicate with same name but different bank/branch
+        account_data["bank_name"] = f"Bank {uuid.uuid4().hex[:6]}"
+        account_data["branch"] = f"Branch {uuid.uuid4().hex[:6]}"
         response2 = self.session.post(f"{BASE_URL}/api/accounting/accounts", json=account_data)
         
-        # Should be rejected with 409 Conflict
+        # Should be rejected with 409 Conflict due to duplicate name
         assert response2.status_code == 409, f"Expected 409 for duplicate account name, got {response2.status_code}: {response2.text}"
         assert "already exists" in response2.text.lower(), f"Expected 'already exists' in error message"
         print(f"✓ P1-5: Duplicate account name correctly rejected with 409")
@@ -280,13 +286,15 @@ class TestFinanceP0P1Fixes:
     def test_p1_5_account_duplicate_case_insensitive(self):
         """P1-5: Account name duplicate check should be case-insensitive"""
         base_name = f"CaseTest Account {uuid.uuid4().hex[:8]}"
+        unique_bank = f"Bank {uuid.uuid4().hex[:6]}"
+        unique_branch = f"Branch {uuid.uuid4().hex[:6]}"
         
-        # Create account with mixed case
+        # Create account with mixed case and unique bank/branch
         account_data = {
             "account_name": base_name,
             "account_type": "bank",
-            "bank_name": "Test Bank",
-            "branch": "Test Branch",
+            "bank_name": unique_bank,
+            "branch": unique_branch,
             "category": "operations",
             "opening_balance": 0,
             "is_active": True
@@ -295,11 +303,13 @@ class TestFinanceP0P1Fixes:
         response1 = self.session.post(f"{BASE_URL}/api/accounting/accounts", json=account_data)
         assert response1.status_code in [200, 201], f"First account creation failed: {response1.text}"
         
-        # Try to create with different case
+        # Try to create with different case name but different bank/branch
         account_data["account_name"] = base_name.upper()
+        account_data["bank_name"] = f"Bank {uuid.uuid4().hex[:6]}"
+        account_data["branch"] = f"Branch {uuid.uuid4().hex[:6]}"
         response2 = self.session.post(f"{BASE_URL}/api/accounting/accounts", json=account_data)
         
-        # Should be rejected
+        # Should be rejected due to case-insensitive name match
         assert response2.status_code == 409, f"Expected 409 for case-insensitive duplicate, got {response2.status_code}"
         print(f"✓ P1-5: Case-insensitive duplicate detection works")
     

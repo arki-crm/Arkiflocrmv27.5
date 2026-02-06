@@ -19972,6 +19972,137 @@ async def set_opening_balance(account_id: str, request: Request):
     return {"success": True, "account": updated}
 
 
+# P1-FIX: Account Archive/Delete endpoint
+@api_router.delete("/accounting/accounts/{account_id}")
+async def archive_or_delete_account(account_id: str, request: Request, force_delete: bool = False):
+    """Archive or delete an accounting account
+    
+    P1-FIX: Account deletion/archive control
+    - Default behavior: Archive (soft delete) - account remains but is_archived=True
+    - force_delete=True: Hard delete (only if no transactions exist)
+    
+    Archived accounts:
+    - Cannot be used for new transactions
+    - Still visible in historical reports
+    - Can be restored if needed
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.manage_accounts"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.manage_accounts permission")
+    
+    existing = await db.accounting_accounts.find_one({"account_id": account_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    # Check if account has any transactions
+    txn_count = await db.accounting_transactions.count_documents({"account_id": account_id})
+    
+    now = datetime.now(timezone.utc)
+    
+    if force_delete:
+        # Hard delete - only allowed if no transactions
+        if txn_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete account with {txn_count} transactions. Archive it instead."
+            )
+        
+        await db.accounting_accounts.delete_one({"account_id": account_id})
+        
+        # Audit log
+        audit_entry = {
+            "audit_id": f"audit_{uuid.uuid4().hex[:8]}",
+            "action": "account_deleted",
+            "entity_type": "accounting_account",
+            "entity_id": account_id,
+            "user_id": user.user_id,
+            "user_name": user.name,
+            "details": f"Permanently deleted account: {existing.get('account_name')}",
+            "timestamp": now.isoformat()
+        }
+        await db.accounting_audit_log.insert_one(audit_entry)
+        
+        return {"success": True, "action": "deleted", "message": "Account permanently deleted"}
+    else:
+        # Soft delete (archive)
+        await db.accounting_accounts.update_one(
+            {"account_id": account_id},
+            {"$set": {
+                "is_archived": True,
+                "is_active": False,
+                "archived_at": now.isoformat(),
+                "archived_by": user.user_id,
+                "updated_at": now.isoformat()
+            }}
+        )
+        
+        # Audit log
+        audit_entry = {
+            "audit_id": f"audit_{uuid.uuid4().hex[:8]}",
+            "action": "account_archived",
+            "entity_type": "accounting_account",
+            "entity_id": account_id,
+            "user_id": user.user_id,
+            "user_name": user.name,
+            "details": f"Archived account: {existing.get('account_name')} (had {txn_count} transactions)",
+            "timestamp": now.isoformat()
+        }
+        await db.accounting_audit_log.insert_one(audit_entry)
+        
+        return {"success": True, "action": "archived", "message": "Account archived successfully", "transaction_count": txn_count}
+
+
+@api_router.post("/accounting/accounts/{account_id}/restore")
+async def restore_archived_account(account_id: str, request: Request):
+    """Restore an archived account
+    
+    P1-FIX: Allow restoring archived accounts
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.manage_accounts"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.manage_accounts permission")
+    
+    existing = await db.accounting_accounts.find_one({"account_id": account_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    if not existing.get("is_archived"):
+        raise HTTPException(status_code=400, detail="Account is not archived")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.accounting_accounts.update_one(
+        {"account_id": account_id},
+        {"$set": {
+            "is_archived": False,
+            "is_active": True,
+            "restored_at": now.isoformat(),
+            "restored_by": user.user_id,
+            "updated_at": now.isoformat()
+        }}
+    )
+    
+    # Audit log
+    audit_entry = {
+        "audit_id": f"audit_{uuid.uuid4().hex[:8]}",
+        "action": "account_restored",
+        "entity_type": "accounting_account",
+        "entity_id": account_id,
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "details": f"Restored archived account: {existing.get('account_name')}",
+        "timestamp": now.isoformat()
+    }
+    await db.accounting_audit_log.insert_one(audit_entry)
+    
+    updated = await db.accounting_accounts.find_one({"account_id": account_id}, {"_id": 0})
+    return {"success": True, "account": updated}
+
+
 # ============ ACCOUNTING: EXPENSE CATEGORIES ============
 
 @api_router.get("/accounting/categories")

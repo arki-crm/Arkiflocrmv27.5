@@ -1147,6 +1147,15 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                 })}
               </div>
               
+              {/* P3-FIX: Add Item button at bottom for better UX when adding multiple items */}
+              {form.items.length > 0 && (
+                <div className="flex justify-center mt-3 pt-3 border-t border-dashed border-gray-300">
+                  <Button variant="outline" size="sm" onClick={addLineItem} className="w-full max-w-xs">
+                    <Plus className="h-4 w-4 mr-1" /> Add Another Item
+                  </Button>
+                </div>
+              )}
+              
               {/* Discount & Total Section */}
               <div className="flex justify-between items-start mt-3 gap-4">
                 {/* Discount Section */}

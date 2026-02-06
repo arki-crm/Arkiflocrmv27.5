@@ -26888,13 +26888,36 @@ async def list_invoices(request: Request, project_id: Optional[str] = None):
 
 
 @api_router.post("/finance/invoices")
-async def create_invoice(project_id: str, request: Request, include_gst: bool = True):
-    """Create an invoice - permission controlled, NOT automatic"""
+async def create_invoice(project_id: str, request: Request, include_gst: bool = True, idempotency_key: Optional[str] = None):
+    """Create an invoice - permission controlled, NOT automatic, with idempotency protection"""
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
     if not has_permission(user_doc, "finance.create_invoice"):
         raise HTTPException(status_code=403, detail="Access denied - no finance.create_invoice permission")
+    
+    # P0-FIX: Idempotency check to prevent duplicate invoices
+    # Check 1: If idempotency_key provided, check for existing invoice with same key
+    if idempotency_key:
+        existing_by_key = await db.finance_invoices.find_one({
+            "idempotency_key": idempotency_key,
+            "status": {"$ne": "cancelled"}
+        }, {"_id": 0})
+        if existing_by_key:
+            return existing_by_key
+    
+    # Check 2: Duplicate detection - same project within 60 seconds
+    recent_cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+    duplicate_check = await db.finance_invoices.find_one({
+        "project_id": project_id,
+        "created_at": {"$gte": recent_cutoff},
+        "status": {"$ne": "cancelled"}
+    }, {"_id": 0})
+    if duplicate_check:
+        raise HTTPException(
+            status_code=409, 
+            detail=f"Duplicate invoice detected. Invoice {duplicate_check.get('invoice_number')} was created within the last 60 seconds for the same project."
+        )
     
     project = await db.projects.find_one({"project_id": project_id})
     if not project:
@@ -26938,6 +26961,7 @@ async def create_invoice(project_id: str, request: Request, include_gst: bool = 
     invoice_doc = {
         "invoice_id": f"inv_{secrets.token_hex(4)}",
         "invoice_number": invoice_number,
+        "idempotency_key": idempotency_key,  # Store for future duplicate checks
         "project_id": project_id,
         "contract_value": contract_value,
         "base_amount": round(base_amount, 2),

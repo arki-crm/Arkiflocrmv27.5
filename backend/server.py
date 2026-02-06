@@ -26594,12 +26594,39 @@ async def get_receipt(receipt_id: str, request: Request):
 
 @api_router.post("/finance/receipts")
 async def create_receipt(receipt: ReceiptCreate, request: Request):
-    """Create a payment receipt - permission controlled"""
+    """Create a payment receipt - permission controlled with idempotency protection"""
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
     if not has_permission(user_doc, "finance.add_receipt"):
         raise HTTPException(status_code=403, detail="Access denied - no finance.add_receipt permission")
+    
+    # P0-FIX: Idempotency check to prevent duplicate receipts
+    # Check 1: If idempotency_key provided, check for existing receipt with same key
+    if receipt.idempotency_key:
+        existing_by_key = await db.finance_receipts.find_one({
+            "idempotency_key": receipt.idempotency_key,
+            "status": {"$ne": "cancelled"}
+        }, {"_id": 0})
+        if existing_by_key:
+            # Return existing receipt instead of creating duplicate
+            return existing_by_key
+    
+    # Check 2: Duplicate detection - same project, amount, payment_mode within 60 seconds
+    recent_cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+    duplicate_check = await db.finance_receipts.find_one({
+        "project_id": receipt.project_id,
+        "amount": receipt.amount,
+        "payment_mode": receipt.payment_mode,
+        "account_id": receipt.account_id,
+        "created_at": {"$gte": recent_cutoff},
+        "status": {"$ne": "cancelled"}
+    }, {"_id": 0})
+    if duplicate_check:
+        raise HTTPException(
+            status_code=409, 
+            detail=f"Duplicate receipt detected. Receipt {duplicate_check.get('receipt_number')} was created within the last 60 seconds with same details."
+        )
     
     # Validate project
     project = await db.projects.find_one({"project_id": receipt.project_id})
@@ -26634,6 +26661,7 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
     receipt_doc = {
         "receipt_id": f"rcp_{secrets.token_hex(4)}",
         "receipt_number": receipt_number,
+        "idempotency_key": receipt.idempotency_key,  # Store for future duplicate checks
         "project_id": receipt.project_id,
         "amount": receipt.amount,
         "payment_mode": receipt.payment_mode,

@@ -19807,15 +19807,28 @@ CASHBOOK_THRESHOLDS = {
 # ============ ACCOUNTING: ACCOUNTS MASTER ============
 
 @api_router.get("/accounting/accounts")
-async def list_accounting_accounts(request: Request):
-    """List all accounting accounts (bank/cash)"""
+async def list_accounting_accounts(request: Request, include_archived: bool = False):
+    """List all accounting accounts (bank/cash)
+    
+    P1-FIX: Option to include/exclude archived accounts
+    - Default: exclude archived accounts
+    - include_archived=True: show all accounts including archived
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
     if not has_permission(user_doc, "finance.view_dashboard") and not has_permission(user_doc, "finance.view_cashbook"):
         raise HTTPException(status_code=403, detail="Access denied - no finance view permission")
     
-    accounts = await db.accounting_accounts.find({}, {"_id": 0}).to_list(100)
+    query = {}
+    if not include_archived:
+        # Exclude archived accounts by default
+        query["$or"] = [
+            {"is_archived": {"$ne": True}},
+            {"is_archived": {"$exists": False}}
+        ]
+    
+    accounts = await db.accounting_accounts.find(query, {"_id": 0}).to_list(100)
     return accounts
 
 

@@ -47,7 +47,7 @@ import {
   X
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '../lib/utils';
+import { cn, getLocalDateString } from '../lib/utils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -72,7 +72,8 @@ const formatDate = (dateStr) => {
 
 const DailyClosing = () => {
   const { hasPermission } = useAuth();
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // P2-FIX: Use getLocalDateString for correct local date
+  const [selectedDate, setSelectedDate] = useState(getLocalDateString());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);

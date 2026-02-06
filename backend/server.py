@@ -26794,12 +26794,43 @@ async def list_refunds(request: Request, project_id: Optional[str] = None):
 
 @api_router.post("/finance/refunds")
 async def create_refund(refund: RefundCreate, request: Request):
-    """Create a refund - permission controlled"""
+    """Create a refund - permission controlled with proper status lifecycle
+    
+    P0-FIX: Refunds now follow a status lifecycle:
+    - initiated: Refund request created, no ledger impact
+    - pending: Refund approved, awaiting execution
+    - completed: Refund executed, ONLY NOW posts to cashbook/daybook
+    
+    Sales Refund = Cash/Bank OUTFLOW (customer money returned)
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
     if not has_permission(user_doc, "finance.issue_refund"):
         raise HTTPException(status_code=403, detail="Access denied - no finance.issue_refund permission")
+    
+    # P0-FIX: Idempotency check
+    if refund.idempotency_key:
+        existing = await db.finance_refunds.find_one({
+            "idempotency_key": refund.idempotency_key,
+            "status": {"$nin": ["cancelled", "reversed"]}
+        }, {"_id": 0})
+        if existing:
+            return existing
+    
+    # Duplicate detection within 60 seconds
+    recent_cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+    duplicate_check = await db.finance_refunds.find_one({
+        "project_id": refund.project_id,
+        "amount": refund.amount,
+        "created_at": {"$gte": recent_cutoff},
+        "status": {"$nin": ["cancelled", "reversed"]}
+    }, {"_id": 0})
+    if duplicate_check:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Duplicate refund detected. Refund {duplicate_check.get('refund_number')} was created within the last 60 seconds."
+        )
     
     project = await db.projects.find_one({"project_id": refund.project_id})
     if not project:
@@ -26808,6 +26839,11 @@ async def create_refund(refund: RefundCreate, request: Request):
     # Validate refund type
     if refund.refund_type not in ["full", "partial", "forfeited"]:
         raise HTTPException(status_code=400, detail="Invalid refund type")
+    
+    # Validate status
+    valid_statuses = ["initiated", "pending", "completed"]
+    if refund.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
     
     # Get total received
     receipts = await db.finance_receipts.find(
@@ -26830,32 +26866,51 @@ async def create_refund(refund: RefundCreate, request: Request):
     refund_doc = {
         "refund_id": f"ref_{secrets.token_hex(4)}",
         "refund_number": refund_number,
+        "idempotency_key": refund.idempotency_key,
         "project_id": refund.project_id,
+        "refund_type": refund.refund_type,  # sales_refund by default (customer money returned)
         "amount": refund.amount if refund.refund_type != "forfeited" else 0,
         "forfeited_amount": total_received if refund.refund_type == "forfeited" else (total_received - refund.amount if refund.refund_type == "partial" else 0),
-        "refund_type": refund.refund_type,
+        "refund_category": refund.refund_type,
         "reason": refund.reason,
         "account_id": refund.account_id,
         "notes": refund.notes,
         "total_received_before": total_received,
+        # P0-FIX: Status lifecycle - no ledger posting until "completed"
+        "status": refund.status,  # initiated, pending, completed
+        "status_history": [{
+            "status": refund.status,
+            "changed_by": user.user_id,
+            "changed_by_name": user.name,
+            "changed_at": now.isoformat(),
+            "notes": "Refund created"
+        }],
+        "transaction_id": None,  # Will be set when completed
+        "completed_at": None,
+        "completed_by": None,
         "created_by": user.user_id,
         "created_by_name": user.name,
         "created_at": now
     }
     
-    # Create outflow transaction for actual refund
-    if refund.refund_type != "forfeited" and refund.amount > 0:
+    # P0-FIX: ONLY create cashbook entry when status is "completed"
+    # Sales Refund = OUTFLOW (money going out to customer)
+    if refund.status == "completed" and refund.refund_type != "forfeited" and refund.amount > 0:
+        txn_id = f"txn_{secrets.token_hex(4)}"
         txn_doc = {
-            "transaction_id": f"txn_{secrets.token_hex(4)}",
-            "transaction_type": "outflow",
+            "transaction_id": txn_id,
+            "transaction_date": now.strftime("%Y-%m-%d"),
+            "transaction_type": "outflow",  # Sales refund = money OUT
+            "entry_type": "sales_refund",
             "amount": refund.amount,
             "mode": "bank_transfer",
-            "category_id": None,
+            "category_id": "customer_refund",
             "account_id": refund.account_id,
             "project_id": refund.project_id,
             "paid_to": project.get("client_name"),
-            "remarks": f"Refund {refund_number} - {refund.reason}",
+            "remarks": f"Sales Refund {refund_number} - {refund.reason}",
             "refund_id": refund_doc["refund_id"],
+            "is_cashbook_entry": True,
             "is_verified": False,
             "created_by": user.user_id,
             "created_by_name": user.name,
@@ -26863,6 +26918,21 @@ async def create_refund(refund: RefundCreate, request: Request):
             "updated_at": now
         }
         await db.accounting_transactions.insert_one(txn_doc)
+        
+        # Update account balance (outflow = decrease)
+        await db.accounting_accounts.update_one(
+            {"account_id": refund.account_id},
+            {"$inc": {"current_balance": -refund.amount}}
+        )
+        
+        refund_doc["transaction_id"] = txn_id
+        refund_doc["completed_at"] = now.isoformat()
+        refund_doc["completed_by"] = user.user_id
+    
+    await db.finance_refunds.insert_one(refund_doc)
+    refund_doc.pop("_id", None)
+    
+    return refund_doc
     
     await db.finance_refunds.insert_one(refund_doc)
     refund_doc.pop("_id", None)

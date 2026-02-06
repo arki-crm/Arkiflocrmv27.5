@@ -367,7 +367,7 @@ const ProjectProfitabilityReport = () => {
                     <TableHead>Stage</TableHead>
                     <TableHead className="text-right">Contract Value</TableHead>
                     <TableHead className="text-right">Received</TableHead>
-                    <TableHead className="text-right">Actual Cost</TableHead>
+                    <TableHead className="text-right">Net Cost</TableHead>
                     <TableHead className="text-right">Profit</TableHead>
                     <TableHead className="text-right">Margin</TableHead>
                     <TableHead>Status</TableHead>
@@ -392,7 +392,17 @@ const ProjectProfitabilityReport = () => {
                       </TableCell>
                       <TableCell className="text-right">{formatCurrency(project.contract_value)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(project.total_received)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(project.actual_cost)}</TableCell>
+                      <TableCell className="text-right">
+                        <div>
+                          {/* P2-FIX: Show net cost with refund indicator */}
+                          <span>{formatCurrency(project.net_actual_cost || project.actual_cost)}</span>
+                          {project.purchase_refunds > 0 && (
+                            <p className="text-xs text-green-600">
+                              (↓{formatCurrency(project.purchase_refunds)} refund)
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className={`text-right font-medium ${project.realized_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                         {formatCurrency(project.realized_profit)}
                       </TableCell>

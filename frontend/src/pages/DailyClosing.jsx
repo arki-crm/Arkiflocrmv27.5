@@ -295,10 +295,10 @@ const DailyClosing = () => {
   const navigateDate = (direction) => {
     const current = new Date(selectedDate);
     current.setDate(current.getDate() + direction);
-    setSelectedDate(current.toISOString().split('T')[0]);
+    setSelectedDate(getLocalDateString(current));  // P2-FIX
   };
 
-  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+  const isToday = selectedDate === getLocalDateString();  // P2-FIX
   const isFuture = new Date(selectedDate) > new Date();
 
   if (!hasPermission('finance.daily_closing') && !hasPermission('finance.view_dashboard')) {
@@ -341,7 +341,7 @@ const DailyClosing = () => {
           <ChevronRight className="w-4 h-4" />
         </Button>
         {!isToday && (
-          <Button variant="outline" onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}>
+          <Button variant="outline" onClick={() => setSelectedDate(getLocalDateString())}>
             Today
           </Button>
         )}

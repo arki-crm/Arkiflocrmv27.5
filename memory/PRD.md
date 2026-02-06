@@ -9,7 +9,7 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Finance Module P0 & P1 Bug Fixes COMPLETE ✅
+## Current Status: Finance Module P0, P1 & P2 Bug Fixes COMPLETE ✅
 **As of February 6, 2026**
 
 ### Finance Module Critical Bug Fixes
@@ -31,44 +31,27 @@ Build a full-stack CRM application for an interior design company, managing the 
 | **Account Deletion/Archive** | Soft delete (archive) by default, hard delete only if no transactions | ✅ |
 | **Purchase Return Status Lifecycle** | Implemented full lifecycle: initiated→vendor_accepted→refund_pending→refund_received→completed | ✅ |
 
-#### New API Endpoints (Finance Module)
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/finance/refunds/{id}/status` | PUT | Update refund status through lifecycle |
-| `/api/accounting/accounts/{id}` | DELETE | Archive (soft delete) or delete account |
-| `/api/accounting/accounts/{id}/restore` | POST | Restore archived account |
-| `/api/finance/purchase-returns/{id}/status` | PUT | Update purchase return through lifecycle |
+#### P2 - System Accuracy & Reporting ✅
 
-#### Key Implementation Details
+| Issue | Fix | Status |
+|-------|-----|--------|
+| **Date & Time Incorrect System-Wide** | Created local timezone utility functions (`getLocalDateString`, `formatDateLocal`), updated CashBook and DailyClosing pages | ✅ |
+| **Purchase Return Reflection in Reports** | Profitability report now includes `purchase_refunds`, `net_actual_cost`, `total_purchase_refunds`, `total_net_cost` fields | ✅ |
 
-**Refund Status Lifecycle:**
-- `initiated` → No ledger impact
-- `pending` → Approved, awaiting execution
-- `completed` → Creates cashbook entry (OUTFLOW for sales refund)
-- `reversed` → Creates reversal entry
+#### New Utility Functions (P2)
+```javascript
+// /app/frontend/src/lib/utils.js
+getLocalDateString(date)    // Returns YYYY-MM-DD in local timezone
+formatDateLocal(dateInput)  // Formats date to 'DD MMM YYYY' in local timezone
+formatTimeLocal(dateInput)  // Formats time to 'HH:MM' in local timezone
+formatDateTimeLocal(dateInput) // Formats date+time in local timezone
+```
 
-**Purchase Return Status Lifecycle:**
-- `initiated` → Return created
-- `vendor_accepted` → Vendor acknowledges return
-- `refund_pending` → Awaiting refund from vendor
-- `refund_received` → Creates cashbook INFLOW entry
-- `completed` → Process complete
-- `reversed` → All entries reversed (for failed/bounced refunds)
-
-**Accounting Rules Implemented:**
-- Sales Refund = Cash/Bank OUTFLOW (customer money returned)
-- Purchase Refund = Cash/Bank INFLOW (vendor money received)
-- Credit purchases do NOT appear in cashbook until payment is made
-- No refund posting before status = "completed"
-
-**Testing:** ✅ All 18 tests passed (iteration_46.json) - Backend 100%
+**Testing:** ✅ All tests passed (iteration_46.json P0/P1, iteration_47.json P2)
 
 ---
 
-## Previous Status: Design Manager Review Queue Phase 3 COMPLETE ✅
-**As of February 5, 2026**
-
-### NEW: Design Manager Review Queue (Phase 3)
+### Previous Status: P0 & P1 Fixes
 
 #### Purpose
 Dedicated review queue page for Design Managers combining all approval items in one place.

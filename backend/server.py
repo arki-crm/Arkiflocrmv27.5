@@ -20346,9 +20346,10 @@ async def list_transactions(
     project_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    needs_review: Optional[bool] = None
+    needs_review: Optional[bool] = None,
+    include_non_cashbook: bool = False  # P0-FIX: Option to include non-cashbook entries
 ):
-    """List transactions (Cash Book view)"""
+    """List transactions (Cash Book view) - excludes credit purchases by default"""
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
@@ -20356,6 +20357,16 @@ async def list_transactions(
         raise HTTPException(status_code=403, detail="Access denied - no finance view permission")
     
     query = {}
+    
+    # P0-FIX: Exclude non-cashbook entries (like unpaid credit purchases) from cashbook view
+    # These entries have is_cashbook_entry=False or account_id=None with entry_type starting with purchase_invoice
+    if not include_non_cashbook:
+        query["$or"] = [
+            {"is_cashbook_entry": {"$ne": False}},  # Include entries without the flag or with True
+            {"account_id": {"$ne": None}}  # Include entries with a valid account (actual cash movement)
+        ]
+        # Also exclude entries that are explicitly marked as non-cashbook
+        query["is_cashbook_entry"] = {"$ne": False}
     
     if date:
         query["transaction_date"] = {"$regex": f"^{date}"}

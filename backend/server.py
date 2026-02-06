@@ -34571,6 +34571,10 @@ async def get_project_profitability_report(
 ):
     """
     Project Profitability Report - Shows all projects with profitability metrics
+    
+    P2-FIX: Now includes purchase returns and refunds in the calculation:
+    - Purchase returns reduce actual cost
+    - Vendor refunds received are added back as cost reduction
     """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
@@ -34615,9 +34619,25 @@ async def get_project_profitability_report(
         }, {"_id": 0, "amount": 1}).to_list(1000)
         actual_cost = sum(float(o.get("amount", 0)) for o in outflows)
         
-        # Calculate profitability
+        # P2-FIX: Get purchase returns for this project
+        purchase_returns = await db.finance_returns.find({
+            "project_id": project_id,
+            "return_type": "purchase",
+            "status": {"$in": ["refund_received", "completed"]}
+        }, {"_id": 0, "actual_refund_received": 1, "expected_refund_amount": 1}).to_list(100)
+        
+        # Sum up refunds received (reduces actual cost)
+        total_purchase_refunds = sum(
+            float(r.get("actual_refund_received", 0) or r.get("expected_refund_amount", 0)) 
+            for r in purchase_returns
+        )
+        
+        # P2-FIX: Adjust actual cost by subtracting purchase refunds
+        net_actual_cost = actual_cost - total_purchase_refunds
+        
+        # Calculate profitability (using net actual cost)
         projected_profit = contract_value - planned_cost if planned_cost > 0 else contract_value
-        realized_profit = total_received - actual_cost
+        realized_profit = total_received - net_actual_cost
         
         projected_margin = (projected_profit / contract_value * 100) if contract_value > 0 else 0
         realized_margin = (realized_profit / total_received * 100) if total_received > 0 else 0
@@ -34630,9 +34650,9 @@ async def get_project_profitability_report(
         else:
             profit_status = "break_even"
         
-        # Risk assessment
-        if actual_cost > planned_cost and planned_cost > 0:
-            cost_overrun = ((actual_cost - planned_cost) / planned_cost * 100)
+        # Risk assessment (use net actual cost)
+        if net_actual_cost > planned_cost and planned_cost > 0:
+            cost_overrun = ((net_actual_cost - planned_cost) / planned_cost * 100)
             risk_level = "high" if cost_overrun > 20 else "medium" if cost_overrun > 10 else "low"
         else:
             cost_overrun = 0
@@ -34650,7 +34670,9 @@ async def get_project_profitability_report(
             "balance_due": contract_value - total_received,
             "planned_cost": planned_cost,
             "actual_cost": actual_cost,
-            "cost_variance": actual_cost - planned_cost,
+            "purchase_refunds": total_purchase_refunds,  # P2-FIX: New field
+            "net_actual_cost": net_actual_cost,  # P2-FIX: New field (actual_cost - refunds)
+            "cost_variance": net_actual_cost - planned_cost,
             "cost_overrun_percent": cost_overrun,
             "projected_profit": projected_profit,
             "realized_profit": realized_profit,

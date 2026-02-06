@@ -31595,6 +31595,29 @@ class PurchaseReturnDispositionUpdate(BaseModel):
     disposition_notes: Optional[str] = None
 
 
+# P1-FIX: Purchase Return Status Lifecycle Model
+class PurchaseReturnStatusUpdate(BaseModel):
+    """Update purchase return status through the lifecycle
+    
+    Lifecycle: initiated → vendor_accepted → refund_pending → refund_received → completed
+    
+    Special transitions:
+    - Any state → cancelled (abort the return)
+    - refund_received/completed → reversed (reversal scenario)
+    """
+    new_status: str  # initiated, vendor_accepted, refund_pending, refund_received, completed, cancelled, reversed
+    notes: Optional[str] = None
+    
+    # For refund_received transition
+    actual_refund_received: Optional[float] = None
+    refund_date: Optional[str] = None
+    refund_mode: Optional[str] = None  # cash, bank_transfer, upi, cheque, adjustment
+    refund_account_id: Optional[str] = None  # Which account received the money
+    
+    # For reversal
+    reversal_reason: Optional[str] = None
+
+
 @api_router.post("/finance/purchase-returns")
 async def create_purchase_return(return_data: PurchaseReturnCreate, request: Request):
     """

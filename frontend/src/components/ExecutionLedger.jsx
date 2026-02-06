@@ -866,7 +866,7 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                           ))}
                         </div>
                       </div>
-                    )}}
+                    )}
                     
                     {entry.remarks && (
                       <p className="text-sm text-gray-500 mt-3 pt-3 border-t">

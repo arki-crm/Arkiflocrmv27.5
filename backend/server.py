@@ -34692,7 +34692,7 @@ async def get_project_profitability_report(
         "margin_percent": "realized_margin_percent",
         "profit": "realized_profit",
         "contract_value": "contract_value",
-        "actual_cost": "actual_cost"
+        "actual_cost": "net_actual_cost"  # P2-FIX: Use net actual cost for sorting
     }.get(sort_by, "realized_margin_percent")
     
     profitability_data.sort(key=lambda x: x.get(sort_key, 0), reverse=reverse)
@@ -34705,6 +34705,8 @@ async def get_project_profitability_report(
     total_contract_value = sum(p["contract_value"] for p in profitability_data)
     total_received = sum(p["total_received"] for p in profitability_data)
     total_actual_cost = sum(p["actual_cost"] for p in profitability_data)
+    total_purchase_refunds = sum(p["purchase_refunds"] for p in profitability_data)  # P2-FIX
+    total_net_cost = sum(p["net_actual_cost"] for p in profitability_data)  # P2-FIX
     total_realized_profit = sum(p["realized_profit"] for p in profitability_data)
     
     overall_margin = (total_realized_profit / total_received * 100) if total_received > 0 else 0
@@ -34723,6 +34725,8 @@ async def get_project_profitability_report(
             "total_contract_value": total_contract_value,
             "total_received": total_received,
             "total_actual_cost": total_actual_cost,
+            "total_purchase_refunds": total_purchase_refunds,  # P2-FIX: New field
+            "total_net_cost": total_net_cost,  # P2-FIX: New field
             "total_realized_profit": total_realized_profit,
             "overall_margin_percent": round(overall_margin, 1)
         },

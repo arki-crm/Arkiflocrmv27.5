@@ -26370,6 +26370,7 @@ class ReceiptCreate(BaseModel):
     stage_name: Optional[str] = None  # Which payment stage this is for
     notes: Optional[str] = None
     payment_date: Optional[str] = None  # ISO date string
+    idempotency_key: Optional[str] = None  # Client-provided key to prevent duplicates
 
 class RefundCreate(BaseModel):
     project_id: str
@@ -26378,6 +26379,8 @@ class RefundCreate(BaseModel):
     reason: str
     account_id: str
     notes: Optional[str] = None
+    idempotency_key: Optional[str] = None  # Client-provided key to prevent duplicates
+    status: str = "initiated"  # Status lifecycle: initiated -> pending -> completed
 
 
 # ============ PAYMENT SCHEDULE ============

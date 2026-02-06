@@ -26933,11 +26933,155 @@ async def create_refund(refund: RefundCreate, request: Request):
     refund_doc.pop("_id", None)
     
     return refund_doc
+
+
+class RefundStatusUpdate(BaseModel):
+    """Update refund status with proper accounting"""
+    new_status: str  # initiated, pending, completed, reversed
+    notes: Optional[str] = None
+    payment_mode: Optional[str] = None  # For completed status
+
+
+@api_router.put("/finance/refunds/{refund_id}/status")
+async def update_refund_status(refund_id: str, update: RefundStatusUpdate, request: Request):
+    """Update refund status - ledger posting ONLY happens when status becomes 'completed'
     
-    await db.finance_refunds.insert_one(refund_doc)
-    refund_doc.pop("_id", None)
+    P0-FIX: Proper status lifecycle for refunds:
+    - initiated → pending → completed (creates cashbook entry)
+    - Any status → reversed (reverses cashbook entry if exists)
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
     
-    return refund_doc
+    if not has_permission(user_doc, "finance.issue_refund"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    refund = await db.finance_refunds.find_one({"refund_id": refund_id})
+    if not refund:
+        raise HTTPException(status_code=404, detail="Refund not found")
+    
+    valid_statuses = ["initiated", "pending", "completed", "reversed"]
+    if update.new_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+    
+    current_status = refund.get("status", "initiated")
+    
+    # Validate status transitions
+    valid_transitions = {
+        "initiated": ["pending", "completed", "reversed"],
+        "pending": ["completed", "reversed"],
+        "completed": ["reversed"],
+        "reversed": []  # Terminal state
+    }
+    
+    if update.new_status not in valid_transitions.get(current_status, []):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot transition from '{current_status}' to '{update.new_status}'"
+        )
+    
+    now = datetime.now(timezone.utc)
+    
+    update_data = {
+        "status": update.new_status,
+        "updated_at": now.isoformat()
+    }
+    
+    # Add status to history
+    status_entry = {
+        "status": update.new_status,
+        "changed_by": user.user_id,
+        "changed_by_name": user.name,
+        "changed_at": now.isoformat(),
+        "notes": update.notes
+    }
+    
+    project = await db.projects.find_one({"project_id": refund.get("project_id")})
+    
+    # P0-FIX: Create cashbook entry ONLY when transitioning to "completed"
+    if update.new_status == "completed" and current_status != "completed":
+        if refund.get("amount", 0) > 0:
+            txn_id = f"txn_{secrets.token_hex(4)}"
+            txn_doc = {
+                "transaction_id": txn_id,
+                "transaction_date": now.strftime("%Y-%m-%d"),
+                "transaction_type": "outflow",  # Sales refund = money OUT
+                "entry_type": "sales_refund",
+                "amount": refund.get("amount"),
+                "mode": update.payment_mode or "bank_transfer",
+                "category_id": "customer_refund",
+                "account_id": refund.get("account_id"),
+                "project_id": refund.get("project_id"),
+                "paid_to": project.get("client_name") if project else "Customer",
+                "remarks": f"Sales Refund {refund.get('refund_number')} - {refund.get('reason')}",
+                "refund_id": refund_id,
+                "is_cashbook_entry": True,
+                "is_verified": False,
+                "created_by": user.user_id,
+                "created_by_name": user.name,
+                "created_at": now,
+                "updated_at": now
+            }
+            await db.accounting_transactions.insert_one(txn_doc)
+            
+            # Update account balance (outflow = decrease)
+            await db.accounting_accounts.update_one(
+                {"account_id": refund.get("account_id")},
+                {"$inc": {"current_balance": -refund.get("amount")}}
+            )
+            
+            update_data["transaction_id"] = txn_id
+            update_data["completed_at"] = now.isoformat()
+            update_data["completed_by"] = user.user_id
+    
+    # P0-FIX: Reverse cashbook entry when transitioning to "reversed"
+    elif update.new_status == "reversed" and refund.get("transaction_id"):
+        # Create reversal entry
+        reversal_txn_id = f"txn_{secrets.token_hex(4)}"
+        reversal_txn = {
+            "transaction_id": reversal_txn_id,
+            "transaction_date": now.strftime("%Y-%m-%d"),
+            "transaction_type": "inflow",  # Reversal of outflow = inflow
+            "entry_type": "sales_refund_reversal",
+            "amount": refund.get("amount"),
+            "mode": "adjustment",
+            "category_id": "refund_reversal",
+            "account_id": refund.get("account_id"),
+            "project_id": refund.get("project_id"),
+            "received_from": project.get("client_name") if project else "Customer",
+            "remarks": f"REVERSAL: Sales Refund {refund.get('refund_number')} - {update.notes or 'Refund reversed'}",
+            "refund_id": refund_id,
+            "original_transaction_id": refund.get("transaction_id"),
+            "is_cashbook_entry": True,
+            "is_reversal": True,
+            "is_verified": True,  # Auto-verified as it's a reversal
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.accounting_transactions.insert_one(reversal_txn)
+        
+        # Restore account balance (inflow = increase)
+        await db.accounting_accounts.update_one(
+            {"account_id": refund.get("account_id")},
+            {"$inc": {"current_balance": refund.get("amount")}}
+        )
+        
+        update_data["reversal_transaction_id"] = reversal_txn_id
+        update_data["reversed_at"] = now.isoformat()
+        update_data["reversed_by"] = user.user_id
+    
+    await db.finance_refunds.update_one(
+        {"refund_id": refund_id},
+        {
+            "$set": update_data,
+            "$push": {"status_history": status_entry}
+        }
+    )
+    
+    updated = await db.finance_refunds.find_one({"refund_id": refund_id}, {"_id": 0})
+    return {"success": True, "refund": updated}
 
 
 # ============ INVOICES (GST - CONDITIONAL) ============

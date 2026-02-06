@@ -32095,6 +32095,255 @@ async def update_purchase_return_disposition(
     return {"success": True, "return": updated}
 
 
+# P1-FIX: Purchase Return Status Lifecycle Endpoint
+@api_router.put("/finance/purchase-returns/{return_id}/status")
+async def update_purchase_return_status(
+    return_id: str,
+    update: PurchaseReturnStatusUpdate,
+    request: Request
+):
+    """
+    Update purchase return status through the proper lifecycle
+    
+    P1-FIX: Implements the required status flow:
+    Initiated → Vendor Accepted Return → Refund Pending → Refund Received → Completed
+    
+    Accounting Treatment:
+    - Case A (Invoice unpaid): Return reduces Vendor Liability
+    - Case B (Invoice already paid): Return creates Vendor Receivable, refund clears it
+    
+    Special states:
+    - cancelled: Abort the return process
+    - reversed: Reverse all accounting entries (refund bounced/failed, vendor cancelled)
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.liabilities.settle"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return_doc = await db.finance_returns.find_one({"return_id": return_id, "return_type": "purchase"})
+    if not return_doc:
+        raise HTTPException(status_code=404, detail="Purchase return not found")
+    
+    # Define valid status values and transitions
+    valid_statuses = ["initiated", "vendor_accepted", "refund_pending", "refund_received", "completed", "cancelled", "reversed"]
+    if update.new_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+    
+    current_status = return_doc.get("status", "initiated")
+    
+    # Define valid transitions
+    valid_transitions = {
+        "initiated": ["vendor_accepted", "cancelled"],
+        "vendor_accepted": ["refund_pending", "cancelled"],
+        "refund_pending": ["refund_received", "cancelled"],
+        "refund_received": ["completed", "reversed"],
+        "completed": ["reversed"],
+        "cancelled": [],  # Terminal state
+        "reversed": []     # Terminal state
+    }
+    
+    # Map old status names to new lifecycle if needed
+    status_mapping = {
+        "open": "initiated",
+        "pending": "refund_pending"
+    }
+    current_status = status_mapping.get(current_status, current_status)
+    
+    if update.new_status not in valid_transitions.get(current_status, []) and update.new_status != "cancelled":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot transition from '{current_status}' to '{update.new_status}'. Valid transitions: {valid_transitions.get(current_status, [])}"
+        )
+    
+    now = datetime.now(timezone.utc)
+    
+    update_data = {
+        "status": update.new_status,
+        "updated_at": now.isoformat()
+    }
+    
+    # Create status history entry
+    status_history_entry = {
+        "from_status": current_status,
+        "to_status": update.new_status,
+        "changed_by": user.user_id,
+        "changed_by_name": user_doc.get("name", "Unknown"),
+        "changed_at": now.isoformat(),
+        "notes": update.notes
+    }
+    
+    # Handle specific status transitions with accounting logic
+    if update.new_status == "refund_received":
+        # Validate required fields
+        if not update.actual_refund_received or update.actual_refund_received <= 0:
+            raise HTTPException(status_code=400, detail="actual_refund_received is required for this status")
+        if not update.refund_account_id:
+            raise HTTPException(status_code=400, detail="refund_account_id is required for this status")
+        
+        # Check if a transaction already exists
+        existing_txn = await db.accounting_transactions.find_one({
+            "reference_id": return_id,
+            "entry_type": "purchase_return_refund"
+        })
+        
+        if not existing_txn:
+            # Create cashbook INFLOW entry (vendor money received)
+            txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+            cashbook_entry = {
+                "transaction_id": txn_id,
+                "transaction_date": update.refund_date or now.strftime("%Y-%m-%d"),
+                "transaction_type": "inflow",  # Purchase refund = INFLOW
+                "entry_type": "purchase_return_refund",
+                "is_cashbook_entry": True,
+                "amount": update.actual_refund_received,
+                "mode": update.refund_mode or "bank_transfer",
+                "category_id": "vendor_refund",
+                "received_from": return_doc.get("vendor_name"),
+                "description": f"Purchase Refund: {return_id} from {return_doc.get('vendor_name', 'Vendor')}",
+                "account_id": update.refund_account_id,
+                "project_id": return_doc.get("project_id"),
+                "vendor_id": return_doc.get("vendor_id"),
+                "reference_type": "purchase_return",
+                "reference_id": return_id,
+                "is_verified": False,
+                "created_by": user.user_id,
+                "created_by_name": user_doc.get("name", "Unknown"),
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            }
+            await db.accounting_transactions.insert_one(cashbook_entry)
+            
+            # Update account balance (inflow = increase)
+            await db.accounting_accounts.update_one(
+                {"account_id": update.refund_account_id},
+                {"$inc": {"current_balance": update.actual_refund_received}}
+            )
+            
+            update_data["linked_transaction_id"] = txn_id
+        
+        update_data["actual_refund_received"] = update.actual_refund_received
+        update_data["refund_date"] = update.refund_date or now.strftime("%Y-%m-%d")
+        update_data["refund_mode"] = update.refund_mode
+        update_data["refund_account_id"] = update.refund_account_id
+        update_data["refund_status"] = "completed"
+        
+        # Clear vendor receivable if exists
+        receivable_id = return_doc.get("linked_receivable_id")
+        if receivable_id:
+            await db.finance_vendor_receivables.update_one(
+                {"receivable_id": receivable_id},
+                {
+                    "$inc": {"amount_received": update.actual_refund_received},
+                    "$set": {"updated_at": now.isoformat()}
+                }
+            )
+            receivable = await db.finance_vendor_receivables.find_one({"receivable_id": receivable_id})
+            if receivable and receivable.get("amount_received", 0) >= receivable.get("amount", 0):
+                await db.finance_vendor_receivables.update_one(
+                    {"receivable_id": receivable_id},
+                    {"$set": {"status": "settled", "amount_remaining": 0}}
+                )
+    
+    elif update.new_status == "reversed":
+        # Refund reversal logic
+        # Reasons: refund bounced, vendor cancelled refund, recorded incorrectly
+        
+        if not update.reversal_reason:
+            raise HTTPException(status_code=400, detail="reversal_reason is required for reversal")
+        
+        linked_txn_id = return_doc.get("linked_transaction_id")
+        actual_refund = return_doc.get("actual_refund_received", 0)
+        refund_account = return_doc.get("refund_account_id")
+        
+        if linked_txn_id and actual_refund > 0 and refund_account:
+            # Create reversal entry (OUTFLOW - reverse the inflow)
+            reversal_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+            reversal_txn = {
+                "transaction_id": reversal_txn_id,
+                "transaction_date": now.strftime("%Y-%m-%d"),
+                "transaction_type": "outflow",  # Reversal of inflow
+                "entry_type": "purchase_refund_reversal",
+                "is_cashbook_entry": True,
+                "amount": actual_refund,
+                "mode": "adjustment",
+                "category_id": "refund_reversal",
+                "account_id": refund_account,
+                "project_id": return_doc.get("project_id"),
+                "vendor_id": return_doc.get("vendor_id"),
+                "paid_to": return_doc.get("vendor_name"),
+                "remarks": f"REVERSAL: {return_id} - {update.reversal_reason}",
+                "reference_type": "purchase_return",
+                "reference_id": return_id,
+                "original_transaction_id": linked_txn_id,
+                "is_reversal": True,
+                "is_verified": True,  # Auto-verified
+                "created_by": user.user_id,
+                "created_by_name": user_doc.get("name", "Unknown"),
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            }
+            await db.accounting_transactions.insert_one(reversal_txn)
+            
+            # Restore account balance (outflow = decrease)
+            await db.accounting_accounts.update_one(
+                {"account_id": refund_account},
+                {"$inc": {"current_balance": -actual_refund}}
+            )
+            
+            update_data["reversal_transaction_id"] = reversal_txn_id
+        
+        update_data["reversed_at"] = now.isoformat()
+        update_data["reversed_by"] = user.user_id
+        update_data["reversal_reason"] = update.reversal_reason
+        update_data["refund_status"] = "reversed"
+        
+        # Reinstate liability or receivable
+        receivable_id = return_doc.get("linked_receivable_id")
+        if receivable_id and actual_refund > 0:
+            await db.finance_vendor_receivables.update_one(
+                {"receivable_id": receivable_id},
+                {
+                    "$inc": {"amount_received": -actual_refund, "amount_remaining": actual_refund},
+                    "$set": {"status": "open", "updated_at": now.isoformat()}
+                }
+            )
+    
+    elif update.new_status == "completed":
+        update_data["completed_at"] = now.isoformat()
+        update_data["completed_by"] = user.user_id
+    
+    elif update.new_status == "cancelled":
+        update_data["cancelled_at"] = now.isoformat()
+        update_data["cancelled_by"] = user.user_id
+        update_data["cancellation_reason"] = update.notes
+        
+        # If liability was reduced, restore it
+        liability_id = return_doc.get("linked_liability_id")
+        if liability_id and return_doc.get("reduces_liability"):
+            expected_refund = return_doc.get("expected_refund_amount", 0)
+            await db.finance_liabilities.update_one(
+                {"liability_id": liability_id},
+                {
+                    "$inc": {"amount_remaining": expected_refund},
+                    "$set": {"status": "open", "updated_at": now.isoformat()}
+                }
+            )
+    
+    # Update the return document
+    await db.finance_returns.update_one(
+        {"return_id": return_id},
+        {
+            "$set": update_data,
+            "$push": {"status_history": status_history_entry}
+        }
+    )
+    
+    updated = await db.finance_returns.find_one({"return_id": return_id}, {"_id": 0})
+    return {"success": True, "return": updated}
+
+
 # ============ SALES RETURN ============
 
 class SalesReturnCreate(BaseModel):

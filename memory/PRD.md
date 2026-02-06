@@ -9,7 +9,7 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Finance Module P0, P1 & P2 Bug Fixes COMPLETE ✅
+## Current Status: Finance Module P0, P1, P2 & P3 Bug Fixes COMPLETE ✅
 **As of February 6, 2026**
 
 ### Finance Module Critical Bug Fixes
@@ -38,20 +38,21 @@ Build a full-stack CRM application for an interior design company, managing the 
 | **Date & Time Incorrect System-Wide** | Created local timezone utility functions (`getLocalDateString`, `formatDateLocal`), updated CashBook and DailyClosing pages | ✅ |
 | **Purchase Return Reflection in Reports** | Profitability report now includes `purchase_refunds`, `net_actual_cost`, `total_purchase_refunds`, `total_net_cost` fields | ✅ |
 
-#### New Utility Functions (P2)
-```javascript
-// /app/frontend/src/lib/utils.js
-getLocalDateString(date)    // Returns YYYY-MM-DD in local timezone
-formatDateLocal(dateInput)  // Formats date to 'DD MMM YYYY' in local timezone
-formatTimeLocal(dateInput)  // Formats time to 'HH:MM' in local timezone
-formatDateTimeLocal(dateInput) // Formats date+time in local timezone
-```
+#### P3 - UI & Usability Enhancements ✅
 
-**Testing:** ✅ All tests passed (iteration_46.json P0/P1, iteration_47.json P2)
+| Issue | Fix | Status |
+|-------|-----|--------|
+| **Unit Dropdown Additions** | Added 'box' and 'packet' to UNITS array in ExecutionLedger.jsx | ✅ |
+| **Purchase Invoice Add Item Button** | Added 'Add Another Item' button at bottom of line items list for better UX | ✅ |
+
+**Testing:** ✅ All tests passed
+- iteration_46.json: P0/P1 backend tests (18/18 passed)
+- iteration_47.json: P2 backend + frontend tests (15/15 + 3/3 passed)
+- iteration_48.json: P3 frontend tests (7/7 passed)
 
 ---
 
-### Previous Status: P0 & P1 Fixes
+### Previous Status: P0, P1 & P2 Fixes
 
 #### Purpose
 Dedicated review queue page for Design Managers combining all approval items in one place.

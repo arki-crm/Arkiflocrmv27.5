@@ -375,7 +375,7 @@ const CashBook = () => {
         from_account_id: '',
         to_account_id: '',
         amount: '',
-        transfer_date: new Date().toISOString().split('T')[0],
+        transfer_date: getLocalDateString(),  // P2-FIX: Use local date
         notes: ''
       });
       fetchData();
@@ -390,7 +390,7 @@ const CashBook = () => {
   const changeDate = (direction) => {
     const current = new Date(selectedDate);
     current.setDate(current.getDate() + direction);
-    setSelectedDate(current.toISOString().split('T')[0]);
+    setSelectedDate(getLocalDateString(current));  // P2-FIX: Use local date
   };
 
   const canAddTransaction = hasPermission('finance.add_transaction');

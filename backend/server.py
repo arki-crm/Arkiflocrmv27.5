@@ -34596,20 +34596,21 @@ async def get_project_profitability_report(
     
     for project in projects:
         project_id = project.get("project_id")
-        contract_value = float(project.get("contract_value", 0))
+        # P2-FIX: Handle None values for contract_value
+        contract_value = float(project.get("contract_value") or 0)
         
         # Get total received (from receipts, exclude imported)
         receipts = await db.finance_receipts.find({
             "project_id": project_id,
             "$or": [{"imported": {"$ne": True}}, {"imported": {"$exists": False}}]
         }, {"_id": 0, "amount": 1}).to_list(100)
-        total_received = sum(float(r.get("amount", 0)) for r in receipts)
+        total_received = sum(float(r.get("amount") or 0) for r in receipts)
         
         # Get planned cost (from vendor mappings)
         vendor_mappings = await db.finance_vendor_mappings.find({
             "project_id": project_id
         }, {"_id": 0, "estimated_amount": 1}).to_list(100)
-        planned_cost = sum(float(vm.get("estimated_amount", 0)) for vm in vendor_mappings)
+        planned_cost = sum(float(vm.get("estimated_amount") or 0) for vm in vendor_mappings)
         
         # Get actual cost (from cashbook outflows, exclude imported)
         outflows = await db.accounting_transactions.find({
@@ -34617,7 +34618,7 @@ async def get_project_profitability_report(
             "type": "outflow",
             "$or": [{"imported": {"$ne": True}}, {"imported": {"$exists": False}}]
         }, {"_id": 0, "amount": 1}).to_list(1000)
-        actual_cost = sum(float(o.get("amount", 0)) for o in outflows)
+        actual_cost = sum(float(o.get("amount") or 0) for o in outflows)
         
         # P2-FIX: Get purchase returns for this project
         purchase_returns = await db.finance_returns.find({

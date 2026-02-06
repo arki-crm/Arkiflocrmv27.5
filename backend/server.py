@@ -30826,29 +30826,39 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
         )
         new_entry["linked_liability_id"] = liability_id
     
-    # BUG FIX: Create Daybook entry for purchase invoice
-    daybook_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
-    daybook_entry = {
-        "transaction_id": daybook_txn_id,
-        "transaction_date": entry.execution_date or entry.invoice_date or now.strftime("%Y-%m-%d"),
-        "transaction_type": "outflow",
-        "entry_type": "purchase_invoice",
-        "amount": grand_total,
-        "description": f"Purchase Invoice: {entry.invoice_no or 'N/A'} - {vendor_name or 'Unknown Vendor'}",
-        "account_id": None,  # Will be set when payment is made
-        "category_id": None,
-        "project_id": entry.project_id,
-        "vendor_id": vendor_id,
-        "reference_type": "execution_ledger",
-        "reference_id": entry_id,
-        "liability_id": liability_id,
-        "payment_status": "unpaid" if entry.purchase_type == "credit" else "paid",
-        "remarks": entry.remarks,
-        "created_by": user.user_id,
-        "created_by_name": user.name,
-        "created_at": now.isoformat()
-    }
-    await db.accounting_transactions.insert_one(daybook_entry)
+    # P0-FIX: Only create Daybook entry for credit purchases (no cashbook entry)
+    # Credit purchases should NOT appear in cashbook until payment is made
+    # They should only create a liability record and daybook reference
+    if entry.purchase_type == "credit":
+        # Create daybook-only entry (NOT a cashbook entry)
+        daybook_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+        daybook_entry = {
+            "transaction_id": daybook_txn_id,
+            "transaction_date": entry.execution_date or entry.invoice_date or now.strftime("%Y-%m-%d"),
+            "transaction_type": "outflow",
+            "entry_type": "purchase_invoice_credit",  # Distinct type for credit purchases
+            "is_cashbook_entry": False,  # P0-FIX: Exclude from cashbook queries
+            "amount": grand_total,
+            "description": f"Credit Purchase Invoice: {entry.invoice_no or 'N/A'} - {vendor_name or 'Unknown Vendor'}",
+            "account_id": None,  # No account until payment is made
+            "category_id": None,
+            "project_id": entry.project_id,
+            "vendor_id": vendor_id,
+            "reference_type": "execution_ledger",
+            "reference_id": entry_id,
+            "liability_id": liability_id,
+            "payment_status": "unpaid",
+            "remarks": entry.remarks,
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "created_at": now.isoformat()
+        }
+        await db.accounting_transactions.insert_one(daybook_entry)
+    # Cash purchases create actual cashbook entries
+    elif entry.purchase_type == "cash" and entry.linked_cashbook_id:
+        # Cash purchase is already linked to an existing cashbook entry
+        # No need to create duplicate entry
+        pass
     
     new_entry.pop("_id", None)
     return {"success": True, "entry": new_entry, "liability_id": liability_id}

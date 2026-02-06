@@ -96,7 +96,8 @@ const PAYMENT_STATUS_CONFIG = {
   paid: { label: 'Paid', color: 'bg-green-100 text-green-800', icon: CheckCircle }
 };
 
-const UNITS = ['pcs', 'sqft', 'rft', 'kg', 'meter', 'set', 'nos', 'lot'];
+// P3-FIX: Added 'box' and 'packet' units as requested
+const UNITS = ['pcs', 'sqft', 'rft', 'kg', 'meter', 'set', 'nos', 'lot', 'box', 'packet'];
 const PAYMENT_MODES = ['cash', 'bank_transfer', 'upi', 'cheque', 'card'];
 
 const formatCurrency = (val) => {

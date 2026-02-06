@@ -19821,12 +19821,35 @@ async def list_accounting_accounts(request: Request):
 
 @api_router.post("/accounting/accounts")
 async def create_accounting_account(account: AccountCreate, request: Request):
-    """Create a new accounting account (Admin only)"""
+    """Create a new accounting account (Admin only) with P1-FIX: duplicate detection"""
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
     if not has_permission(user_doc, "finance.manage_accounts"):
         raise HTTPException(status_code=403, detail="Access denied - no finance.manage_accounts permission")
+    
+    # P1-FIX: Check for duplicate account by name (case-insensitive)
+    existing_by_name = await db.accounting_accounts.find_one({
+        "account_name": {"$regex": f"^{account.account_name}$", "$options": "i"}
+    })
+    if existing_by_name:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Account with name '{account.account_name}' already exists"
+        )
+    
+    # P1-FIX: Check for duplicate bank account number (if provided)
+    if account.bank_name and account.branch:
+        existing_by_bank = await db.accounting_accounts.find_one({
+            "bank_name": {"$regex": f"^{account.bank_name}$", "$options": "i"},
+            "branch": {"$regex": f"^{account.branch}$", "$options": "i"},
+            "account_type": account.account_type
+        })
+        if existing_by_bank:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Account with same bank, branch and type already exists"
+            )
     
     now = datetime.now(timezone.utc)
     account_id = f"acc_{uuid.uuid4().hex[:8]}"
@@ -19841,6 +19864,7 @@ async def create_accounting_account(account: AccountCreate, request: Request):
         "opening_balance": account.opening_balance,
         "current_balance": account.opening_balance,
         "is_active": account.is_active,
+        "is_archived": False,  # P1-FIX: Archive support
         "created_at": now.isoformat(),
         "created_by": user.user_id,
         "updated_at": now.isoformat()

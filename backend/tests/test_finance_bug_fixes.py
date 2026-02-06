@@ -8,7 +8,7 @@ import uuid
 import sys
 
 # Test configuration
-BASE_URL = "https://workflow-audit-2.preview.emergentagent.com/api"
+BASE_URL = "https://designhub-finance.preview.emergentagent.com/api"
 FOUNDER_EMAIL = "sidheeq.arkidots@gmail.com"
 FOUNDER_PASSWORD = "founder123"
 

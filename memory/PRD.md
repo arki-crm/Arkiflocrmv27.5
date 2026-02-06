@@ -726,7 +726,7 @@ Lead Allocated → BC Call Done → BOQ Shared → Site Meeting → Revised BOQ 
 ## Test Credentials
 
 **Local Admin Login:**
-- **URL**: https://workflow-audit-2.preview.emergentagent.com/login
+- **URL**: https://designhub-finance.preview.emergentagent.com/login
 - **Email**: thaha.pakayil@gmail.com
 - **Password**: password123
 - **Access**: Full Admin permissions

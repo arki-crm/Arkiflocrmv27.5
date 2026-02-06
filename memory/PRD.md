@@ -9,7 +9,63 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Design Manager Review Queue Phase 3 COMPLETE ✅
+## Current Status: Finance Module P0 & P1 Bug Fixes COMPLETE ✅
+**As of February 6, 2026**
+
+### Finance Module Critical Bug Fixes
+
+#### P0 - Ledger Integrity (Critical Accounting Accuracy) ✅
+
+| Issue | Fix | Status |
+|-------|-----|--------|
+| **Invoice & Receipt Duplication** | Added idempotency key support + 60-second duplicate detection | ✅ |
+| **Credit Purchase in Cashbook** | Added `is_cashbook_entry=False` flag, excluded from cashbook queries | ✅ |
+| **Purchase Return Refund Direction** | Verified as INFLOW when status=completed (vendor returns money to us) | ✅ |
+| **Refund Module Status Lifecycle** | Implemented initiated→pending→completed flow, only "completed" posts to ledger | ✅ |
+
+#### P1 - Financial Structure & Control ✅
+
+| Issue | Fix | Status |
+|-------|-----|--------|
+| **Bank Account Duplication** | Case-insensitive name check + bank/branch duplicate detection | ✅ |
+| **Account Deletion/Archive** | Soft delete (archive) by default, hard delete only if no transactions | ✅ |
+| **Purchase Return Status Lifecycle** | Implemented full lifecycle: initiated→vendor_accepted→refund_pending→refund_received→completed | ✅ |
+
+#### New API Endpoints (Finance Module)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/refunds/{id}/status` | PUT | Update refund status through lifecycle |
+| `/api/accounting/accounts/{id}` | DELETE | Archive (soft delete) or delete account |
+| `/api/accounting/accounts/{id}/restore` | POST | Restore archived account |
+| `/api/finance/purchase-returns/{id}/status` | PUT | Update purchase return through lifecycle |
+
+#### Key Implementation Details
+
+**Refund Status Lifecycle:**
+- `initiated` → No ledger impact
+- `pending` → Approved, awaiting execution
+- `completed` → Creates cashbook entry (OUTFLOW for sales refund)
+- `reversed` → Creates reversal entry
+
+**Purchase Return Status Lifecycle:**
+- `initiated` → Return created
+- `vendor_accepted` → Vendor acknowledges return
+- `refund_pending` → Awaiting refund from vendor
+- `refund_received` → Creates cashbook INFLOW entry
+- `completed` → Process complete
+- `reversed` → All entries reversed (for failed/bounced refunds)
+
+**Accounting Rules Implemented:**
+- Sales Refund = Cash/Bank OUTFLOW (customer money returned)
+- Purchase Refund = Cash/Bank INFLOW (vendor money received)
+- Credit purchases do NOT appear in cashbook until payment is made
+- No refund posting before status = "completed"
+
+**Testing:** ✅ All 18 tests passed (iteration_46.json) - Backend 100%
+
+---
+
+## Previous Status: Design Manager Review Queue Phase 3 COMPLETE ✅
 **As of February 5, 2026**
 
 ### NEW: Design Manager Review Queue (Phase 3)

@@ -2124,7 +2124,10 @@ DEFAULT_ROLE_PERMISSIONS = {
         "projects.hold", "projects.activate", "projects.deactivate",
         "leads.hold", "leads.activate", "leads.deactivate",
         # DesignManager can adjust timelines
-        "timeline.adjust"
+        "timeline.adjust",
+        # Design approval permissions (Phase 1 & 3 Design Approval Gate)
+        "design.review", "design.approve", "design.reject",
+        "design.queue.view", "design.submissions.view"
     ],
     "ProductionOpsManager": [
         "projects.view", "projects.view_all", 

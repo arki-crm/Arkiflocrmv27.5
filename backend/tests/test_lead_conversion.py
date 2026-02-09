@@ -29,116 +29,42 @@ class TestLeadConversion:
     """Test Lead to Project Conversion functionality"""
     
     @pytest.fixture(scope="class")
-    def auth_token(self):
-        """Get authentication token"""
-        response = requests.post(
+    def session(self):
+        """Get authenticated session with cookies"""
+        session = requests.Session()
+        session.headers.update({"Content-Type": "application/json"})
+        
+        response = session.post(
             f"{BASE_URL}/api/auth/local-login",
             json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
         )
         assert response.status_code == 200, f"Login failed: {response.text}"
         data = response.json()
-        token = data.get("token") or data.get("access_token")
-        assert token, f"No token in response: {data}"
-        return token
+        assert data.get("success") == True, f"Login not successful: {data}"
+        
+        # Session cookies are automatically stored in the session
+        return session
     
     @pytest.fixture(scope="class")
-    def auth_headers(self, auth_token):
-        """Get headers with auth token"""
-        return {
-            "Authorization": f"Bearer {auth_token}",
-            "Content-Type": "application/json"
-        }
-    
-    @pytest.fixture(scope="class")
-    def test_designer(self, auth_headers):
+    def test_designer(self, session):
         """Get or create a test designer user"""
-        # Get list of users to find a designer
-        response = requests.get(f"{BASE_URL}/api/users", headers=auth_headers)
+        response = session.get(f"{BASE_URL}/api/users")
         if response.status_code == 200:
             users = response.json()
-            # Find a designer
             for user in users:
                 if user.get("role") == "Designer":
                     return user
-        # Return None if no designer found - tests will handle this
         return None
     
-    @pytest.fixture(scope="class")
-    def test_lead_for_conversion(self, auth_headers, test_designer):
-        """Create a test lead at 'Booking Completed' stage for conversion testing"""
-        unique_id = uuid.uuid4().hex[:8]
-        
-        lead_data = {
-            "customer_name": f"TEST_ConversionTest_{unique_id}",
-            "customer_phone": f"9876{unique_id[:6]}",
-            "customer_email": f"test_conversion_{unique_id}@example.com",
-            "customer_address": "Test Address for Conversion",
-            "source": "Website",
-            "budget": 500000,
-            "customer_requirements": "Test requirements for conversion testing"
-        }
-        
-        # Create lead
-        response = requests.post(
-            f"{BASE_URL}/api/leads",
-            json=lead_data,
-            headers=auth_headers
-        )
-        assert response.status_code in [200, 201], f"Failed to create lead: {response.text}"
-        lead = response.json()
-        lead_id = lead.get("lead_id")
-        assert lead_id, f"No lead_id in response: {lead}"
-        
-        # Progress lead to Booking Completed stage
-        # First, assign a designer if available
-        if test_designer:
-            designer_id = test_designer.get("user_id")
-            requests.put(
-                f"{BASE_URL}/api/leads/{lead_id}/assign-designer",
-                json={"designer_id": designer_id},
-                headers=auth_headers
-            )
-        
-        # Progress through stages to reach Booking Completed
-        stages_to_progress = [
-            "Site Visit Scheduled",
-            "Site Visit Completed", 
-            "Quotation Sent",
-            "Negotiation",
-            "Booking Completed"
-        ]
-        
-        for stage in stages_to_progress:
-            response = requests.put(
-                f"{BASE_URL}/api/leads/{lead_id}/stage",
-                json={"stage": stage},
-                headers=auth_headers
-            )
-            # Don't fail if stage update fails - some stages may have requirements
-        
-        # Confirm booking payment (required for conversion)
-        response = requests.put(
-            f"{BASE_URL}/api/leads/{lead_id}/confirm-booking-payment",
-            headers=auth_headers
-        )
-        
-        # Get the updated lead
-        response = requests.get(f"{BASE_URL}/api/leads/{lead_id}", headers=auth_headers)
-        if response.status_code == 200:
-            lead = response.json()
-        
-        yield lead
-        
-        # Cleanup: Delete test lead and any created project
-        # Note: In production, you might want to keep these for audit
+    def test_01_login_works(self, session):
+        """Verify login works and we have a valid session"""
+        response = session.get(f"{BASE_URL}/api/auth/me")
+        assert response.status_code == 200, f"Auth check failed: {response.text}"
+        user = response.json()
+        assert user.get("email") == TEST_EMAIL
+        print(f"✓ Login successful, user: {user.get('name')}")
     
-    def test_01_login_works(self, auth_token):
-        """Verify login works and we have a valid token"""
-        assert auth_token is not None
-        assert len(auth_token) > 0
-        print(f"✓ Login successful, token obtained")
-    
-    def test_02_create_lead_for_conversion(self, auth_headers):
+    def test_02_create_lead_for_conversion(self, session):
         """Create a fresh lead specifically for conversion testing"""
         unique_id = uuid.uuid4().hex[:8]
         
@@ -151,10 +77,9 @@ class TestLeadConversion:
             "customer_requirements": "Full home interior - conversion test"
         }
         
-        response = requests.post(
+        response = session.post(
             f"{BASE_URL}/api/leads",
-            json=lead_data,
-            headers=auth_headers
+            json=lead_data
         )
         
         assert response.status_code in [200, 201], f"Failed to create lead: {response.text}"
@@ -169,17 +94,13 @@ class TestLeadConversion:
         self.__class__.created_lead_id = lead["lead_id"]
         return lead
     
-    def test_03_conversion_requires_booking_completed_stage(self, auth_headers):
+    def test_03_conversion_requires_booking_completed_stage(self, session):
         """Verify conversion fails if lead is not at Booking Completed stage"""
-        # Use the lead created in previous test
         lead_id = getattr(self.__class__, 'created_lead_id', None)
         if not lead_id:
             pytest.skip("No lead created in previous test")
         
-        response = requests.post(
-            f"{BASE_URL}/api/leads/{lead_id}/convert",
-            headers=auth_headers
-        )
+        response = session.post(f"{BASE_URL}/api/leads/{lead_id}/convert")
         
         # Should fail because lead is not at Booking Completed stage
         assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
@@ -188,7 +109,7 @@ class TestLeadConversion:
         
         print(f"✓ Conversion correctly rejected - lead not at Booking Completed stage")
     
-    def test_04_progress_lead_to_booking_completed(self, auth_headers, test_designer):
+    def test_04_progress_lead_to_booking_completed(self, session, test_designer):
         """Progress lead through stages to Booking Completed"""
         lead_id = getattr(self.__class__, 'created_lead_id', None)
         if not lead_id:
@@ -197,10 +118,9 @@ class TestLeadConversion:
         # Assign designer if available
         if test_designer:
             designer_id = test_designer.get("user_id")
-            response = requests.put(
+            response = session.put(
                 f"{BASE_URL}/api/leads/{lead_id}/assign-designer",
-                json={"designer_id": designer_id},
-                headers=auth_headers
+                json={"designer_id": designer_id}
             )
             print(f"  Designer assignment: {response.status_code}")
         
@@ -214,31 +134,27 @@ class TestLeadConversion:
         ]
         
         for stage in stages:
-            response = requests.put(
+            response = session.put(
                 f"{BASE_URL}/api/leads/{lead_id}/stage",
-                json={"stage": stage},
-                headers=auth_headers
+                json={"stage": stage}
             )
             print(f"  Stage '{stage}': {response.status_code}")
         
         # Verify lead is at Booking Completed
-        response = requests.get(f"{BASE_URL}/api/leads/{lead_id}", headers=auth_headers)
+        response = session.get(f"{BASE_URL}/api/leads/{lead_id}")
         assert response.status_code == 200
         lead = response.json()
         
         assert lead.get("stage") == "Booking Completed", f"Lead stage is {lead.get('stage')}, expected Booking Completed"
         print(f"✓ Lead progressed to Booking Completed stage")
     
-    def test_05_conversion_requires_payment_confirmation(self, auth_headers):
+    def test_05_conversion_requires_payment_confirmation(self, session):
         """Verify conversion fails without booking payment confirmation"""
         lead_id = getattr(self.__class__, 'created_lead_id', None)
         if not lead_id:
             pytest.skip("No lead created in previous test")
         
-        response = requests.post(
-            f"{BASE_URL}/api/leads/{lead_id}/convert",
-            headers=auth_headers
-        )
+        response = session.post(f"{BASE_URL}/api/leads/{lead_id}/convert")
         
         # Should fail because booking payment not confirmed
         assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
@@ -248,28 +164,25 @@ class TestLeadConversion:
         
         print(f"✓ Conversion correctly rejected - booking payment not confirmed")
     
-    def test_06_confirm_booking_payment(self, auth_headers):
+    def test_06_confirm_booking_payment(self, session):
         """Confirm booking payment for the lead"""
         lead_id = getattr(self.__class__, 'created_lead_id', None)
         if not lead_id:
             pytest.skip("No lead created in previous test")
         
-        response = requests.put(
-            f"{BASE_URL}/api/leads/{lead_id}/confirm-booking-payment",
-            headers=auth_headers
-        )
+        response = session.put(f"{BASE_URL}/api/leads/{lead_id}/confirm-booking-payment")
         
         assert response.status_code == 200, f"Failed to confirm payment: {response.text}"
         
         # Verify lead has booking_payment_confirmed
-        response = requests.get(f"{BASE_URL}/api/leads/{lead_id}", headers=auth_headers)
+        response = session.get(f"{BASE_URL}/api/leads/{lead_id}")
         assert response.status_code == 200
         lead = response.json()
         
         assert lead.get("booking_payment_confirmed") == True, f"Payment not confirmed: {lead}"
         print(f"✓ Booking payment confirmed")
     
-    def test_07_convert_lead_to_project_success(self, auth_headers):
+    def test_07_convert_lead_to_project_success(self, session):
         """
         CRITICAL TEST: Verify lead converts to project successfully
         This tests the bug fix for function name collision
@@ -278,10 +191,7 @@ class TestLeadConversion:
         if not lead_id:
             pytest.skip("No lead created in previous test")
         
-        response = requests.post(
-            f"{BASE_URL}/api/leads/{lead_id}/convert",
-            headers=auth_headers
-        )
+        response = session.post(f"{BASE_URL}/api/leads/{lead_id}/convert")
         
         assert response.status_code == 200, f"Conversion failed: {response.text}"
         data = response.json()
@@ -300,16 +210,13 @@ class TestLeadConversion:
         print(f"  Project ID: {data['project_id']}")
         print(f"  PID: {data['pid']}")
     
-    def test_08_verify_project_created_in_database(self, auth_headers):
+    def test_08_verify_project_created_in_database(self, session):
         """Verify the project document was created in database"""
         project_id = getattr(self.__class__, 'created_project_id', None)
         if not project_id:
             pytest.skip("No project created in previous test")
         
-        response = requests.get(
-            f"{BASE_URL}/api/projects/{project_id}",
-            headers=auth_headers
-        )
+        response = session.get(f"{BASE_URL}/api/projects/{project_id}")
         
         assert response.status_code == 200, f"Project not found: {response.text}"
         project = response.json()
@@ -328,16 +235,13 @@ class TestLeadConversion:
         print(f"  Stage: {project.get('stage')}")
         print(f"  Client: {project.get('client_name')}")
     
-    def test_09_verify_lead_marked_as_converted(self, auth_headers):
+    def test_09_verify_lead_marked_as_converted(self, session):
         """Verify lead is marked as is_converted=True"""
         lead_id = getattr(self.__class__, 'created_lead_id', None)
         if not lead_id:
             pytest.skip("No lead created in previous test")
         
-        response = requests.get(
-            f"{BASE_URL}/api/leads/{lead_id}",
-            headers=auth_headers
-        )
+        response = session.get(f"{BASE_URL}/api/leads/{lead_id}")
         
         assert response.status_code == 200, f"Lead not found: {response.text}"
         lead = response.json()
@@ -351,7 +255,7 @@ class TestLeadConversion:
         print(f"  is_converted: {lead.get('is_converted')}")
         print(f"  project_id: {lead.get('project_id')}")
     
-    def test_10_verify_project_timeline_generated(self, auth_headers):
+    def test_10_verify_project_timeline_generated(self, session):
         """
         CRITICAL TEST: Verify project timeline was generated during conversion
         This is the key test for the bug fix - timeline generation was failing
@@ -361,10 +265,7 @@ class TestLeadConversion:
         if not project_id:
             pytest.skip("No project created in previous test")
         
-        response = requests.get(
-            f"{BASE_URL}/api/projects/{project_id}",
-            headers=auth_headers
-        )
+        response = session.get(f"{BASE_URL}/api/projects/{project_id}")
         
         assert response.status_code == 200
         project = response.json()
@@ -380,26 +281,18 @@ class TestLeadConversion:
         for entry in timeline[:3]:
             print(f"    - {entry.get('title', 'N/A')}: {entry.get('status', 'N/A')}")
     
-    def test_11_verify_project_milestones_seeded(self, auth_headers):
+    def test_11_verify_project_milestones_seeded(self, session):
         """Verify project milestones were seeded during conversion"""
         project_id = getattr(self.__class__, 'created_project_id', None)
         if not project_id:
             pytest.skip("No project created in previous test")
         
-        response = requests.get(
-            f"{BASE_URL}/api/projects/{project_id}",
-            headers=auth_headers
-        )
+        response = session.get(f"{BASE_URL}/api/projects/{project_id}")
         
         assert response.status_code == 200
         project = response.json()
         
         timeline = project.get("timeline", [])
-        
-        # Check for expected milestone stages
-        expected_stages = ["Design Finalization"]  # At minimum, current stage should be present
-        
-        timeline_stages = [entry.get("stage_ref") or entry.get("stage") for entry in timeline]
         
         # Verify at least some milestones exist
         assert len(timeline) >= 1, f"Expected at least 1 milestone, got {len(timeline)}"
@@ -407,16 +300,13 @@ class TestLeadConversion:
         print(f"✓ Project milestones seeded")
         print(f"  Total milestones: {len(timeline)}")
     
-    def test_12_verify_cannot_convert_already_converted_lead(self, auth_headers):
+    def test_12_verify_cannot_convert_already_converted_lead(self, session):
         """Verify that already converted lead cannot be converted again"""
         lead_id = getattr(self.__class__, 'created_lead_id', None)
         if not lead_id:
             pytest.skip("No lead created in previous test")
         
-        response = requests.post(
-            f"{BASE_URL}/api/leads/{lead_id}/convert",
-            headers=auth_headers
-        )
+        response = session.post(f"{BASE_URL}/api/leads/{lead_id}/convert")
         
         assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
         data = response.json()
@@ -424,7 +314,7 @@ class TestLeadConversion:
         
         print(f"✓ Double conversion correctly prevented")
     
-    def test_13_verify_timeline_intelligence_endpoint_renamed(self, auth_headers):
+    def test_13_verify_timeline_intelligence_endpoint_renamed(self, session):
         """
         Verify the Timeline Intelligence endpoint is properly renamed
         and doesn't conflict with the sync helper function
@@ -435,14 +325,13 @@ class TestLeadConversion:
         
         # Try to call the timeline generate endpoint
         # It should fail because timeline already exists (from conversion)
-        response = requests.post(
+        response = session.post(
             f"{BASE_URL}/api/projects/{project_id}/timeline/generate",
             json={
                 "scope_type": "3bhk",
                 "project_tier": "standard",
                 "priority_tag": "normal"
-            },
-            headers=auth_headers
+            }
         )
         
         # Should return 400 because timeline already exists
@@ -464,30 +353,25 @@ class TestLeadConversionEdgeCases:
     """Test edge cases for lead conversion"""
     
     @pytest.fixture(scope="class")
-    def auth_headers(self):
-        """Get authentication headers"""
-        response = requests.post(
+    def session(self):
+        """Get authenticated session"""
+        session = requests.Session()
+        session.headers.update({"Content-Type": "application/json"})
+        
+        response = session.post(
             f"{BASE_URL}/api/auth/local-login",
             json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
         )
         assert response.status_code == 200
-        data = response.json()
-        token = data.get("token") or data.get("access_token")
-        return {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
+        return session
     
-    def test_convert_nonexistent_lead(self, auth_headers):
+    def test_convert_nonexistent_lead(self, session):
         """Verify conversion fails for non-existent lead"""
         fake_lead_id = f"lead_nonexistent_{uuid.uuid4().hex[:8]}"
         
-        response = requests.post(
-            f"{BASE_URL}/api/leads/{fake_lead_id}/convert",
-            headers=auth_headers
-        )
+        response = session.post(f"{BASE_URL}/api/leads/{fake_lead_id}/convert")
         
-        assert response.status_code == 404, f"Expected 404, got {response.status_code}"
+        assert response.status_code == 404, f"Expected 404, got {response.status_code}: {response.text}"
         print(f"✓ Non-existent lead conversion correctly returns 404")
     
     def test_convert_without_auth(self):

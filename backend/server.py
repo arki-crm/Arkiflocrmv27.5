@@ -2085,7 +2085,10 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.add_receipt", "finance.view_receipts", "finance.edit_payment_schedule",
         "finance.create_invoice", "finance.issue_refund", "finance.mark_cancellation",
         "finance.create_expense_request", "finance.approve_expense", "finance.record_expense",
-        "finance.allow_over_budget", "finance.view_expense_requests", "finance.track_refunds"
+        "finance.allow_over_budget", "finance.view_expense_requests", "finance.track_refunds",
+        # Design approval permissions (Phase 1 & 3 Design Approval Gate)
+        "design.review", "design.approve", "design.reject",
+        "design.queue.view", "design.submissions.view"
     ],
     
     # ============ CRM ROLES (unchanged) ============

@@ -42,18 +42,18 @@ class TestFullDesignApprovalFlow:
         """Create a fresh design submission for design_meeting_2"""
         submission_data = {
             "milestone_key": "design_meeting_2",
-            "checklist_items": [
-                {"item_id": "floor_plan_finalized", "completed": True, "notes": "Floor plan complete"},
-                {"item_id": "3d_renders_ready", "completed": True, "notes": "3D renders ready"},
-                {"item_id": "material_palette_selected", "completed": True, "notes": "Materials selected"},
-                {"item_id": "budget_aligned", "completed": True, "notes": "Budget aligned"},
-                {"item_id": "scope_coverage_complete", "completed": True, "notes": "All areas covered"},
-                {"item_id": "client_requirements_addressed", "completed": True, "notes": "Requirements addressed"}
+            "checklist": [
+                {"key": "floor_plan_finalized", "label": "Floor Plan Finalized", "checked": True},
+                {"key": "3d_renders_ready", "label": "3D Renders Ready", "checked": True},
+                {"key": "material_palette_selected", "label": "Material Palette Selected", "checked": True},
+                {"key": "budget_aligned", "label": "Budget Aligned", "checked": True},
+                {"key": "scope_coverage_complete", "label": "All Areas Covered", "checked": True},
+                {"key": "client_requirements_addressed", "label": "Requirements Addressed", "checked": True}
             ],
             "files": [
                 {"filename": "test_design.pdf", "url": "https://example.com/test.pdf"}
             ],
-            "notes": f"Full flow test submission - {datetime.now().isoformat()}"
+            "design_notes": f"Full flow test submission - {datetime.now().isoformat()}"
         }
         
         response = requests.post(
@@ -191,11 +191,14 @@ class TestDesignRejectionFlow:
         """Create a submission to test rejection flow"""
         submission_data = {
             "milestone_key": "design_meeting_2",
-            "checklist_items": [
-                {"item_id": "floor_plan_finalized", "completed": True, "notes": "Test"},
-                {"item_id": "3d_renders_ready", "completed": True, "notes": "Test"}
+            "checklist": [
+                {"key": "floor_plan_finalized", "label": "Floor Plan Finalized", "checked": True},
+                {"key": "3d_renders_ready", "label": "3D Renders Ready", "checked": True}
             ],
-            "notes": f"Rejection test submission - {datetime.now().isoformat()}"
+            "files": [
+                {"filename": "test.pdf", "url": "https://example.com/test.pdf"}
+            ],
+            "design_notes": f"Rejection test submission - {datetime.now().isoformat()}"
         }
         
         response = requests.post(

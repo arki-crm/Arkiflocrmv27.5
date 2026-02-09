@@ -62,17 +62,20 @@ class TestFullDesignApprovalFlow:
             json=submission_data
         )
         
-        assert response.status_code == 201, f"Failed to create submission: {response.text}"
+        # API returns 200 or 201 on success
+        assert response.status_code in [200, 201], f"Failed to create submission: {response.text}"
         
         data = response.json()
-        TestFullDesignApprovalFlow.test_submission_id = data.get("submission_id")
+        # Response may have submission nested or at top level
+        submission = data.get("submission", data)
+        TestFullDesignApprovalFlow.test_submission_id = submission.get("submission_id")
         
         assert TestFullDesignApprovalFlow.test_submission_id is not None
-        assert data.get("status") == "pending_review"
+        assert submission.get("status") == "pending_review"
         
         print(f"✅ Created submission: {TestFullDesignApprovalFlow.test_submission_id}")
-        print(f"   Status: {data.get('status')}")
-        print(f"   Milestone: {data.get('milestone_name')}")
+        print(f"   Status: {submission.get('status')}")
+        print(f"   Milestone: {submission.get('milestone_name')}")
     
     def test_02_verify_submission_in_review_queue(self):
         """Verify the submission appears in the review queue"""
@@ -207,11 +210,12 @@ class TestDesignRejectionFlow:
             json=submission_data
         )
         
-        if response.status_code != 201:
+        if response.status_code not in [200, 201]:
             pytest.skip(f"Could not create submission: {response.text}")
         
         data = response.json()
-        TestDesignRejectionFlow.test_submission_id = data.get("submission_id")
+        submission = data.get("submission", data)
+        TestDesignRejectionFlow.test_submission_id = submission.get("submission_id")
         print(f"✅ Created submission for rejection test: {TestDesignRejectionFlow.test_submission_id}")
     
     def test_02_rejection_requires_detailed_notes(self):

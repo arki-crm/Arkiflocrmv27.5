@@ -76,11 +76,13 @@ class TestDesignApprovalRouting:
         )
         assert response.status_code == 200, f"Failed to get roles: {response.text}"
         
-        roles = response.json()
+        data = response.json()
+        # API returns {"roles": [...]} structure
+        roles = data.get("roles", data) if isinstance(data, dict) else data
         design_manager_role = None
         
         for role in roles:
-            if role.get("id") == "DesignManager":
+            if isinstance(role, dict) and role.get("id") == "DesignManager":
                 design_manager_role = role
                 break
         
@@ -257,14 +259,20 @@ class TestDesignApprovalRouting:
         )
         assert response.status_code == 200, f"Failed to get submissions: {response.text}"
         
-        submissions = response.json()
-        print(f"✅ Found {len(submissions)} submissions for project")
+        data = response.json()
+        # API returns {"by_milestone": [...], "total_submissions": N} structure
+        total = data.get("total_submissions", 0)
+        by_milestone = data.get("by_milestone", [])
         
-        if submissions:
-            latest = submissions[0]
-            print(f"   Latest submission: {latest.get('submission_id')}")
-            print(f"   Status: {latest.get('status')}")
-            print(f"   Milestone: {latest.get('milestone_name')}")
+        print(f"✅ Found {total} submissions for project")
+        
+        if by_milestone:
+            for milestone_data in by_milestone:
+                latest = milestone_data.get("latest_submission", {})
+                if latest:
+                    print(f"   Milestone: {milestone_data.get('milestone_name')}")
+                    print(f"   Latest submission: {latest.get('submission_id')}")
+                    print(f"   Status: {latest.get('status')}")
     
     # ============ TEST 9: Verify Pending Submissions in Review Queue ============
     def test_09_verify_pending_in_review_queue(self):

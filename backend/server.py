@@ -3132,6 +3132,55 @@ async def create_role(role_data: RoleCreate, request: Request):
     return {"message": f"Role '{role_data.name}' created successfully", "role": new_role}
 
 
+@api_router.post("/admin/resync-permissions")
+async def resync_all_permissions(request: Request):
+    """
+    Admin endpoint to resync permissions for all users with empty permissions.
+    This fixes users created before the permission system was properly seeded.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "admin.manage_users") and user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Permission denied: admin.manage_users required")
+    
+    # Find all users with empty or missing permissions
+    users_to_fix = await db.users.find({
+        "$or": [
+            {"permissions": {"$exists": False}},
+            {"permissions": []},
+            {"permissions": None}
+        ],
+        "status": "Active"
+    }).to_list(1000)
+    
+    fixed_count = 0
+    fixed_users = []
+    
+    for user_to_fix in users_to_fix:
+        role = user_to_fix.get("role", "Designer")
+        default_perms = DEFAULT_ROLE_PERMISSIONS.get(role, DEFAULT_ROLE_PERMISSIONS.get("Designer", []))
+        
+        await db.users.update_one(
+            {"user_id": user_to_fix["user_id"]},
+            {"$set": {"permissions": default_perms}}
+        )
+        
+        fixed_count += 1
+        fixed_users.append({
+            "user_id": user_to_fix["user_id"],
+            "email": user_to_fix.get("email"),
+            "role": role,
+            "permissions_assigned": len(default_perms)
+        })
+    
+    return {
+        "success": True,
+        "message": f"Resynced permissions for {fixed_count} users",
+        "fixed_users": fixed_users
+    }
+
+
 @api_router.get("/roles/{role_id}")
 async def get_role(role_id: str, request: Request):
     """Get a specific role's details"""

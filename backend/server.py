@@ -15692,12 +15692,16 @@ async def _generate_project_timeline(
 
 
 @api_router.post("/projects/{project_id}/timeline/generate")
-async def generate_project_timeline(
+async def generate_project_timeline_intelligent(
     project_id: str, 
     gen_request: TimelineGenerateRequest,
     request: Request
 ):
-    """Generate a system timeline for a project"""
+    """Generate a system timeline for a project using Timeline Intelligence Engine
+    
+    NOTE: Renamed from generate_project_timeline to avoid conflict with 
+    the sync generate_project_timeline() helper function used during lead conversion.
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     

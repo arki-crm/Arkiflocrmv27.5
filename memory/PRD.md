@@ -9,21 +9,38 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Purchase→Payment Double-Posting Bug FIX VERIFIED ✅
+## Current Status: Financial Mapping Fix VERIFIED ✅
 **As of February 10, 2026**
 
-### Latest Fix: Credit Purchase Double-Posting Bug (P0 Critical)
+### Latest Fix: Financial Value Mapping in Project Finance
+
+| Issue | Description | Fix | Status |
+|-------|-------------|-----|--------|
+| **Contract Value Mapping** | "Contract Value" was pulling Presales Budget instead of Sign-off Locked BOQ value | Implemented proper value lifecycle: `presales_budget` → `booked_value` → `signoff_value`. Changed label to "Sign-off Value" and use `signoff_value` for all profit calculations | ✅ VERIFIED |
+
+**Value Lifecycle Now Correctly Mapped:**
+- `presales_budget`: Initial estimate from Lead/Presales
+- `booked_value`: Value at Booking/Agreement (locked at first payment)
+- `signoff_value`: Final BOQ value (locked at Design Sign-off) - **PRIMARY for financials**
+
+**Verification (iteration_53.json):** 10/10 tests passed
+- Backend returns all three value lifecycle fields ✅
+- `signoff_value` used for profit calculations ✅
+- Backward compatibility maintained (`contract_value` = `signoff_value`) ✅
+- Frontend displays "Sign-off Value" label ✅
+
+---
+
+## Previous Status: Purchase→Payment Double-Posting Bug FIX VERIFIED ✅
+**As of February 10, 2026**
+
+### Credit Purchase Double-Posting Bug (P0 Critical)
 
 | Issue | Description | Fix | Status |
 |-------|-------------|-----|--------|
 | **Double-Posting Bug** | Credit purchases were being counted twice in `actual_cost` - once on invoice creation and again on payment | Modified query filters in `get_project_finance_detail` and `get_daily_summary` to exclude entries with `is_cashbook_entry=False`. Credit purchase daybook entries now set `is_cashbook_entry=False`, only liability settlement creates cashbook entry with `is_cashbook_entry=True` | ✅ VERIFIED |
 
 **Verification (iteration_52.json):** 20/20 tests passed
-- Credit purchase creation does NOT increase `actual_cost` ✅
-- `remaining_liability` increases correctly after credit purchase ✅
-- Only liability settlement (payment) increases `actual_cost` ✅
-- `remaining_liability` returns to 0 after full payment ✅
-- Cashbook excludes credit purchase entries ✅
 
 ---
 

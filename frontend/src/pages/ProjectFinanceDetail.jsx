@@ -1304,8 +1304,8 @@ const ProjectFinanceDetail = () => {
                   Add Stage
                 </Button>
                 <div className="flex justify-between items-center pt-3 border-t">
-                  <span className="text-sm text-slate-600">Contract Value:</span>
-                  <span className="font-bold text-slate-900">{formatCurrency(paymentSchedule.contract_value)}</span>
+                  <span className="text-sm text-slate-600">Sign-off Value:</span>
+                  <span className="font-bold text-slate-900">{formatCurrency(paymentSchedule.signoff_value || paymentSchedule.contract_value)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-slate-600">Schedule Total:</span>
@@ -1842,8 +1842,8 @@ const ProjectFinanceDetail = () => {
 
               <div className="bg-slate-50 p-4 rounded-lg">
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-slate-600">Contract Value</span>
-                  <span className="font-medium">{formatCurrency(viewReceipt.project?.contract_value)}</span>
+                  <span className="text-slate-600">Sign-off Value</span>
+                  <span className="font-medium">{formatCurrency(viewReceipt.project?.signoff_value || viewReceipt.project?.contract_value)}</span>
                 </div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-slate-600">Total Received</span>

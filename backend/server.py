@@ -21708,7 +21708,8 @@ async def get_project_finance_detail(project_id: str, request: Request):
         })
     
     contract_value = project.get("project_value", 0) or 0
-    remaining_liability = total_planned - total_outflow
+    # P0-FIX: Use actual open liabilities from liabilities collection, not calculated from planned
+    remaining_liability = total_open_liability
     safe_surplus = total_inflow - total_outflow
     
     return {

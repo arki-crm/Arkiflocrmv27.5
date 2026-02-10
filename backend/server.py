@@ -21723,7 +21723,15 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "over_budget": actual > planned if planned > 0 else False
         })
     
-    contract_value = project.get("project_value", 0) or 0
+    # Financial value lifecycle:
+    # - presales_budget (project_value): Initial estimate from presales/lead
+    # - booked_value: Value at booking/agreement (locked at first payment)
+    # - signoff_value: Final BOQ value (locked at design sign-off) - PRIMARY for financials
+    presales_budget = project.get("project_value", 0) or 0
+    booked_value = project.get("booked_value", 0) or 0
+    signoff_value = project.get("signoff_value") or project.get("contract_value") or booked_value or presales_budget
+    signoff_locked = project.get("signoff_locked", False)
+    
     # P0-FIX: Use actual open liabilities from liabilities collection, not calculated from planned
     remaining_liability = total_open_liability
     safe_surplus = total_inflow - total_outflow
@@ -21739,13 +21747,22 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "current_stage": project.get("current_stage")
         },
         "summary": {
-            "contract_value": contract_value,
+            # Value lifecycle
+            "presales_budget": presales_budget,
+            "booked_value": booked_value,
+            "signoff_value": signoff_value,  # PRIMARY: Use this for financial calculations
+            "signoff_locked": signoff_locked,
+            "contract_value": signoff_value,  # DEPRECATED: Alias for backward compatibility
+            # Financial metrics
             "total_received": total_inflow,
             "planned_cost": total_planned,
             "actual_cost": total_outflow,
             "remaining_liability": remaining_liability,
             "safe_surplus": safe_surplus,
-            "has_overspend": total_outflow > total_planned if total_planned > 0 else False
+            "has_overspend": total_outflow > total_planned if total_planned > 0 else False,
+            # Profitability (based on signoff_value as revenue baseline)
+            "gross_profit": signoff_value - total_outflow if signoff_value > 0 else 0,
+            "profit_margin": round(((signoff_value - total_outflow) / signoff_value) * 100, 1) if signoff_value > 0 else 0
         },
         "vendor_mappings": vendor_mappings,
         "transactions": enriched_txns,

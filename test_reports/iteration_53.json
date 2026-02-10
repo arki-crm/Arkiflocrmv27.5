@@ -1,0 +1,56 @@
+{
+  "summary": "Financial Mapping Fix Verified - All backend tests passed (10/10). Frontend label changes from 'Contract Value' to 'Sign-off Value' verified and fixed remaining instances in ProjectFinanceDetail.jsx.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "test_01_login_works - Authentication working with founder credentials",
+    "test_02_list_projects_returns_value_lifecycle_fields - GET /api/finance/project-finance returns presales_budget, booked_value, signoff_value",
+    "test_03_contract_value_equals_signoff_value - Backward compatibility verified",
+    "test_04_get_project_finance_detail_returns_value_lifecycle - GET /api/finance/project-finance/{project_id} returns value lifecycle in summary",
+    "test_05_signoff_value_used_for_profit_calculations - Profit calculations use signoff_value correctly",
+    "test_06_test_project_has_correct_signoff_value - Test project shows signoff_value=214000 (not presales_budget)",
+    "test_07_value_lifecycle_fields_are_distinct - presales_budget, booked_value, signoff_value tracked separately",
+    "test_08_detail_contract_value_equals_signoff_value - Detail endpoint backward compatibility verified",
+    "test_01_search_filter_works - Search filter on project finance list works",
+    "test_02_all_projects_have_value_lifecycle - All projects have complete value lifecycle fields"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_financial_mapping_fix.py",
+    "/app/test_reports/pytest/financial_mapping_fix_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Other pages (ProjectProfitabilityReport.jsx, MilestonePaymentConfirmations.jsx, Receipts.jsx, Refunds.jsx) still have 'Contract Value' labels - may need to be updated for consistency if required"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_financial_mapping_fix.py",
+    "/app/frontend/src/pages/ProjectFinanceDetail.jsx"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 tests passed)",
+    "frontend": "100% (Sign-off Value label verified)"
+  },
+  "test_credentials": {
+    "founder_login": {
+      "email": "sidheeq.arkidots@gmail.com",
+      "password": "founder123"
+    }
+  },
+  "seed_data_creation": "None - used existing test project proj_4aaba062",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Financial mapping fix verified. Key changes: 1) Backend returns presales_budget, booked_value, signoff_value as distinct fields, 2) signoff_value is used for profit calculations, 3) contract_value is returned for backward compatibility (equals signoff_value), 4) Frontend shows 'Sign-off Value' label in Project Finance pages. Test file: test_financial_mapping_fix.py",
+  "rca_of_the_issue": {
+    "root_cause": "Contract Value was incorrectly pulling presales_budget instead of the locked BOQ value (signoff_value) from Design Sign-off",
+    "impact": "Financial reports showed incorrect revenue baseline for profit calculations",
+    "fix": "1) Backend now returns three distinct value lifecycle fields: presales_budget (Lead/Presales estimate), booked_value (Booking/Agreement), signoff_value (Final BOQ from Design Sign-off). 2) signoff_value is used as the primary revenue baseline for profit calculations. 3) Frontend label renamed from 'Contract Value' to 'Sign-off Value'",
+    "verification": "All 10 backend tests pass. Frontend shows 'Sign-off Value' label correctly in Project Finance list and detail pages."
+  }
+}

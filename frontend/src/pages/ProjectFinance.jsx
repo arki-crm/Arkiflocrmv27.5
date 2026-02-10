@@ -53,15 +53,15 @@ const ProjectFinance = () => {
       });
       setProjects(res.data);
       
-      // Calculate stats
+      // Calculate stats - use signoff_value as primary (fallback to contract_value for compatibility)
       const total = res.data.reduce((acc, p) => ({
-        totalContractValue: acc.totalContractValue + (p.contract_value || 0),
+        totalSignoffValue: acc.totalSignoffValue + (p.signoff_value || p.contract_value || 0),
         totalReceived: acc.totalReceived + (p.total_received || 0),
         totalPlanned: acc.totalPlanned + (p.planned_cost || 0),
         totalActual: acc.totalActual + (p.actual_cost || 0),
         projectsWithOverspend: acc.projectsWithOverspend + (p.has_overspend ? 1 : 0)
       }), {
-        totalContractValue: 0,
+        totalSignoffValue: 0,
         totalReceived: 0,
         totalPlanned: 0,
         totalActual: 0,

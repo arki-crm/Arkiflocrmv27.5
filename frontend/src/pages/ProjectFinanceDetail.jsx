@@ -816,8 +816,8 @@ const ProjectFinanceDetail = () => {
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div>
-              <p className="text-xs text-slate-400 mb-1">Contract Value</p>
-              <p className="text-xl font-bold">{formatCurrency(summary.contract_value)}</p>
+              <p className="text-xs text-slate-400 mb-1">Sign-off Value</p>
+              <p className="text-xl font-bold">{formatCurrency(summary.signoff_value || summary.contract_value)}</p>
             </div>
             <div>
               <p className="text-xs text-green-400 mb-1 flex items-center gap-1">

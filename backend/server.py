@@ -21627,11 +21627,12 @@ async def get_project_finance_detail(project_id: str, request: Request):
     if not has_permission(user_doc, "finance.view_project_finance"):
         raise HTTPException(status_code=403, detail="Access denied - no finance.view_project_finance permission")
     
-    # Get project from CRM (read-only)
+    # Get project from CRM (read-only) - include value lifecycle fields
     project = await db.projects.find_one(
         {"project_id": project_id},
         {"_id": 0, "project_id": 1, "pid": 1, "project_name": 1, "client_name": 1,
-         "project_value": 1, "status": 1, "current_stage": 1, "stages": 1}
+         "project_value": 1, "booked_value": 1, "signoff_value": 1, "signoff_locked": 1,
+         "contract_value": 1, "status": 1, "current_stage": 1, "stages": 1}
     )
     
     if not project:

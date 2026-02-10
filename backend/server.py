@@ -21231,13 +21231,18 @@ async def get_daily_summary(date: str, request: Request):
     accounts = await db.accounting_accounts.find({"is_active": True}, {"_id": 0}).to_list(100)
     
     # P0-FIX: Exclude credit purchase daybook entries (is_cashbook_entry=False)
+    # Also exclude old purchase_invoice entries that don't have the flag
     # These are for tracking purposes only and don't represent actual cash movement
     transactions = await db.accounting_transactions.find(
         {
             "transaction_date": {"$regex": f"^{date}"},
-            "$or": [
-                {"is_cashbook_entry": {"$ne": False}},
-                {"is_cashbook_entry": {"$exists": False}}
+            "$and": [
+                {"$or": [
+                    {"is_cashbook_entry": {"$ne": False}},
+                    {"is_cashbook_entry": {"$exists": False}}
+                ]},
+                # Also exclude old credit purchase entries
+                {"entry_type": {"$nin": ["purchase_invoice", "purchase_invoice_credit"]}}
             ]
         },
         {"_id": 0}

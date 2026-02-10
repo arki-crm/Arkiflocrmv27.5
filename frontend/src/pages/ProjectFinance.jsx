@@ -37,7 +37,7 @@ const ProjectFinance = () => {
   const [search, setSearch] = useState('');
   const [stats, setStats] = useState({
     totalProjects: 0,
-    totalContractValue: 0,
+    totalSignoffValue: 0,
     totalReceived: 0,
     totalPlanned: 0,
     totalActual: 0,

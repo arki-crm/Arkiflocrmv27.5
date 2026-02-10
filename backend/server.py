@@ -21645,6 +21645,13 @@ async def get_project_finance_detail(project_id: str, request: Request):
         planned_by_category[cat] = planned_by_category.get(cat, 0) + vm.get("planned_amount", 0)
     total_planned = sum(planned_by_category.values())
     
+    # P0-FIX: Get actual liabilities for this project (unpaid vendor amounts)
+    liabilities = await db.finance_liabilities.find(
+        {"project_id": project_id, "status": "open"},
+        {"_id": 0, "amount_remaining": 1}
+    ).to_list(100)
+    total_open_liability = sum(l.get("amount_remaining", 0) for l in liabilities)
+    
     # Get actual transactions from cashbook (EXCLUDE credit purchase daybook entries)
     # P0-FIX: Credit purchases have is_cashbook_entry=False OR entry_type contains 'purchase_invoice'
     # These should not count as actual cost until payment is made via liability settlement

@@ -210,10 +210,13 @@ class TestCreditPurchaseDoublePostingFix:
         assert response.status_code == 200, f"Failed to settle liability: {response.text}"
         data = response.json()
         
-        assert data.get("success") == True or "transaction_id" in data or "liability" in data, \
+        # Settlement response contains liability_id and cashbook_transaction_id on success
+        assert "liability_id" in data or "cashbook_transaction_id" in data or data.get("success") == True, \
             f"Settlement failed: {data}"
         
         print(f"✓ Liability settled successfully")
+        if "cashbook_transaction_id" in data:
+            print(f"  Cashbook transaction: {data['cashbook_transaction_id']}")
     
     def test_08_verify_actual_cost_increased_after_payment(self, session):
         """Verify actual_cost increased ONLY after payment (not after credit purchase)"""

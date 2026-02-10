@@ -240,8 +240,8 @@ const ProjectFinance = () => {
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-right">
                     <div>
-                      <p className="text-xs text-slate-500">Contract</p>
-                      <p className="font-semibold text-slate-900">{formatCurrency(project.contract_value)}</p>
+                      <p className="text-xs text-slate-500">Sign-off Value</p>
+                      <p className="font-semibold text-slate-900">{formatCurrency(project.signoff_value || project.contract_value)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-500">Received</p>

@@ -21641,14 +21641,19 @@ async def get_project_finance_detail(project_id: str, request: Request):
     total_planned = sum(planned_by_category.values())
     
     # Get actual transactions from cashbook (EXCLUDE credit purchase daybook entries)
-    # P0-FIX: Credit purchases have is_cashbook_entry=False, should not count as actual cost
-    # until payment is made via liability settlement
+    # P0-FIX: Credit purchases have is_cashbook_entry=False OR entry_type contains 'purchase_invoice'
+    # These should not count as actual cost until payment is made via liability settlement
     transactions = await db.accounting_transactions.find(
         {
             "project_id": project_id,
-            "$or": [
-                {"is_cashbook_entry": {"$ne": False}},  # Include entries without the flag or True
-                {"is_cashbook_entry": {"$exists": False}}  # Include old entries without the flag
+            # Exclude non-cashbook entries (credit purchases)
+            "$and": [
+                {"$or": [
+                    {"is_cashbook_entry": {"$ne": False}},
+                    {"is_cashbook_entry": {"$exists": False}}
+                ]},
+                # Also exclude old credit purchase entries that don't have the flag
+                {"entry_type": {"$nin": ["purchase_invoice", "purchase_invoice_credit"]}}
             ]
         },
         {"_id": 0}

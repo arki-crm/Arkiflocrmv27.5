@@ -9,7 +9,25 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Finance Module P0, P1, P2 & P3 Bug Fixes COMPLETE ✅
+## Current Status: Purchase→Payment Double-Posting Bug FIX VERIFIED ✅
+**As of February 10, 2026**
+
+### Latest Fix: Credit Purchase Double-Posting Bug (P0 Critical)
+
+| Issue | Description | Fix | Status |
+|-------|-------------|-----|--------|
+| **Double-Posting Bug** | Credit purchases were being counted twice in `actual_cost` - once on invoice creation and again on payment | Modified query filters in `get_project_finance_detail` and `get_daily_summary` to exclude entries with `is_cashbook_entry=False`. Credit purchase daybook entries now set `is_cashbook_entry=False`, only liability settlement creates cashbook entry with `is_cashbook_entry=True` | ✅ VERIFIED |
+
+**Verification (iteration_52.json):** 20/20 tests passed
+- Credit purchase creation does NOT increase `actual_cost` ✅
+- `remaining_liability` increases correctly after credit purchase ✅
+- Only liability settlement (payment) increases `actual_cost` ✅
+- `remaining_liability` returns to 0 after full payment ✅
+- Cashbook excludes credit purchase entries ✅
+
+---
+
+## Previous Status: Finance Module P0, P1, P2 & P3 Bug Fixes COMPLETE ✅
 **As of February 6, 2026**
 
 ### Finance Module Critical Bug Fixes

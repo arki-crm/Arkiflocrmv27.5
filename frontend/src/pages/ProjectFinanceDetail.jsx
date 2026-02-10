@@ -890,7 +890,7 @@ const ProjectFinanceDetail = () => {
                   {formatCurrency(projectProfit.projected_profit)}
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
-                  Contract ({formatCurrency(projectProfit.contract_value)}) − Planned ({formatCurrency(projectProfit.planned_cost)})
+                  Sign-off ({formatCurrency(projectProfit.signoff_value || projectProfit.contract_value)}) − Planned ({formatCurrency(projectProfit.planned_cost)})
                 </p>
               </div>
 

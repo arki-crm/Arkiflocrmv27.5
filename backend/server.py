@@ -26206,6 +26206,8 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
         "approval_status": "not_required",
         "reviewed_by": None,
         "reviewed_at": None,
+        # P0-FIX: Explicitly mark as cashbook entry (actual cash movement)
+        "is_cashbook_entry": True,
         # System-generated marker - prevents manual editing
         "system_generated": True,
         "source_module": "liability",

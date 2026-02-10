@@ -101,7 +101,7 @@ class TestCreditPurchaseDoublePostingFix:
                 {
                     "material_name": f"Test Credit Purchase Item {unique_id}",  # Required field
                     "description": f"Test Credit Purchase Item {unique_id}",
-                    "category": "Materials",
+                    "category": "Modular Material",  # Valid category
                     "quantity": 1,
                     "unit": "nos",
                     "rate": test_amount,  # Required field

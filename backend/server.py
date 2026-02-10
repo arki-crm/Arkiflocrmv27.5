@@ -21544,11 +21544,12 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
             {"client_name": {"$regex": search, "$options": "i"}}
         ]
     
-    # Get projects with relevant fields
+    # Get projects with relevant fields including value lifecycle
     projects = await db.projects.find(
         query,
         {"_id": 0, "project_id": 1, "pid": 1, "project_name": 1, "client_name": 1, 
-         "project_value": 1, "status": 1, "current_stage": 1, "created_at": 1}
+         "project_value": 1, "booked_value": 1, "signoff_value": 1, "signoff_locked": 1,
+         "status": 1, "current_stage": 1, "created_at": 1}
     ).sort("created_at", -1).to_list(500)
     
     # Enrich with financial data

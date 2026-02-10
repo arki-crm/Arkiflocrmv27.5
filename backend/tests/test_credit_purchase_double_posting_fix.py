@@ -63,7 +63,8 @@ class TestCreditPurchaseDoublePostingFix:
     
     def test_02_get_initial_project_finance(self, session):
         """Get initial project finance state before creating credit purchase"""
-        response = session.get(f"{BASE_URL}/api/finance/projects/{TEST_PROJECT_ID}")
+        # Correct endpoint: /api/finance/project-finance/{project_id}
+        response = session.get(f"{BASE_URL}/api/finance/project-finance/{TEST_PROJECT_ID}")
         
         assert response.status_code == 200, f"Failed to get project finance: {response.text}"
         data = response.json()
@@ -81,19 +82,29 @@ class TestCreditPurchaseDoublePostingFix:
         invoice_no = f"TEST-INV-{unique_id}"
         test_amount = 15000  # Test amount
         
+        # Get vendor name first
+        vendor_response = session.get(f"{BASE_URL}/api/accounting/vendors/{TEST_VENDOR_ID}")
+        vendor_name = "Test Vendor"
+        if vendor_response.status_code == 200:
+            vendor_data = vendor_response.json()
+            vendor_name = vendor_data.get("vendor_name", vendor_data.get("name", "Test Vendor"))
+        
         payload = {
             "project_id": TEST_PROJECT_ID,
             "vendor_id": TEST_VENDOR_ID,
+            "vendor_name": vendor_name,  # Required field
             "invoice_no": invoice_no,
             "invoice_date": datetime.now().strftime("%Y-%m-%d"),
             "execution_date": datetime.now().strftime("%Y-%m-%d"),
             "purchase_type": "credit",  # CREDIT purchase
             "items": [
                 {
+                    "material_name": f"Test Credit Purchase Item {unique_id}",  # Required field
                     "description": f"Test Credit Purchase Item {unique_id}",
                     "category": "Materials",
                     "quantity": 1,
                     "unit": "nos",
+                    "rate": test_amount,  # Required field
                     "unit_price": test_amount,
                     "line_total": test_amount
                 }
@@ -127,7 +138,7 @@ class TestCreditPurchaseDoublePostingFix:
     
     def test_04_verify_actual_cost_unchanged_after_credit_purchase(self, session):
         """Verify actual_cost did NOT increase after credit purchase"""
-        response = session.get(f"{BASE_URL}/api/finance/projects/{TEST_PROJECT_ID}")
+        response = session.get(f"{BASE_URL}/api/finance/project-finance/{TEST_PROJECT_ID}")
         
         assert response.status_code == 200, f"Failed to get project finance: {response.text}"
         data = response.json()
@@ -142,7 +153,7 @@ class TestCreditPurchaseDoublePostingFix:
     
     def test_05_verify_liability_created_with_correct_amount(self, session):
         """Verify liability was created with correct amount"""
-        response = session.get(f"{BASE_URL}/api/finance/projects/{TEST_PROJECT_ID}")
+        response = session.get(f"{BASE_URL}/api/finance/project-finance/{TEST_PROJECT_ID}")
         
         assert response.status_code == 200, f"Failed to get project finance: {response.text}"
         data = response.json()
@@ -206,7 +217,7 @@ class TestCreditPurchaseDoublePostingFix:
     
     def test_08_verify_actual_cost_increased_after_payment(self, session):
         """Verify actual_cost increased ONLY after payment (not after credit purchase)"""
-        response = session.get(f"{BASE_URL}/api/finance/projects/{TEST_PROJECT_ID}")
+        response = session.get(f"{BASE_URL}/api/finance/project-finance/{TEST_PROJECT_ID}")
         
         assert response.status_code == 200, f"Failed to get project finance: {response.text}"
         data = response.json()
@@ -222,7 +233,7 @@ class TestCreditPurchaseDoublePostingFix:
     
     def test_09_verify_remaining_liability_zero_after_payment(self, session):
         """Verify remaining_liability returns to initial value after full payment"""
-        response = session.get(f"{BASE_URL}/api/finance/projects/{TEST_PROJECT_ID}")
+        response = session.get(f"{BASE_URL}/api/finance/project-finance/{TEST_PROJECT_ID}")
         
         assert response.status_code == 200, f"Failed to get project finance: {response.text}"
         data = response.json()
@@ -287,7 +298,8 @@ class TestCashbookExcludesCreditPurchases:
         """Verify daybook/daily summary excludes credit purchase entries"""
         today = datetime.now().strftime("%Y-%m-%d")
         
-        response = session.get(f"{BASE_URL}/api/finance/daybook/daily-summary?date={today}")
+        # Correct endpoint: /api/accounting/daily-summary/{date}
+        response = session.get(f"{BASE_URL}/api/accounting/daily-summary/{today}")
         
         assert response.status_code == 200, f"Failed to get daily summary: {response.text}"
         data = response.json()
@@ -300,7 +312,8 @@ class TestCashbookExcludesCreditPurchases:
     
     def test_02_cashbook_transactions_exclude_credit_purchases(self, session):
         """Verify cashbook transactions list excludes credit purchase entries"""
-        response = session.get(f"{BASE_URL}/api/finance/cashbook/transactions")
+        # Correct endpoint: /api/accounting/transactions
+        response = session.get(f"{BASE_URL}/api/accounting/transactions")
         
         assert response.status_code == 200, f"Failed to get cashbook transactions: {response.text}"
         data = response.json()
@@ -343,7 +356,7 @@ class TestProjectFinanceExcludesCreditPurchases:
     
     def test_01_project_finance_transactions_exclude_credit_purchases(self, session):
         """Verify project finance transactions exclude credit purchase entries"""
-        response = session.get(f"{BASE_URL}/api/finance/projects/{TEST_PROJECT_ID}")
+        response = session.get(f"{BASE_URL}/api/finance/project-finance/{TEST_PROJECT_ID}")
         
         assert response.status_code == 200, f"Failed to get project finance: {response.text}"
         data = response.json()
@@ -386,14 +399,16 @@ class TestRegressionOtherFinanceEndpoints:
     
     def test_01_finance_dashboard_works(self, session):
         """Verify finance dashboard endpoint works"""
-        response = session.get(f"{BASE_URL}/api/finance/dashboard")
+        # Correct endpoint: /api/dashboards/finance
+        response = session.get(f"{BASE_URL}/api/dashboards/finance")
         
         assert response.status_code == 200, f"Finance dashboard failed: {response.text}"
         print("✓ Finance dashboard endpoint works")
     
     def test_02_accounts_list_works(self, session):
         """Verify accounts list endpoint works"""
-        response = session.get(f"{BASE_URL}/api/finance/accounts")
+        # Correct endpoint: /api/accounting/accounts
+        response = session.get(f"{BASE_URL}/api/accounting/accounts")
         
         assert response.status_code == 200, f"Accounts list failed: {response.text}"
         data = response.json()
@@ -422,6 +437,20 @@ class TestRegressionOtherFinanceEndpoints:
         # 200 or 404 (if no mappings) are both acceptable
         assert response.status_code in [200, 404], f"Vendor mappings failed: {response.text}"
         print("✓ Vendor mappings endpoint works")
+    
+    def test_06_project_finance_list_works(self, session):
+        """Verify project finance list endpoint works"""
+        response = session.get(f"{BASE_URL}/api/finance/project-finance")
+        
+        assert response.status_code == 200, f"Project finance list failed: {response.text}"
+        print("✓ Project finance list endpoint works")
+    
+    def test_07_founder_dashboard_works(self, session):
+        """Verify founder dashboard endpoint works"""
+        response = session.get(f"{BASE_URL}/api/finance/founder-dashboard")
+        
+        assert response.status_code == 200, f"Founder dashboard failed: {response.text}"
+        print("✓ Founder dashboard endpoint works")
 
 
 if __name__ == "__main__":

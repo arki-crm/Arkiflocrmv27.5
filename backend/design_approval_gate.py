@@ -219,16 +219,33 @@ def calculate_deadline_status(deadline: str) -> Dict:
         return {"has_deadline": False}
     
     now = datetime.now(timezone.utc)
-    deadline_dt = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
     
-    delta = deadline_dt - now
-    days_remaining = delta.days
-    
-    return {
-        "has_deadline": True,
-        "deadline": deadline,
-        "days_remaining": days_remaining,
-        "is_overdue": days_remaining < 0,
-        "is_due_soon": 0 <= days_remaining <= 2,
-        "status_label": "Overdue" if days_remaining < 0 else f"{days_remaining} days remaining"
-    }
+    try:
+        # Handle various datetime formats
+        if isinstance(deadline, str):
+            if 'T' in deadline:
+                deadline_dt = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
+            else:
+                # Date only format (YYYY-MM-DD) - set to end of day
+                deadline_dt = datetime.fromisoformat(deadline + 'T23:59:59+00:00')
+            
+            # Ensure timezone awareness
+            if deadline_dt.tzinfo is None:
+                deadline_dt = deadline_dt.replace(tzinfo=timezone.utc)
+        else:
+            return {"has_deadline": False}
+        
+        delta = deadline_dt - now
+        days_remaining = delta.days
+        
+        return {
+            "has_deadline": True,
+            "deadline": deadline,
+            "days_remaining": days_remaining,
+            "is_overdue": days_remaining < 0,
+            "is_due_soon": 0 <= days_remaining <= 2,
+            "status_label": "Overdue" if days_remaining < 0 else f"{days_remaining} days remaining"
+        }
+    except (ValueError, TypeError):
+        return {"has_deadline": False}
+

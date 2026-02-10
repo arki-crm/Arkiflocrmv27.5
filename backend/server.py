@@ -21580,7 +21580,15 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         inflow_result = await db.accounting_transactions.aggregate(inflow_pipeline).to_list(1)
         total_received = inflow_result[0]["total"] if inflow_result else 0
         
-        contract_value = p.get("project_value", 0) or 0
+        # Financial value lifecycle:
+        # - presales_budget (project_value): Initial estimate from presales/lead
+        # - booked_value: Value at booking/agreement (locked at first payment)
+        # - signoff_value: Final BOQ value (locked at design sign-off) - PRIMARY for financials
+        presales_budget = p.get("project_value", 0) or 0
+        booked_value = p.get("booked_value", 0) or 0
+        signoff_value = p.get("signoff_value") or p.get("contract_value") or booked_value or presales_budget
+        signoff_locked = p.get("signoff_locked", False)
+        
         remaining_liability = planned_cost - actual_cost
         safe_surplus = total_received - actual_cost
         
@@ -21592,7 +21600,13 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
             "client_name": p.get("client_name"),
             "status": p.get("status"),
             "current_stage": p.get("current_stage"),
-            "contract_value": contract_value,
+            # Value lifecycle fields
+            "presales_budget": presales_budget,
+            "booked_value": booked_value,
+            "signoff_value": signoff_value,  # PRIMARY: Use this for financial calculations
+            "signoff_locked": signoff_locked,
+            "contract_value": signoff_value,  # DEPRECATED: Alias for backward compatibility
+            # Financial summary
             "total_received": total_received,
             "planned_cost": planned_cost,
             "actual_cost": actual_cost,

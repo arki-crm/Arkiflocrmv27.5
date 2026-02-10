@@ -21632,9 +21632,17 @@ async def get_project_finance_detail(project_id: str, request: Request):
         planned_by_category[cat] = planned_by_category.get(cat, 0) + vm.get("planned_amount", 0)
     total_planned = sum(planned_by_category.values())
     
-    # Get actual transactions from cashbook
+    # Get actual transactions from cashbook (EXCLUDE credit purchase daybook entries)
+    # P0-FIX: Credit purchases have is_cashbook_entry=False, should not count as actual cost
+    # until payment is made via liability settlement
     transactions = await db.accounting_transactions.find(
-        {"project_id": project_id},
+        {
+            "project_id": project_id,
+            "$or": [
+                {"is_cashbook_entry": {"$ne": False}},  # Include entries without the flag or True
+                {"is_cashbook_entry": {"$exists": False}}  # Include old entries without the flag
+            ]
+        },
         {"_id": 0}
     ).sort("created_at", -1).to_list(500)
     

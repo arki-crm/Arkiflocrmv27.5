@@ -151,8 +151,23 @@ def create_submission_document(
     # Check if overdue
     is_overdue = False
     if deadline:
-        deadline_dt = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
-        is_overdue = now > deadline_dt
+        try:
+            # Handle various datetime formats
+            if isinstance(deadline, str):
+                if 'T' in deadline:
+                    deadline_dt = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
+                else:
+                    # Date only format (YYYY-MM-DD)
+                    deadline_dt = datetime.fromisoformat(deadline + 'T23:59:59+00:00')
+                
+                # Ensure timezone awareness
+                if deadline_dt.tzinfo is None:
+                    deadline_dt = deadline_dt.replace(tzinfo=timezone.utc)
+                    
+                is_overdue = now > deadline_dt
+        except (ValueError, TypeError):
+            # If parsing fails, don't mark as overdue
+            is_overdue = False
     
     return {
         "submission_id": f"DS-{uuid.uuid4().hex[:12]}",

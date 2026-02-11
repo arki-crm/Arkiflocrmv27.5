@@ -1051,6 +1051,178 @@ export default function Salaries() {
             </CardContent>
           </Card>
         </TabsContent>
+        
+        {/* Incentives Tab */}
+        <TabsContent value="incentives" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Gift className="w-5 h-5 text-purple-500" />
+                  Incentive Management
+                </CardTitle>
+                <CardDescription>Manage booking and execution incentives</CardDescription>
+              </div>
+              <Button onClick={() => setShowIncentiveModal(true)}>
+                <Plus className="w-4 h-4 mr-2" /> Create Incentive
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <p className="text-xs text-purple-600">Total Incentives</p>
+                    <p className="text-xl font-bold text-purple-700">
+                      {formatCurrency(incentives.reduce((sum, i) => sum + (i.amount || 0), 0))}
+                    </p>
+                  </div>
+                  <div className="bg-amber-50 p-4 rounded-lg">
+                    <p className="text-xs text-amber-600">Pending Approval</p>
+                    <p className="text-xl font-bold text-amber-700">
+                      {formatCurrency(incentives.filter(i => i.status === 'pending').reduce((sum, i) => sum + (i.amount || 0), 0))}
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <p className="text-xs text-blue-600">Approved</p>
+                    <p className="text-xl font-bold text-blue-700">
+                      {formatCurrency(incentives.filter(i => i.status === 'approved').reduce((sum, i) => sum + (i.amount || 0), 0))}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <p className="text-xs text-green-600">Paid Out</p>
+                    <p className="text-xl font-bold text-green-700">
+                      {formatCurrency(incentives.filter(i => i.status === 'paid').reduce((sum, i) => sum + (i.amount || 0), 0))}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Incentives List */}
+                <div className="divide-y">
+                  {incentives.length === 0 ? (
+                    <p className="text-center text-slate-500 py-8">No incentives found</p>
+                  ) : (
+                    incentives.map(inc => (
+                      <div key={inc.incentive_id} className="py-4 flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{inc.employee_name}</p>
+                            <Badge variant={inc.status === 'paid' ? 'default' : inc.status === 'approved' ? 'secondary' : 'outline'}>
+                              {inc.status}
+                            </Badge>
+                            {inc.project_linked && (
+                              <Badge variant="outline" className="text-xs">Project-Linked</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-slate-500">{inc.incentive_type_name}</p>
+                          {inc.project_name && <p className="text-xs text-slate-400">Project: {inc.project_name}</p>}
+                        </div>
+                        <div className="text-right mr-4">
+                          <p className="font-bold text-lg">{formatCurrency(inc.amount)}</p>
+                          <p className="text-xs text-slate-400">{inc.trigger_event || inc.calculation_type}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          {inc.status === 'pending' && (
+                            <Button size="sm" variant="outline" onClick={() => handleApproveIncentive(inc.incentive_id)}>
+                              Approve
+                            </Button>
+                          )}
+                          {(inc.status === 'pending' || inc.status === 'approved') && (
+                            <Button size="sm" onClick={() => {
+                              setSelectedIncentive(inc);
+                              setShowPayoutModal(true);
+                            }}>
+                              Pay
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        {/* Commissions Tab */}
+        <TabsContent value="commissions" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Briefcase className="w-5 h-5 text-indigo-500" />
+                  Commission Management
+                </CardTitle>
+                <CardDescription>Manage external commissions for referrals and channel partners</CardDescription>
+              </div>
+              <Button onClick={() => setShowCommissionModal(true)}>
+                <Plus className="w-4 h-4 mr-2" /> Create Commission
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-indigo-50 p-4 rounded-lg">
+                    <p className="text-xs text-indigo-600">Total Commissions</p>
+                    <p className="text-xl font-bold text-indigo-700">
+                      {formatCurrency(commissions.reduce((sum, c) => sum + (c.amount || 0), 0))}
+                    </p>
+                  </div>
+                  <div className="bg-amber-50 p-4 rounded-lg">
+                    <p className="text-xs text-amber-600">Pending</p>
+                    <p className="text-xl font-bold text-amber-700">
+                      {formatCurrency(commissions.filter(c => c.status === 'pending').reduce((sum, c) => sum + (c.amount || 0), 0))}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <p className="text-xs text-green-600">Paid</p>
+                    <p className="text-xl font-bold text-green-700">
+                      {formatCurrency(commissions.filter(c => c.status === 'paid').reduce((sum, c) => sum + (c.amount || 0), 0))}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Commissions List */}
+                <div className="divide-y">
+                  {commissions.length === 0 ? (
+                    <p className="text-center text-slate-500 py-8">No commissions found</p>
+                  ) : (
+                    commissions.map(com => (
+                      <div key={com.commission_id} className="py-4 flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{com.recipient_name}</p>
+                            <Badge variant={com.status === 'paid' ? 'default' : 'outline'}>
+                              {com.status}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-slate-500">{com.commission_type_name}</p>
+                          {com.project_name && <p className="text-xs text-slate-400">Project: {com.project_name}</p>}
+                        </div>
+                        <div className="text-right mr-4">
+                          <p className="font-bold text-lg">{formatCurrency(com.amount)}</p>
+                          <p className="text-xs text-slate-400">{com.recipient_type}</p>
+                        </div>
+                        <div>
+                          {com.status === 'pending' && (
+                            <Button size="sm" onClick={() => {
+                              setSelectedCommission(com);
+                              setShowPayoutModal(true);
+                            }}>
+                              Pay
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Add Salary Modal */}

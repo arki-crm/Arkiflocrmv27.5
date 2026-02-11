@@ -25623,6 +25623,7 @@ async def get_all_projects_lock_status(request: Request):
     ).to_list(10000)
     
     # Filter to execution-phase receipts per project
+    from datetime import datetime as dt
     execution_receipts_by_project = {}
     for r in all_receipts:
         pid = r.get("project_id")
@@ -25638,16 +25639,30 @@ async def get_all_projects_lock_status(request: Request):
         # 1. Created after signoff lock, OR
         # 2. Linked to execution stage name
         is_execution_receipt = False
+        
+        # Check date comparison (handle string vs datetime)
         if signoff_locked_at and created_at:
-            # Compare dates (handle both string and datetime)
-            if isinstance(created_at, str):
-                is_execution_receipt = created_at >= signoff_locked_at
-            else:
-                from datetime import datetime
+            try:
+                # Normalize both to datetime for comparison
                 if isinstance(signoff_locked_at, str):
-                    is_execution_receipt = created_at.isoformat() >= signoff_locked_at
+                    signoff_dt = dt.fromisoformat(signoff_locked_at.replace('Z', '+00:00'))
                 else:
-                    is_execution_receipt = created_at >= signoff_locked_at
+                    signoff_dt = signoff_locked_at
+                
+                if isinstance(created_at, str):
+                    created_dt = dt.fromisoformat(created_at.replace('Z', '+00:00'))
+                else:
+                    created_dt = created_at
+                
+                # Make both timezone-aware or naive for comparison
+                if signoff_dt.tzinfo is None and created_dt.tzinfo is not None:
+                    signoff_dt = signoff_dt.replace(tzinfo=created_dt.tzinfo)
+                elif signoff_dt.tzinfo is not None and created_dt.tzinfo is None:
+                    created_dt = created_dt.replace(tzinfo=signoff_dt.tzinfo)
+                
+                is_execution_receipt = created_dt >= signoff_dt
+            except Exception:
+                pass
         
         # Also check stage name
         if any(exec_stage in stage_name for exec_stage in execution_stages):

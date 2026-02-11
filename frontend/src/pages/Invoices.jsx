@@ -36,7 +36,7 @@ const Invoices = () => {
   const [creating, setCreating] = useState(false);
 
   const hasPermission = (perm) => {
-    if (user?.role === 'Admin') return true;
+    if (user?.role === 'Admin' || user?.role === 'Founder') return true;
     return user?.permissions?.includes(perm);
   };
 

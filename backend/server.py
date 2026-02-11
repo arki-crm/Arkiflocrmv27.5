@@ -1963,7 +1963,22 @@ AVAILABLE_PERMISSIONS = {
             {"id": "finance.salaries.close_month", "name": "Close Salary Month", "description": "Close monthly salary cycles"},
             {"id": "finance.salaries.manage_exit", "name": "Manage Exit Settlement", "description": "Process final settlement for exiting employees"},
             {"id": "finance.salaries.manage_ladder", "name": "Manage Salary Ladder", "description": "Configure salary level definitions - Admin only"},
-            {"id": "finance.salaries.promote", "name": "Promote/Adjust Salary", "description": "Change employee salary with history tracking"}
+            {"id": "finance.salaries.promote", "name": "Promote/Adjust Salary", "description": "Change employee salary with history tracking"},
+            {"id": "finance.salaries.manage", "name": "Manage Salary Deductions", "description": "Add/modify deductions on salary cycles"}
+        ]
+    },
+    
+    # Employee Compensation & Payouts
+    "finance_compensation": {
+        "name": "Compensation & Payouts",
+        "permissions": [
+            {"id": "finance.incentives.create", "name": "Create Incentives", "description": "Create incentive records for employees"},
+            {"id": "finance.incentives.view_all", "name": "View All Incentives", "description": "View all employee incentives"},
+            {"id": "finance.incentives.approve", "name": "Approve Incentives", "description": "Approve pending incentives for payout"},
+            {"id": "finance.incentives.pay", "name": "Pay Incentives", "description": "Process incentive payouts"},
+            {"id": "finance.commissions.create", "name": "Create Commissions", "description": "Create commission records for external parties"},
+            {"id": "finance.commissions.view", "name": "View Commissions", "description": "View commission records"},
+            {"id": "finance.commissions.pay", "name": "Pay Commissions", "description": "Process commission payouts"}
         ]
     },
     

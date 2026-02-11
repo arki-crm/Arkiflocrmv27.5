@@ -847,14 +847,19 @@ export default function Salaries() {
 
         {/* Monthly Status Tab */}
         <TabsContent value="monthly" className="space-y-4">
-          <div className="flex items-center gap-4 mb-4">
-            <Label>Select Month:</Label>
-            <Input 
-              type="month" 
-              value={selectedMonth} 
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-48"
-            />
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <Label>Select Month:</Label>
+              <Input 
+                type="month" 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="w-48"
+              />
+            </div>
+            <Button onClick={() => setShowDeductionModal(true)} variant="outline">
+              <Minus className="w-4 h-4 mr-2" /> Process with Deductions
+            </Button>
           </div>
 
           <Card>
@@ -867,8 +872,9 @@ export default function Salaries() {
                   <thead>
                     <tr className="border-b">
                       <th className="text-left py-3 px-4">Employee</th>
-                      <th className="text-right py-3 px-4">Monthly Salary</th>
-                      <th className="text-right py-3 px-4">Advances</th>
+                      <th className="text-right py-3 px-4">Gross Salary</th>
+                      <th className="text-right py-3 px-4">Deductions</th>
+                      <th className="text-right py-3 px-4">Net Payable</th>
                       <th className="text-right py-3 px-4">Paid</th>
                       <th className="text-right py-3 px-4">Balance</th>
                       <th className="text-center py-3 px-4">Status</th>

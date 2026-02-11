@@ -5,14 +5,58 @@ Build a full-stack CRM application for an interior design company, managing the 
 
 ## Architecture
 - **Frontend**: React 19 + TailwindCSS + Shadcn UI
-- **Backend**: FastAPI (Python) - Currently monolithic server.py (~19,000+ lines)
+- **Backend**: FastAPI (Python) - Currently monolithic server.py (~20,000+ lines)
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: BOQ Builder (Phase-1) COMPLETE ✅
+## Current Status: Spatial BOQ Canvas COMPLETE ✅
 **As of February 11, 2026**
 
-### New Feature: Bill of Quantities (BOQ) Builder - Canvas Model
+### New Feature: 2D Spatial Layout Canvas for Modular Planning
+
+A visual 2D measured layout canvas (Light CAD) for modular kitchen/wardrobe planning.
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Canvas Type** | 2D SVG-based canvas with grid, wall drawing, module placement | ✅ |
+| **Wall Drawing** | Draw room walls with dimensions (horizontal/vertical, snaps) | ✅ |
+| **Module Library** | 10 module types: Base Cabinet, Wall Cabinet, Tall Unit, Loft Unit, Hob, Chimney, Microwave Unit, Oven Unit, Dishwasher, Sink Unit | ✅ |
+| **Module Placement** | Drag from library, place on canvas, snap to walls | ✅ |
+| **Dimensions** | Capture W×H×D per module with manual resizing | ✅ |
+| **Finish Types** | Laminate, Acrylic, PU Paint, Veneer, Membrane, Glass with sqft rates | ✅ |
+| **Shutter Types** | Flat, Profile, Glass, Handleless, Shaker with price multipliers | ✅ |
+| **Auto-Calculation** | Total wall length (mm), cabinet length, area (sqft), material consumption, estimated cost | ✅ |
+| **BOQ Integration** | Generate modular BOQ line items from placed modules | ✅ |
+| **Export** | PNG export of layout (top-view) | ✅ |
+
+**Route:** `/projects/{project_id}/spatial-boq`
+
+**API Endpoints:**
+- `GET /api/spatial/module-library` - Module types, finish types, shutter types
+- `GET /api/projects/{project_id}/spatial-layout` - List layouts
+- `POST /api/projects/{project_id}/spatial-layout` - Create layout with walls/modules
+- `PUT /api/projects/{project_id}/spatial-layout/{layout_id}` - Update layout
+- `POST /api/projects/{project_id}/spatial-layout/{layout_id}/generate-boq` - Generate BOQ items
+- `GET /api/projects/{project_id}/modular-boq` - Get generated modular BOQs
+
+**Pricing (Rate Card):**
+| Finish | Rate/sqft |
+|--------|-----------|
+| Laminate | ₹450 |
+| Acrylic | ₹850 |
+| PU Paint | ₹1,200 |
+| Veneer | ₹950 |
+| Membrane | ₹550 |
+| Glass | ₹750 |
+
+**Verification (iteration_61.json):** 100% pass rate (19/19 backend tests + all frontend UI verified)
+
+---
+
+## Previous Status: BOQ Builder (Phase-1) COMPLETE ✅
+**As of February 11, 2026**
+
+### Bill of Quantities (BOQ) Builder - Table Model
 
 A room-wise BOQ workspace accessible from Project → Commercial section.
 

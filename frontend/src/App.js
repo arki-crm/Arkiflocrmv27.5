@@ -97,6 +97,9 @@ import RoleManagement from './pages/RoleManagement';
 // BOQ Builder (Phase-1)
 import BOQBuilder from './pages/BOQBuilder';
 
+// Spatial BOQ Canvas (2D Modular Layout)
+import SpatialBOQCanvas from './pages/SpatialBOQCanvas';
+
 import './App.css';
 
 // Router component that handles session_id detection synchronously

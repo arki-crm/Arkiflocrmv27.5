@@ -1114,6 +1114,107 @@ const ProjectDetails = () => {
             />
           </div>
 
+          {/* BOQ Builder Section */}
+          <Card className="border-slate-200">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Package className="h-5 w-5 text-slate-600" />
+                  <CardTitle className="text-lg">Bill of Quantities (BOQ)</CardTitle>
+                </div>
+                <Button
+                  onClick={() => navigate(`/projects/${id}/boq`)}
+                  data-testid="open-boq-builder"
+                >
+                  {boqSummary?.has_boq ? (
+                    <>
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open BOQ
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create BOQ
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {boqSummary?.has_boq ? (
+                <div className="space-y-4">
+                  {/* BOQ Status Badge */}
+                  <div className="flex items-center gap-2">
+                    <Badge className={
+                      boqSummary.status === 'locked' ? 'bg-green-100 text-green-800' :
+                      boqSummary.status === 'under_review' ? 'bg-amber-100 text-amber-800' :
+                      'bg-slate-100 text-slate-700'
+                    }>
+                      {boqSummary.status === 'locked' && <Lock className="h-3 w-3 mr-1" />}
+                      {boqSummary.status === 'locked' ? 'Locked' :
+                       boqSummary.status === 'under_review' ? 'Under Review' : 'Draft'}
+                    </Badge>
+                    <span className="text-sm text-slate-500">Version {boqSummary.version}</span>
+                  </div>
+
+                  {/* BOQ Summary */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-3 bg-slate-50 rounded-lg">
+                      <p className="text-xs text-slate-500 uppercase">Grand Total</p>
+                      <p className="text-lg font-semibold">
+                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(boqSummary.grand_total || 0)}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-lg">
+                      <p className="text-xs text-slate-500 uppercase">Rooms</p>
+                      <p className="text-lg font-semibold">{boqSummary.room_count || 0}</p>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-lg">
+                      <p className="text-xs text-slate-500 uppercase">Items</p>
+                      <p className="text-lg font-semibold">{boqSummary.item_count || 0}</p>
+                    </div>
+                  </div>
+
+                  {/* Room Summary */}
+                  {boqSummary.room_summary && boqSummary.room_summary.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-slate-700">Room Breakdown</p>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {boqSummary.room_summary.slice(0, 6).map((room, idx) => (
+                          <div key={idx} className="flex justify-between items-center p-2 bg-slate-50 rounded">
+                            <span className="text-slate-600">{room.name}</span>
+                            <span className="font-medium">
+                              {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(room.subtotal || 0)}
+                            </span>
+                          </div>
+                        ))}
+                        {boqSummary.room_summary.length > 6 && (
+                          <div className="col-span-2 text-center text-slate-500 text-xs">
+                            +{boqSummary.room_summary.length - 6} more rooms
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Last Updated */}
+                  {boqSummary.updated_at && (
+                    <p className="text-xs text-slate-400">
+                      Last updated: {new Date(boqSummary.updated_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      {boqSummary.updated_by_name && ` by ${boqSummary.updated_by_name}`}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Package className="h-12 w-12 mx-auto text-slate-300 mb-3" />
+                  <p className="text-slate-500">No BOQ created yet</p>
+                  <p className="text-sm text-slate-400">Create a detailed Bill of Quantities for this project</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Timeline Intelligence Panel */}
           <TimelineIntelligencePanel
             projectId={id}

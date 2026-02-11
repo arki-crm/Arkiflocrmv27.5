@@ -72,6 +72,14 @@ export default function Salaries() {
   const [selectedIncentive, setSelectedIncentive] = useState(null);
   const [selectedCommission, setSelectedCommission] = useState(null);
   
+  // Classification management states
+  const [classificationSummary, setClassificationSummary] = useState(null);
+  const [showClassificationModal, setShowClassificationModal] = useState(false);
+  const [selectedEmployeeForClassification, setSelectedEmployeeForClassification] = useState(null);
+  const [classificationHistory, setClassificationHistory] = useState([]);
+  const [showClassificationHistoryModal, setShowClassificationHistoryModal] = useState(false);
+  const [newClassification, setNewClassification] = useState('');
+  
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
   

@@ -9,10 +9,33 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Spatial BOQ Canvas COMPLETE ✅
+## Current Status: Composer UX Improvements COMPLETE ✅
 **As of February 11, 2026**
 
-### New Feature: 2D Spatial Layout Canvas for Modular Planning
+### Composer (SpatialBOQCanvas) - 9 UX Improvements
+
+All 9 UX enhancements requested by user have been implemented and verified.
+
+| # | UX Improvement | Description | Status |
+|---|----------------|-------------|--------|
+| 1 | **Collapsible Panels** | Left (module library) and right (properties) panels can be collapsed via toggle buttons | ✅ |
+| 2 | **Editable Wall Dimensions** | Wall properties panel shows editable Length (mm) input that updates wall on canvas | ✅ |
+| 3 | **Door/Window Placement** | Door tool (brown) and Window tool (cyan) add openings near walls | ✅ |
+| 4 | **2D Elevation View** | Shows when wall selected - displays modules on wall with height visualization | ✅ |
+| 5 | **Keyboard Navigation** | Arrow keys move selected module, Delete/Backspace removes items | ✅ |
+| 6 | **Live Pricing Header** | Real-time Modules count, Area (sqft), Est. Cost (₹) in header | ✅ |
+| 7 | **Movement Hint** | Tooltip when module selected: "Drag to move • Arrow keys • Delete to remove" | ✅ |
+| 8 | **Carcass Material Selection** | Dropdown: BWR Plywood 710, MR Plywood 303, HDHMR, Particle Board, MDF | ✅ |
+| 9 | **Direct Dimension Inputs** | Properties panel with W/H/D (mm) inputs + X/Y position controls | ✅ |
+
+**Verification (iteration_62.json):** 100% pass rate - All 9 UX improvements verified working.
+
+---
+
+## Previous Status: Spatial BOQ Canvas (Composer) Phase 1 COMPLETE ✅
+**As of February 11, 2026**
+
+### 2D Spatial Layout Canvas for Modular Planning
 
 A visual 2D measured layout canvas (Light CAD) for modular kitchen/wardrobe planning.
 

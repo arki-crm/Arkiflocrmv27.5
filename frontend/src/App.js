@@ -94,6 +94,9 @@ import ReplacementOrders from './pages/ReplacementOrders';
 // Role Management
 import RoleManagement from './pages/RoleManagement';
 
+// BOQ Builder (Phase-1)
+import BOQBuilder from './pages/BOQBuilder';
+
 import './App.css';
 
 // Router component that handles session_id detection synchronously

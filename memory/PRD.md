@@ -9,7 +9,29 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Finance Widget Alignment VERIFIED ✅
+## Current Status: Cash Lock Booking Advance Reclassification VERIFIED ✅
+**As of February 11, 2026**
+
+### Latest Fix: Advance Cash Lock - Booking Advance Handling
+
+| Issue | Description | Fix | Status |
+|-------|-------------|-----|--------|
+| **Booking Advance Exclusion** | Cash Lock was incorrectly including booking advances before project sign-off | Before Sign-off: Booking advances EXCLUDED (Total Received = 0). After Sign-off: ALL receipts auto-reclassified as execution liquidity | ✅ VERIFIED |
+
+**Reclassification Logic:**
+- `signoff_locked = false` → No receipts count (booking advances excluded)
+- `signoff_locked = true` → ALL receipts become execution liquidity (auto-reclassify)
+- Historical receipt records are NOT modified - reclassification is calculation-only
+
+**Verification (iteration_56.json):** 9/9 tests passed
+- Signed-off project includes ALL receipts ✅
+- Non-signed-off project excludes booking advances ✅
+- Safe to Use calculated correctly after sign-off ✅
+- Historical receipts preserved (no data modification) ✅
+
+---
+
+## Previous Status: Finance Widget Alignment VERIFIED ✅
 **As of February 11, 2026**
 
 ### Latest Fixes: Revenue Baseline & Liability Calculation

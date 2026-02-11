@@ -2393,6 +2393,114 @@ export default function Salaries() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Change Classification Modal */}
+      <Dialog open={showClassificationModal} onOpenChange={setShowClassificationModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Employee Classification</DialogTitle>
+            <DialogDescription>
+              Update classification for {selectedEmployeeForClassification?.name}. This will affect their payment workflow and statutory deductions.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
+              <p className="font-medium text-amber-800 mb-1">⚠️ Important</p>
+              <ul className="text-amber-700 text-xs space-y-1">
+                <li>• <strong>Permanent/Probation:</strong> Salary workflow with statutory deductions (PF, ESI)</li>
+                <li>• <strong>Trainee:</strong> Stipend workflow only, no statutory deductions</li>
+                <li>• <strong>Freelancer/Channel Partner:</strong> Commission workflow only, no statutory deductions</li>
+              </ul>
+            </div>
+            
+            <div>
+              <Label>Current Classification</Label>
+              <div className="mt-1">
+                {getClassificationBadge(selectedEmployeeForClassification?.employee_classification || 'permanent')}
+              </div>
+            </div>
+            
+            <div>
+              <Label>New Classification</Label>
+              <Select value={newClassification} onValueChange={setNewClassification}>
+                <SelectTrigger data-testid="new-classification-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="permanent">Permanent Employee</SelectItem>
+                  <SelectItem value="probation">Probation Employee</SelectItem>
+                  <SelectItem value="trainee">Trainee / Intern</SelectItem>
+                  <SelectItem value="freelancer">Freelancer / Consultant</SelectItem>
+                  <SelectItem value="channel_partner">Channel Partner</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {newClassification && newClassification !== (selectedEmployeeForClassification?.employee_classification || 'permanent') && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                <p className="font-medium text-blue-800">After this change:</p>
+                <p className="text-blue-700 text-xs mt-1">
+                  {newClassification === 'permanent' && 'Employee will be eligible for Salary payments with statutory deductions (PF, ESI, Professional Tax).'}
+                  {newClassification === 'probation' && 'Employee will be eligible for Salary payments with statutory deductions (PF, ESI).'}
+                  {newClassification === 'trainee' && 'Employee will only receive Stipend payments. No statutory deductions.'}
+                  {newClassification === 'freelancer' && 'Employee will only receive Commission/Professional Fee payments. No statutory deductions.'}
+                  {newClassification === 'channel_partner' && 'Employee will only receive Commission payments. No statutory deductions.'}
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowClassificationModal(false)}>Cancel</Button>
+            <Button 
+              onClick={handleChangeClassification}
+              disabled={!newClassification || newClassification === (selectedEmployeeForClassification?.employee_classification || 'permanent')}
+              data-testid="confirm-classification-change"
+            >
+              Update Classification
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Classification History Modal */}
+      <Dialog open={showClassificationHistoryModal} onOpenChange={setShowClassificationHistoryModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Classification History</DialogTitle>
+            <DialogDescription>
+              History of classification changes for {selectedEmployeeForClassification?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4 max-h-[400px] overflow-y-auto">
+            {classificationHistory.length === 0 ? (
+              <p className="text-center text-slate-500 py-4">No classification changes recorded</p>
+            ) : (
+              <div className="space-y-3">
+                {classificationHistory.map((record, idx) => (
+                  <div key={idx} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                    <div className="bg-white p-2 rounded-full">
+                      <ArrowRight className="h-4 w-4 text-slate-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        {getClassificationBadge(record.old_classification)}
+                        <ArrowRight className="h-3 w-3 text-slate-400" />
+                        {getClassificationBadge(record.new_classification)}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Changed by {record.changed_by_name} on {formatDate(record.changed_at)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowClassificationHistoryModal(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

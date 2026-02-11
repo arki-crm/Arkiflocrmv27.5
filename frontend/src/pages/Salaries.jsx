@@ -184,16 +184,18 @@ export default function Salaries() {
       
       // Fetch compensation data
       try {
-        const [incentivesRes, commissionsRes, deductionTypesRes, projectsRes] = await Promise.all([
+        const [incentivesRes, commissionsRes, deductionTypesRes, projectsRes, classificationRes] = await Promise.all([
           axios.get(`${API}/api/finance/incentives`, { withCredentials: true }).catch(() => ({ data: { incentives: [] } })),
           axios.get(`${API}/api/finance/commissions`, { withCredentials: true }).catch(() => ({ data: { commissions: [] } })),
           axios.get(`${API}/api/finance/deduction-types`, { withCredentials: true }).catch(() => ({ data: { deduction_types: {} } })),
-          axios.get(`${API}/api/projects`, { withCredentials: true }).catch(() => ({ data: [] }))
+          axios.get(`${API}/api/projects`, { withCredentials: true }).catch(() => ({ data: [] })),
+          axios.get(`${API}/api/hr/classification-summary`, { withCredentials: true }).catch(() => ({ data: null }))
         ]);
         setIncentives(incentivesRes.data?.incentives || []);
         setCommissions(commissionsRes.data?.commissions || []);
         setDeductionTypes(deductionTypesRes.data?.deduction_types || {});
         setProjects(Array.isArray(projectsRes.data) ? projectsRes.data : projectsRes.data?.projects || []);
+        setClassificationSummary(classificationRes.data);
       } catch (err) {
         console.log('Compensation data fetch error:', err);
       }

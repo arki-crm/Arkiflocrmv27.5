@@ -770,6 +770,8 @@ export default function Salaries() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="monthly">Monthly Status</TabsTrigger>
           <TabsTrigger value="employees">All Employees</TabsTrigger>
+          <TabsTrigger value="incentives">Incentives</TabsTrigger>
+          <TabsTrigger value="commissions">Commissions</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}

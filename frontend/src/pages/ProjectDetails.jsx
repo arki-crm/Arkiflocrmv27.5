@@ -57,7 +57,8 @@ import {
   History,
   Package,
   Lock,
-  ExternalLink
+  ExternalLink,
+  Grid
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';

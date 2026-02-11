@@ -31,7 +31,7 @@ import uuid
 import subprocess
 
 class ArkifloIntegrationTester:
-    def __init__(self, base_url="https://budget-buddy-4783.preview.emergentagent.com"):
+    def __init__(self, base_url="https://hr-class-audit.preview.emergentagent.com"):
         self.base_url = base_url
         self.admin_token = None
         self.designer_token = None

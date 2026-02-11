@@ -30161,7 +30161,7 @@ async def process_salary_with_deductions(data: SalaryProcessingRequest, request:
     statutory_deductions = 0
     non_statutory_deductions = 0
     
-    for ded in data.deductions:
+    for ded in all_deductions:
         if ded.deduction_type not in DEDUCTION_TYPES:
             raise HTTPException(status_code=400, detail=f"Invalid deduction type: {ded.deduction_type}")
         
@@ -30174,7 +30174,7 @@ async def process_salary_with_deductions(data: SalaryProcessingRequest, request:
             "reason": ded.reason,
             "ledger_impact": ded_info["ledger_impact"],
             "statutory": ded_info["statutory"],
-            "auto_calculated": ded.auto_calculated,
+            "auto_calculated": getattr(ded, 'auto_calculated', False),
             "created_at": now.isoformat()
         }
         deduction_breakdown.append(deduction_record)

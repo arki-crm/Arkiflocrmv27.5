@@ -26572,18 +26572,31 @@ async def get_pnl_snapshot(
 
 @api_router.get("/finance/project-profit/{project_id}")
 async def get_project_profit(project_id: str, request: Request):
-    """Get profit metrics for a project"""
+    """Get profit metrics for a project - anchored to Sign-off Locked BOQ Value"""
     user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Get project
-    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    # Get project with value lifecycle fields
+    project = await db.projects.find_one(
+        {"project_id": project_id}, 
+        {"_id": 0, "project_id": 1, "project_name": 1, "name": 1,
+         "signoff_value": 1, "contract_value": 1, "booked_value": 1, 
+         "project_value": 1, "total_value": 1, "signoff_locked": 1}
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Contract value can be stored in different fields
-    contract_value = project.get("total_value") or project.get("project_value") or project.get("contract_value", 0)
+    # Revenue Baseline: Use signoff_value as primary (Sign-off Locked BOQ Value)
+    # Fallback chain: signoff_value → contract_value → booked_value → project_value
+    signoff_value = (
+        project.get("signoff_value") or 
+        project.get("contract_value") or 
+        project.get("booked_value") or 
+        project.get("project_value") or 
+        project.get("total_value") or 0
+    )
+    signoff_locked = project.get("signoff_locked", False)
     
     # Get planned cost from vendor mappings (check both collection names)
     vendor_mappings = await db.vendor_mappings.find(
@@ -26597,14 +26610,20 @@ async def get_project_profit(project_id: str, request: Request):
         ).to_list(1000)
     planned_cost = sum(vm.get("planned_cost") or vm.get("planned_amount", 0) for vm in vendor_mappings)
     
-    # Get actual cost (cashbook outflows linked to project)
+    # Get actual cost (ONLY cashbook entries - exclude credit purchase daybook entries)
     actual_outflows = await db.accounting_transactions.find({
         "project_id": project_id,
-        "transaction_type": "outflow"
+        "transaction_type": "outflow",
+        # Exclude non-cashbook entries (credit purchases that haven't been paid)
+        "$or": [
+            {"is_cashbook_entry": {"$ne": False}},
+            {"is_cashbook_entry": {"$exists": False}}
+        ],
+        "entry_type": {"$nin": ["purchase_invoice", "purchase_invoice_credit"]}
     }, {"_id": 0, "amount": 1}).to_list(10000)
     actual_cost = sum(t.get("amount", 0) for t in actual_outflows)
     
-    # Get total received
+    # Get total received (Sign-off Collected Amount)
     receipts = await db.finance_receipts.find(
         {"project_id": project_id},
         {"_id": 0, "amount": 1}
@@ -26617,31 +26636,38 @@ async def get_project_profit(project_id: str, request: Request):
     }, {"_id": 0, "amount": 1}).to_list(10000)
     inflows_total = sum(t.get("amount", 0) for t in inflows)
     
-    total_received = receipts_total + inflows_total
+    total_received = max(receipts_total, inflows_total)  # Avoid double-counting
     
-    # Calculate profits
-    projected_profit = contract_value - planned_cost
-    projected_profit_pct = (projected_profit / contract_value * 100) if contract_value > 0 else 0
+    # Calculate profits based on Sign-off Locked BOQ Value
+    # Projected Profit = Sign-off Locked Value – Planned Cost
+    projected_profit = signoff_value - planned_cost
+    projected_profit_pct = (projected_profit / signoff_value * 100) if signoff_value > 0 else 0
     
+    # Realised Profit = Sign-off Collected Amount – Actual Cost
     realised_profit = total_received - actual_cost
     realised_profit_pct = (realised_profit / total_received * 100) if total_received > 0 else 0
     
+    # Execution Margin = Based only on Sign-off Locked Value
     execution_margin_remaining = projected_profit - realised_profit
     
     return {
         "project_id": project_id,
         "project_name": project.get("name") or project.get("project_name"),
-        "contract_value": contract_value,
+        # Value lifecycle (all anchored to signoff_value)
+        "signoff_value": signoff_value,
+        "signoff_locked": signoff_locked,
+        "contract_value": signoff_value,  # Deprecated alias for backward compatibility
+        # Costs
         "planned_cost": planned_cost,
         "actual_cost": actual_cost,
         "total_received": total_received,
-        
+        # Projected Profit (Sign-off Value - Planned Cost)
         "projected_profit": projected_profit,
         "projected_profit_pct": round(projected_profit_pct, 1),
-        
+        # Realised Profit (Received - Actual Cost)
         "realised_profit": realised_profit,
         "realised_profit_pct": round(realised_profit_pct, 1),
-        
+        # Execution Margin
         "execution_margin_remaining": execution_margin_remaining
     }
 

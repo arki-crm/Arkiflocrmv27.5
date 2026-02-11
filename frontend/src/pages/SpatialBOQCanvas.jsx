@@ -1447,7 +1447,21 @@ export default function SpatialBOQCanvas() {
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
-              style={{ cursor: tool === 'wall' ? 'crosshair' : tool === 'module' ? 'copy' : tool === 'door' || tool === 'window' ? 'crosshair' : isDragging ? 'grabbing' : 'default' }}
+              onWheel={(e) => {
+                // Mouse wheel zoom centered on cursor (Item #2)
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                const newScale = Math.max(0.05, Math.min(0.5, scale * delta));
+                zoomAtCursor(newScale, e.clientX, e.clientY);
+              }}
+              style={{ 
+                cursor: isPanning ? 'grabbing' : 
+                        spacePressed ? 'grab' : 
+                        tool === 'wall' ? 'crosshair' : 
+                        tool === 'module' ? 'copy' : 
+                        tool === 'door' || tool === 'window' ? 'crosshair' : 
+                        isDragging ? 'grabbing' : 'default' 
+              }}
             >
               {/* Grid */}
               <defs>

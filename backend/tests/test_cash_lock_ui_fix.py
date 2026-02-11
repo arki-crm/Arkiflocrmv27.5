@@ -15,23 +15,22 @@ class TestCashLockUIFix:
     
     @pytest.fixture(autouse=True)
     def setup(self):
-        """Login and get session token"""
-        login_response = requests.post(
+        """Login and get session token via cookies"""
+        self.session = requests.Session()
+        login_response = self.session.post(
             f"{BASE_URL}/api/auth/local-login",
             json={"email": "sidheeq.arkidots@gmail.com", "password": "founder123"}
         )
         assert login_response.status_code == 200, f"Login failed: {login_response.text}"
-        self.session_token = login_response.json().get("session_token")
-        self.headers = {"Authorization": f"Bearer {self.session_token}"}
+        # Session token is set as cookie automatically
         
     def test_01_cash_lock_api_returns_outflow_count(self):
         """Test that Cash Lock API returns outflow_count field for backward compatibility"""
         # Test project: proj_0a79eb51 (signed off with total_received=30000)
         project_id = "proj_0a79eb51"
         
-        response = requests.get(
-            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
-            headers=self.headers
+        response = self.session.get(
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}"
         )
         
         assert response.status_code == 200, f"API failed: {response.text}"
@@ -45,9 +44,8 @@ class TestCashLockUIFix:
         """Test that all required fields for UI rendering are present"""
         project_id = "proj_0a79eb51"
         
-        response = requests.get(
-            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
-            headers=self.headers
+        response = self.session.get(
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}"
         )
         
         assert response.status_code == 200
@@ -77,9 +75,8 @@ class TestCashLockUIFix:
         """Test that lockStatus.total_received > 0 for signed-off project"""
         project_id = "proj_0a79eb51"
         
-        response = requests.get(
-            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
-            headers=self.headers
+        response = self.session.get(
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}"
         )
         
         assert response.status_code == 200
@@ -95,9 +92,8 @@ class TestCashLockUIFix:
         """Test that signed-off project includes all receipts in cash lock"""
         project_id = "proj_0a79eb51"
         
-        response = requests.get(
-            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
-            headers=self.headers
+        response = self.session.get(
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}"
         )
         
         assert response.status_code == 200
@@ -116,9 +112,8 @@ class TestCashLockUIFix:
         """Test that backward compatibility aliases match new field names"""
         project_id = "proj_0a79eb51"
         
-        response = requests.get(
-            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
-            headers=self.headers
+        response = self.session.get(
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}"
         )
         
         assert response.status_code == 200
@@ -146,9 +141,8 @@ class TestCashLockUIFix:
         """Test safe_to_use calculation is correct"""
         project_id = "proj_0a79eb51"
         
-        response = requests.get(
-            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
-            headers=self.headers
+        response = self.session.get(
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}"
         )
         
         assert response.status_code == 200

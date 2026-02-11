@@ -547,6 +547,69 @@ export default function Salaries() {
     }));
   };
 
+  // ============ CLASSIFICATION HANDLERS ============
+  const handleChangeClassification = async () => {
+    if (!selectedEmployeeForClassification || !newClassification) return;
+    
+    try {
+      await axios.put(
+        `${API}/api/hr/employees/${selectedEmployeeForClassification.user_id}/classification`,
+        { classification: newClassification },
+        { withCredentials: true }
+      );
+      toast.success(`Classification updated to ${newClassification}`);
+      setShowClassificationModal(false);
+      setSelectedEmployeeForClassification(null);
+      setNewClassification('');
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update classification');
+    }
+  };
+
+  const fetchClassificationHistory = async (employee) => {
+    try {
+      const res = await axios.get(
+        `${API}/api/hr/employees/${employee.user_id}/classification-history`,
+        { withCredentials: true }
+      );
+      setClassificationHistory(res.data?.history || []);
+      setSelectedEmployeeForClassification(employee);
+      setShowClassificationHistoryModal(true);
+    } catch (err) {
+      toast.error('Failed to fetch classification history');
+    }
+  };
+
+  const openClassificationModal = (employee) => {
+    setSelectedEmployeeForClassification(employee);
+    setNewClassification(employee.employee_classification || 'permanent');
+    setShowClassificationModal(true);
+  };
+
+  const getClassificationBadge = (classification) => {
+    const config = {
+      permanent: { bg: 'bg-green-100', text: 'text-green-800', label: 'Permanent' },
+      probation: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Probation' },
+      trainee: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Trainee' },
+      freelancer: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Freelancer' },
+      channel_partner: { bg: 'bg-pink-100', text: 'text-pink-800', label: 'Channel Partner' }
+    };
+    const c = config[classification] || { bg: 'bg-gray-100', text: 'text-gray-800', label: classification };
+    return <Badge className={`${c.bg} ${c.text}`}>{c.label}</Badge>;
+  };
+
+  const getPaymentMethodLabel = (classification) => {
+    const methods = {
+      permanent: 'Salary',
+      probation: 'Salary',
+      trainee: 'Stipend',
+      freelancer: 'Commission',
+      channel_partner: 'Commission'
+    };
+    return methods[classification] || 'Unknown';
+  };
+
   const getRiskBadge = (status) => {
     switch (status) {
       case 'safe': return <Badge className="bg-green-100 text-green-800">Safe</Badge>;

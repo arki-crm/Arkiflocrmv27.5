@@ -2346,7 +2346,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.daily_closing.view",
         "finance.accounts.view",
         "finance.receipts.view", "finance.receipts.download",
-        "finance.invoices.view",
+        "finance.invoices.view", "finance.invoices.create", "finance.invoices.cancel",
         "finance.refunds.view", "finance.refunds.approve",
         # Project Finance - Full view and override
         "finance.project.view", "finance.project.override_budget",
@@ -2371,7 +2371,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.view_project_finance", "finance.daily_closing", "finance.monthly_snapshot",
         "finance.founder_dashboard", "finance.view_vendors", "finance.view_audit_log",
         "finance.view_receipts", "finance.view_expense_requests",
-        "finance.approve_expense", "finance.allow_over_budget", "finance.issue_refund"
+        "finance.approve_expense", "finance.allow_over_budget", "finance.issue_refund",
+        "finance.create_invoice"  # Invoice creation permission
     ],
     
     # Legacy roles kept for backward compatibility

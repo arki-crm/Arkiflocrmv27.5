@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="6" time="0.648" timestamp="2026-02-11T12:44:42.380588+00:00" hostname="agent-env-7e43ddfe-24d6-40f1-b429-860e6ba71c37"><testcase classname="backend.tests.test_cash_lock_ui_fix.TestCashLockUIFix" name="test_01_cash_lock_api_returns_outflow_count" time="0.136"><failure message="AssertionError: API failed: {&quot;detail&quot;:&quot;Not Found&quot;}&#10;assert 404 == 200&#10; +  where 404 = &lt;Response [404]&gt;.status_code">backend/tests/test_cash_lock_ui_fix.py:37: in test_01_cash_lock_api_returns_outflow_count
+    assert response.status_code == 200, f"API failed: {response.text}"
+E   AssertionError: API failed: {"detail":"Not Found"}
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_cash_lock_ui_fix.TestCashLockUIFix" name="test_02_cash_lock_api_returns_all_required_fields" time="0.083"><failure message="assert 404 == 200&#10; +  where 404 = &lt;Response [404]&gt;.status_code">backend/tests/test_cash_lock_ui_fix.py:53: in test_02_cash_lock_api_returns_all_required_fields
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_cash_lock_ui_fix.TestCashLockUIFix" name="test_03_cash_lock_ui_renders_when_total_received_positive" time="0.091"><failure message="assert 404 == 200&#10; +  where 404 = &lt;Response [404]&gt;.status_code">backend/tests/test_cash_lock_ui_fix.py:85: in test_03_cash_lock_ui_renders_when_total_received_positive
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_cash_lock_ui_fix.TestCashLockUIFix" name="test_04_signoff_locked_project_has_receipts" time="0.083"><failure message="assert 404 == 200&#10; +  where 404 = &lt;Response [404]&gt;.status_code">backend/tests/test_cash_lock_ui_fix.py:103: in test_04_signoff_locked_project_has_receipts
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_cash_lock_ui_fix.TestCashLockUIFix" name="test_05_backward_compatibility_aliases_match" time="0.087"><failure message="assert 404 == 200&#10; +  where 404 = &lt;Response [404]&gt;.status_code">backend/tests/test_cash_lock_ui_fix.py:124: in test_05_backward_compatibility_aliases_match
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_cash_lock_ui_fix.TestCashLockUIFix" name="test_06_safe_to_use_calculation" time="0.080"><failure message="assert 404 == 200&#10; +  where 404 = &lt;Response [404]&gt;.status_code">backend/tests/test_cash_lock_ui_fix.py:154: in test_06_safe_to_use_calculation
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404]&gt;.status_code</failure></testcase></testsuite></testsuites>

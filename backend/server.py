@@ -25581,45 +25581,79 @@ async def get_all_projects_lock_status(request: Request):
     default_lock_pct = config.get("default_lock_percentage", DEFAULT_LOCK_PERCENTAGE) if config else DEFAULT_LOCK_PERCENTAGE
     monthly_operating_expense = config.get("monthly_operating_expense", DEFAULT_MONTHLY_OPERATING_EXPENSE) if config else DEFAULT_MONTHLY_OPERATING_EXPENSE
     
-    # Get all active projects (not cancelled/dropped)
+    # Get all active projects with signoff info
     cancelled_stages = ["Cancelled", "Dropped", "Lost", "On Hold", "Rejected"]
     active_projects = await db.projects.find(
         {"stage": {"$nin": cancelled_stages}},
-        {"_id": 0, "project_id": 1, "name": 1, "project_name": 1, "total_value": 1, "stage": 1, "pid_display": 1}
+        {"_id": 0, "project_id": 1, "name": 1, "project_name": 1, "total_value": 1, 
+         "signoff_value": 1, "signoff_locked": 1, "signoff_locked_at": 1, "stage": 1, "pid_display": 1}
     ).to_list(1000)
+    
+    # Build signoff map
+    signoff_map = {p["project_id"]: {
+        "signoff_locked_at": p.get("signoff_locked_at"),
+        "signoff_locked": p.get("signoff_locked", False)
+    } for p in active_projects}
     
     # Get all lock overrides
     overrides = await db.project_lock_overrides.find({}, {"_id": 0}).to_list(1000)
     override_map = {o["project_id"]: o for o in overrides}
     
-    # Get all receipts grouped by project
-    all_receipts = await db.finance_receipts.find({}, {"_id": 0, "project_id": 1, "amount": 1}).to_list(10000)
-    receipts_by_project = {}
+    # EXECUTION-PHASE receipts only
+    # Execution phases: Production, Delivery, Installation, Handover
+    execution_stages = ["production", "production payment", "delivery", "installation", "handover", 
+                       "final payment", "final", "post-production", "completion"]
+    
+    # Get ALL receipts with stage info and date
+    all_receipts = await db.finance_receipts.find(
+        {"status": {"$ne": "cancelled"}},
+        {"_id": 0, "project_id": 1, "amount": 1, "stage_name": 1, "created_at": 1}
+    ).to_list(10000)
+    
+    # Filter to execution-phase receipts per project
+    execution_receipts_by_project = {}
     for r in all_receipts:
         pid = r.get("project_id")
-        if pid:
-            receipts_by_project[pid] = receipts_by_project.get(pid, 0) + r.get("amount", 0)
+        if not pid:
+            continue
+            
+        signoff_info = signoff_map.get(pid, {})
+        signoff_locked_at = signoff_info.get("signoff_locked_at")
+        stage_name = (r.get("stage_name") or "").lower()
+        created_at = r.get("created_at")
+        
+        # Check if receipt is execution-phase:
+        # 1. Created after signoff lock, OR
+        # 2. Linked to execution stage name
+        is_execution_receipt = False
+        if signoff_locked_at and created_at:
+            # Compare dates (handle both string and datetime)
+            if isinstance(created_at, str):
+                is_execution_receipt = created_at >= signoff_locked_at
+            else:
+                from datetime import datetime
+                if isinstance(signoff_locked_at, str):
+                    is_execution_receipt = created_at.isoformat() >= signoff_locked_at
+                else:
+                    is_execution_receipt = created_at >= signoff_locked_at
+        
+        # Also check stage name
+        if any(exec_stage in stage_name for exec_stage in execution_stages):
+            is_execution_receipt = True
+        
+        if is_execution_receipt:
+            execution_receipts_by_project[pid] = execution_receipts_by_project.get(pid, 0) + r.get("amount", 0)
     
-    # Get all project-linked inflows
-    all_inflows = await db.accounting_transactions.find(
-        {"transaction_type": "inflow", "project_id": {"$ne": None}},
-        {"_id": 0, "project_id": 1, "amount": 1}
+    # Get execution-phase liabilities (commitments from execution ledger)
+    all_execution_liabilities = await db.finance_liabilities.find(
+        {"source": "execution_ledger", "status": {"$in": ["open", "partially_settled"]}},
+        {"_id": 0, "project_id": 1, "amount_remaining": 1}
     ).to_list(10000)
-    for t in all_inflows:
-        pid = t.get("project_id")
+    execution_liabilities_by_project = {}
+    for l in all_execution_liabilities:
+        pid = l.get("project_id")
         if pid:
-            receipts_by_project[pid] = receipts_by_project.get(pid, 0) + t.get("amount", 0)
-    
-    # Get all project-linked outflows (commitments)
-    all_outflows = await db.accounting_transactions.find(
-        {"transaction_type": "outflow", "project_id": {"$ne": None}},
-        {"_id": 0, "project_id": 1, "amount": 1}
-    ).to_list(10000)
-    outflows_by_project = {}
-    for t in all_outflows:
-        pid = t.get("project_id")
-        if pid:
-            outflows_by_project[pid] = outflows_by_project.get(pid, 0) + t.get("amount", 0)
+            execution_liabilities_by_project[pid] = execution_liabilities_by_project.get(pid, 0) + l.get("amount_remaining", 0)
     
     # Get all approved expense requests
     all_expense_requests = await db.finance_expense_requests.find(
@@ -25632,7 +25666,7 @@ async def get_all_projects_lock_status(request: Request):
         if pid:
             expense_requests_by_project[pid] = expense_requests_by_project.get(pid, 0) + er.get("amount", 0)
     
-    # Calculate lock status for each project
+    # Calculate lock status for each project (EXECUTION PHASE ONLY)
     projects_status = []
     total_received_all = 0
     total_locked_all = 0
@@ -25646,32 +25680,33 @@ async def get_all_projects_lock_status(request: Request):
         override = override_map.get(pid)
         effective_lock_pct = override.get("lock_percentage") if override else default_lock_pct
         
-        # Calculate amounts
-        total_received = receipts_by_project.get(pid, 0)
-        outflow_commitment = outflows_by_project.get(pid, 0)
+        # Calculate execution-phase amounts only
+        total_execution_received = execution_receipts_by_project.get(pid, 0)
+        execution_invoice_commitment = execution_liabilities_by_project.get(pid, 0)
         er_commitment = expense_requests_by_project.get(pid, 0)
-        total_commitments = outflow_commitment + er_commitment
+        total_commitments = execution_invoice_commitment + er_commitment
         
-        gross_locked = total_received * (effective_lock_pct / 100)
+        gross_locked = total_execution_received * (effective_lock_pct / 100)
         net_locked = max(gross_locked - total_commitments, 0)
-        safe_to_use = total_received - net_locked
+        safe_to_use = max(0, total_execution_received - net_locked - total_commitments)
         
         # Aggregate totals
-        total_received_all += total_received
+        total_received_all += total_execution_received
         total_locked_all += net_locked
         total_commitments_all += total_commitments
         total_safe_all += safe_to_use
         
-        if total_received > 0:  # Only include projects with receipts
+        if total_execution_received > 0:  # Only include projects with execution receipts
             projects_status.append({
                 "project_id": pid,
                 "project_name": project.get("name") or project.get("project_name"),
                 "pid_display": project.get("pid_display"),
                 "stage": project.get("stage"),
-                "total_value": project.get("total_value", 0),
+                "total_value": project.get("signoff_value") or project.get("total_value", 0),
+                "signoff_locked": project.get("signoff_locked", False),
                 "effective_lock_pct": effective_lock_pct,
                 "is_overridden": override is not None,
-                "total_received": total_received,
+                "total_received": total_execution_received,  # Execution receipts only
                 "total_commitments": total_commitments,
                 "net_locked": round(net_locked, 2),
                 "safe_to_use": round(safe_to_use, 2)

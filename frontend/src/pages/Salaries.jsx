@@ -173,6 +173,22 @@ export default function Salaries() {
       } catch (err) {
         // May not have permission
       }
+      
+      // Fetch compensation data
+      try {
+        const [incentivesRes, commissionsRes, deductionTypesRes, projectsRes] = await Promise.all([
+          axios.get(`${API}/api/finance/incentives`, { withCredentials: true }).catch(() => ({ data: { incentives: [] } })),
+          axios.get(`${API}/api/finance/commissions`, { withCredentials: true }).catch(() => ({ data: { commissions: [] } })),
+          axios.get(`${API}/api/finance/deduction-types`, { withCredentials: true }).catch(() => ({ data: { deduction_types: {} } })),
+          axios.get(`${API}/api/projects`, { withCredentials: true }).catch(() => ({ data: [] }))
+        ]);
+        setIncentives(incentivesRes.data?.incentives || []);
+        setCommissions(commissionsRes.data?.commissions || []);
+        setDeductionTypes(deductionTypesRes.data?.deduction_types || {});
+        setProjects(Array.isArray(projectsRes.data) ? projectsRes.data : projectsRes.data?.projects || []);
+      } catch (err) {
+        console.log('Compensation data fetch error:', err);
+      }
     } catch (err) {
       console.error('Error fetching data:', err);
       toast.error('Failed to load salary data');

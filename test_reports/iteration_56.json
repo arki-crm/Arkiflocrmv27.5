@@ -1,0 +1,72 @@
+{
+  "summary": "Booking Advance Signoff Reclassification - All 9 tests passed. Cash lock correctly excludes booking advances before sign-off and includes ALL receipts after sign-off.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "test_01_login_works - Authentication working",
+    "test_02_signed_off_project_includes_all_receipts - proj_0a79eb51 (signed off) shows Total Received = 30000 (all receipts)",
+    "test_03_not_signed_off_project_excludes_booking_advances - proj_17942869 (not signed off) shows Total Received = 0",
+    "test_04_safe_to_use_calculation_after_signoff - Safe to Use = 4500 (30000 - 85% locked)",
+    "test_05_bulk_endpoint_follows_same_logic - Bulk endpoint correctly includes/excludes based on signoff_locked",
+    "test_06_historical_receipts_not_modified - Receipt records preserved, reclassification is calculation-only",
+    "test_07_response_structure_complete - All 19 required fields present",
+    "test_08_bulk_response_structure_complete - Bulk endpoint structure verified",
+    "test_09_signoff_determines_inclusion_logic - Core logic verified: signoff_locked determines receipt inclusion"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_booking_advance_signoff_reclassification.py",
+    "/app/test_reports/pytest/booking_advance_signoff_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_booking_advance_signoff_reclassification.py"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 tests passed)",
+    "frontend": "N/A (backend only testing requested)"
+  },
+  "test_credentials": {
+    "founder_login": {
+      "email": "sidheeq.arkidots@gmail.com",
+      "password": "founder123"
+    }
+  },
+  "seed_data_creation": "None - used existing test projects",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Booking advance signoff reclassification verified. Key logic: 1) signoff_locked=True → ALL receipts included in cash lock (booking advances auto-reclassified as execution liquidity), 2) signoff_locked=False → NO receipts included (booking advances excluded from cash lock). Test projects: proj_0a79eb51 (signoff_locked=True, total_received=30000 = 25000 booking + 5000 post-signoff, safe_to_use=4500), proj_17942869 (signoff_locked=False, total_received=0). Historical receipt records are NOT modified - reclassification is purely calculation logic.",
+  "verified_data": {
+    "proj_0a79eb51": {
+      "signoff_locked": true,
+      "signoff_locked_at": "2026-01-31T19:15:51.161214+00:00",
+      "booking_advance_receipt": 25000,
+      "post_signoff_receipt": 5000,
+      "total_received": 30000,
+      "lock_percentage": 85,
+      "gross_locked": 25500,
+      "net_locked": 25500,
+      "safe_to_use": 4500,
+      "total_commitments": 0
+    },
+    "proj_17942869": {
+      "signoff_locked": false,
+      "signoff_locked_at": null,
+      "total_received": 0,
+      "reason": "Not signed off - booking advances excluded from cash lock"
+    }
+  },
+  "reclassification_logic": {
+    "before_signoff": "Booking advances are EXCLUDED from cash lock (Total Received = 0)",
+    "after_signoff": "ALL receipts (including booking advances) are included as execution liquidity",
+    "automatic_reclassification": "Upon sign-off, booking advances automatically become execution liquidity",
+    "historical_records": "Receipt records are NOT modified - only calculation logic changes"
+  }
+}

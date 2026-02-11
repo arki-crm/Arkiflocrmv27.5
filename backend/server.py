@@ -30040,8 +30040,89 @@ async def get_employees_by_classification(request: Request, classification: Opti
     return {
         "employees": employees,
         "grouped": grouped,
-        "classifications": EMPLOYEE_CLASSIFICATIONS
+        "classifications": EMPLOYEE_CLASSIFICATIONS,
+        "classification_rules": {
+            "salary_eligible": SALARY_ELIGIBLE_CLASSIFICATIONS,
+            "stipend_eligible": STIPEND_ELIGIBLE_CLASSIFICATIONS,
+            "incentive_eligible": INCENTIVE_ELIGIBLE_CLASSIFICATIONS,
+            "statutory_exempt": STATUTORY_EXEMPT_CLASSIFICATIONS
+        }
     }
+
+
+@api_router.get("/hr/employees/{user_id}/classification-history")
+async def get_classification_history(user_id: str, request: Request):
+    """Get classification change history for an employee"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "hr.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get employee
+    employee = await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1, "name": 1, "employee_classification": 1})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    # Get history
+    history = await db.hr_classification_history.find(
+        {"employee_id": user_id},
+        {"_id": 0}
+    ).sort("changed_at", -1).to_list(50)
+    
+    return {
+        "employee": employee,
+        "current_classification": employee.get("employee_classification", "permanent"),
+        "history": history,
+        "classification_rules": {
+            "salary_eligible": SALARY_ELIGIBLE_CLASSIFICATIONS,
+            "stipend_eligible": STIPEND_ELIGIBLE_CLASSIFICATIONS,
+            "incentive_eligible": INCENTIVE_ELIGIBLE_CLASSIFICATIONS,
+            "statutory_exempt": STATUTORY_EXEMPT_CLASSIFICATIONS
+        }
+    }
+
+
+@api_router.get("/hr/classification-summary")
+async def get_classification_summary(request: Request):
+    """Get summary of employees by classification with payment workflow guidance"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "hr.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get all active employees
+    employees = await db.users.find(
+        {"status": {"$ne": "inactive"}},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "employee_classification": 1}
+    ).to_list(500)
+    
+    # Build summary
+    summary = {
+        "total_employees": len(employees),
+        "by_classification": {},
+        "workflow_guidance": {
+            "permanent": {"payment_method": "Salary", "statutory_deductions": "PF, ESI, Professional Tax (auto-calculated)", "can_receive": ["Salary", "Incentives"]},
+            "probation": {"payment_method": "Salary", "statutory_deductions": "PF, ESI (auto-calculated)", "can_receive": ["Salary", "Incentives"]},
+            "trainee": {"payment_method": "Stipend", "statutory_deductions": "None (exempt)", "can_receive": ["Stipend", "Incentives"]},
+            "freelancer": {"payment_method": "Commission/Professional Fee", "statutory_deductions": "None (exempt)", "can_receive": ["Commission"]},
+            "channel_partner": {"payment_method": "Commission", "statutory_deductions": "None (exempt)", "can_receive": ["Commission"]}
+        }
+    }
+    
+    for classification in EMPLOYEE_CLASSIFICATIONS:
+        emps_in_class = [e for e in employees if e.get("employee_classification", "permanent") == classification]
+        summary["by_classification"][classification] = {
+            "count": len(emps_in_class),
+            "employees": emps_in_class,
+            "is_salary_eligible": classification in SALARY_ELIGIBLE_CLASSIFICATIONS,
+            "is_stipend_eligible": classification in STIPEND_ELIGIBLE_CLASSIFICATIONS,
+            "is_incentive_eligible": classification in INCENTIVE_ELIGIBLE_CLASSIFICATIONS,
+            "is_statutory_exempt": classification in STATUTORY_EXEMPT_CLASSIFICATIONS
+        }
+    
+    return summary
 
 
 # ============ ENHANCED SALARY PROCESSING WITH DEDUCTIONS ============

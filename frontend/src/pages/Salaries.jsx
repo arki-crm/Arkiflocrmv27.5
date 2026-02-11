@@ -60,6 +60,18 @@ export default function Salaries() {
   const [employeeHistory, setEmployeeHistory] = useState(null);
   const [salaryChangeHistory, setSalaryChangeHistory] = useState([]);
   
+  // Compensation & Payout states
+  const [incentives, setIncentives] = useState([]);
+  const [commissions, setCommissions] = useState([]);
+  const [deductionTypes, setDeductionTypes] = useState({});
+  const [projects, setProjects] = useState([]);
+  const [showIncentiveModal, setShowIncentiveModal] = useState(false);
+  const [showCommissionModal, setShowCommissionModal] = useState(false);
+  const [showDeductionModal, setShowDeductionModal] = useState(false);
+  const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [selectedIncentive, setSelectedIncentive] = useState(null);
+  const [selectedCommission, setSelectedCommission] = useState(null);
+  
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
   

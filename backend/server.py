@@ -29784,6 +29784,1037 @@ async def get_employee_salary_history(employee_id: str, request: Request):
     return history
 
 
+# ============ EMPLOYEE COMPENSATION & PAYOUT ARCHITECTURE ============
+# Unified system for salary deductions, stipends, incentives, and commissions
+
+# Employee Classification Types
+EMPLOYEE_CLASSIFICATIONS = [
+    "permanent",      # Permanent Employee → Salary
+    "probation",      # Probation Employee → Salary
+    "trainee",        # Trainee / Intern → Stipend
+    "freelancer",     # Freelancer / Consultant → Professional Fee
+    "channel_partner" # Channel Partner → Commission
+]
+
+# Deduction Types with ledger mapping
+DEDUCTION_TYPES = {
+    "leave": {"name": "Leave Deduction", "ledger_impact": "expense_reduction", "statutory": False},
+    "late_attendance": {"name": "Late Attendance Deduction", "ledger_impact": "expense_reduction", "statutory": False},
+    "loss_recovery": {"name": "Loss / Damage Recovery", "ledger_impact": "company_income", "statutory": False},
+    "advance_recovery": {"name": "Advance Recovery", "ledger_impact": "receivable_cleared", "statutory": False},
+    "penalty": {"name": "Penalty / Disciplinary", "ledger_impact": "expense_reduction", "statutory": False},
+    "tds": {"name": "TDS (Tax Deducted at Source)", "ledger_impact": "statutory_payable", "statutory": True},
+    "pf": {"name": "Provident Fund", "ledger_impact": "statutory_payable", "statutory": True},
+    "esi": {"name": "ESI", "ledger_impact": "statutory_payable", "statutory": True},
+    "professional_tax": {"name": "Professional Tax", "ledger_impact": "statutory_payable", "statutory": True},
+    "custom": {"name": "Custom Deduction", "ledger_impact": "expense_reduction", "statutory": False}
+}
+
+# Incentive Types
+INCENTIVE_TYPES = {
+    "booking": {"name": "Booking Incentive", "ledger": "project_acquisition_expense", "project_linked": True},
+    "execution_50_percent": {"name": "50% Collection Incentive", "ledger": "project_execution_expense", "project_linked": True},
+    "project_completion": {"name": "Project Completion Incentive", "ledger": "project_execution_expense", "project_linked": True},
+    "customer_review": {"name": "Customer Review Incentive", "ledger": "project_execution_expense", "project_linked": True},
+    "performance": {"name": "Performance Incentive", "ledger": "hr_expense", "project_linked": False}
+}
+
+# Commission Types
+COMMISSION_TYPES = {
+    "referral": {"name": "Referral Commission", "ledger": "business_development_expense"},
+    "channel_partner": {"name": "Channel Partner Commission", "ledger": "business_development_expense"},
+    "project_linked": {"name": "Project Commission", "ledger": "project_expense"}
+}
+
+
+# ============ PYDANTIC MODELS FOR COMPENSATION ============
+
+class EmployeeClassificationUpdate(BaseModel):
+    """Update employee classification"""
+    classification: str  # permanent, probation, trainee, freelancer, channel_partner
+
+
+class StructuredDeduction(BaseModel):
+    """Individual deduction entry"""
+    deduction_type: str  # From DEDUCTION_TYPES
+    amount: float
+    reason: Optional[str] = None
+    custom_label: Optional[str] = None  # For custom deductions
+    auto_calculated: bool = False  # Whether system auto-calculated
+
+
+class SalaryProcessingRequest(BaseModel):
+    """Enhanced salary processing with structured deductions"""
+    employee_id: str
+    month_year: str  # YYYY-MM
+    gross_salary: float
+    deductions: List[StructuredDeduction] = []
+    notes: Optional[str] = None
+
+
+class StipendPaymentRequest(BaseModel):
+    """Stipend payment for trainees/interns"""
+    employee_id: str
+    month_year: str
+    amount: float
+    account_id: str
+    payment_date: str
+    notes: Optional[str] = None
+
+
+class IncentiveRequest(BaseModel):
+    """Create incentive payout request"""
+    employee_id: str
+    incentive_type: str  # From INCENTIVE_TYPES
+    project_id: Optional[str] = None  # Required for project-linked incentives
+    amount: float
+    calculation_type: str = "fixed"  # fixed or percentage
+    percentage_of: Optional[float] = None  # Base amount if percentage
+    trigger_event: Optional[str] = None  # booking, 50_collection, completion, review
+    notes: Optional[str] = None
+
+
+class IncentivePayoutRequest(BaseModel):
+    """Process incentive payout"""
+    incentive_id: str
+    account_id: str
+    payment_date: str
+    notes: Optional[str] = None
+
+
+class CommissionRequest(BaseModel):
+    """External commission payout request"""
+    recipient_type: str  # referral, channel_partner, associate
+    recipient_id: Optional[str] = None  # If internal user
+    recipient_name: str
+    recipient_contact: Optional[str] = None
+    commission_type: str  # From COMMISSION_TYPES
+    project_id: Optional[str] = None
+    amount: float
+    calculation_type: str = "fixed"  # fixed or percentage
+    percentage_of: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class CommissionPayoutRequest(BaseModel):
+    """Process commission payout"""
+    commission_id: str
+    account_id: str
+    payment_date: str
+    notes: Optional[str] = None
+
+
+# ============ EMPLOYEE CLASSIFICATION ENDPOINTS ============
+
+@api_router.put("/hr/employees/{user_id}/classification")
+async def update_employee_classification(user_id: str, data: EmployeeClassificationUpdate, request: Request):
+    """Update employee classification (Permanent, Trainee, Freelancer, etc.)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "hr.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if data.classification not in EMPLOYEE_CLASSIFICATIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid classification. Must be one of: {EMPLOYEE_CLASSIFICATIONS}")
+    
+    employee = await db.users.find_one({"user_id": user_id})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    now = datetime.now(timezone.utc)
+    old_classification = employee.get("employee_classification", "permanent")
+    
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "employee_classification": data.classification,
+            "classification_updated_at": now,
+            "classification_updated_by": user.user_id
+        }}
+    )
+    
+    # Log the change
+    await db.hr_classification_history.insert_one({
+        "history_id": f"clh_{uuid.uuid4().hex[:12]}",
+        "employee_id": user_id,
+        "employee_name": employee.get("name", "Unknown"),
+        "old_classification": old_classification,
+        "new_classification": data.classification,
+        "changed_by": user.user_id,
+        "changed_by_name": user_doc.get("name", "Unknown"),
+        "changed_at": now
+    })
+    
+    return {
+        "success": True,
+        "employee_id": user_id,
+        "classification": data.classification,
+        "message": f"Classification updated from {old_classification} to {data.classification}"
+    }
+
+
+@api_router.get("/hr/employees/classifications")
+async def get_employees_by_classification(request: Request, classification: Optional[str] = None):
+    """Get employees grouped by classification"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "hr.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {"status": {"$ne": "inactive"}}
+    if classification:
+        query["employee_classification"] = classification
+    
+    employees = await db.users.find(
+        query,
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "employee_classification": 1}
+    ).to_list(500)
+    
+    # Group by classification
+    grouped = {}
+    for emp in employees:
+        cls = emp.get("employee_classification", "permanent")
+        if cls not in grouped:
+            grouped[cls] = []
+        grouped[cls].append(emp)
+    
+    return {
+        "employees": employees,
+        "grouped": grouped,
+        "classifications": EMPLOYEE_CLASSIFICATIONS
+    }
+
+
+# ============ ENHANCED SALARY PROCESSING WITH DEDUCTIONS ============
+
+@api_router.post("/finance/salary-processing")
+async def process_salary_with_deductions(data: SalaryProcessingRequest, request: Request):
+    """
+    Process salary with structured deductions.
+    Creates proper ledger entries for different deduction types.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.salaries.pay"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Verify employee exists
+    employee = await db.users.find_one({"user_id": data.employee_id})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    # Verify salary master exists
+    salary_master = await db.finance_salary_master.find_one({"employee_id": data.employee_id})
+    if not salary_master:
+        raise HTTPException(status_code=404, detail="Salary record not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Calculate deductions breakdown
+    deduction_breakdown = []
+    total_deductions = 0
+    statutory_deductions = 0
+    non_statutory_deductions = 0
+    
+    for ded in data.deductions:
+        if ded.deduction_type not in DEDUCTION_TYPES:
+            raise HTTPException(status_code=400, detail=f"Invalid deduction type: {ded.deduction_type}")
+        
+        ded_info = DEDUCTION_TYPES[ded.deduction_type]
+        deduction_record = {
+            "deduction_id": f"ded_{uuid.uuid4().hex[:8]}",
+            "type": ded.deduction_type,
+            "type_name": ded_info["name"] if ded.deduction_type != "custom" else ded.custom_label,
+            "amount": ded.amount,
+            "reason": ded.reason,
+            "ledger_impact": ded_info["ledger_impact"],
+            "statutory": ded_info["statutory"],
+            "auto_calculated": ded.auto_calculated,
+            "created_at": now.isoformat()
+        }
+        deduction_breakdown.append(deduction_record)
+        total_deductions += ded.amount
+        
+        if ded_info["statutory"]:
+            statutory_deductions += ded.amount
+        else:
+            non_statutory_deductions += ded.amount
+    
+    # Calculate net payable
+    net_payable = data.gross_salary - total_deductions
+    if net_payable < 0:
+        raise HTTPException(status_code=400, detail="Net payable cannot be negative")
+    
+    # Get or create salary cycle
+    cycle = await db.finance_salary_cycles.find_one({
+        "employee_id": data.employee_id,
+        "month_year": data.month_year
+    })
+    
+    if not cycle:
+        cycle = {
+            "cycle_id": f"cycle_{uuid.uuid4().hex[:12]}",
+            "employee_id": data.employee_id,
+            "employee_name": employee.get("name", "Unknown"),
+            "month_year": data.month_year,
+            "gross_salary": data.gross_salary,
+            "monthly_salary": salary_master.get("monthly_salary", data.gross_salary),
+            "deductions": deduction_breakdown,
+            "total_deductions": total_deductions,
+            "statutory_deductions": statutory_deductions,
+            "non_statutory_deductions": non_statutory_deductions,
+            "net_payable": net_payable,
+            "total_advances": 0,
+            "total_salary_paid": 0,
+            "balance_payable": net_payable,
+            "carry_forward_recovery": 0,
+            "status": "open",
+            "processing_notes": data.notes,
+            "processed_by": user.user_id,
+            "processed_by_name": user_doc.get("name", "Unknown"),
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.finance_salary_cycles.insert_one(cycle)
+    else:
+        if cycle.get("status") == "closed":
+            raise HTTPException(status_code=400, detail="Salary cycle already closed")
+        
+        # Update existing cycle with new deductions
+        existing_deductions = cycle.get("deductions", [])
+        existing_deductions.extend(deduction_breakdown)
+        
+        new_total_deductions = cycle.get("total_deductions", 0) + total_deductions
+        new_net_payable = data.gross_salary - new_total_deductions
+        total_paid = cycle.get("total_advances", 0) + cycle.get("total_salary_paid", 0)
+        
+        await db.finance_salary_cycles.update_one(
+            {"employee_id": data.employee_id, "month_year": data.month_year},
+            {"$set": {
+                "gross_salary": data.gross_salary,
+                "deductions": existing_deductions,
+                "total_deductions": new_total_deductions,
+                "statutory_deductions": cycle.get("statutory_deductions", 0) + statutory_deductions,
+                "non_statutory_deductions": cycle.get("non_statutory_deductions", 0) + non_statutory_deductions,
+                "net_payable": new_net_payable,
+                "balance_payable": max(0, new_net_payable - total_paid),
+                "processing_notes": data.notes,
+                "updated_at": now
+            }}
+        )
+    
+    updated_cycle = await db.finance_salary_cycles.find_one(
+        {"employee_id": data.employee_id, "month_year": data.month_year},
+        {"_id": 0}
+    )
+    
+    return {
+        "success": True,
+        "cycle": updated_cycle,
+        "summary": {
+            "gross_salary": data.gross_salary,
+            "total_deductions": total_deductions,
+            "statutory_deductions": statutory_deductions,
+            "non_statutory_deductions": non_statutory_deductions,
+            "net_payable": net_payable
+        },
+        "deduction_breakdown": deduction_breakdown
+    }
+
+
+@api_router.get("/finance/deduction-types")
+async def get_deduction_types(request: Request):
+    """Get available deduction types with ledger mapping"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    return {
+        "deduction_types": DEDUCTION_TYPES,
+        "classifications": EMPLOYEE_CLASSIFICATIONS
+    }
+
+
+# ============ STIPEND MANAGEMENT (TRAINEES) ============
+
+@api_router.post("/finance/stipend-payments")
+async def create_stipend_payment(data: StipendPaymentRequest, request: Request):
+    """
+    Process stipend payment for trainees/interns.
+    - No statutory deductions (PF/TDS/ESI)
+    - Classified under Training/HR Development Expense
+    - Not included in payroll compliance reports
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.salaries.pay"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Verify employee is a trainee
+    employee = await db.users.find_one({"user_id": data.employee_id})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    if employee.get("employee_classification") not in ["trainee", None]:
+        # Allow for backward compatibility if classification not set
+        pass
+    
+    # Verify account
+    account = await db.accounting_accounts.find_one({"account_id": data.account_id})
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    now = datetime.now(timezone.utc)
+    stipend_id = f"stip_{uuid.uuid4().hex[:12]}"
+    
+    # Ensure stipend category exists
+    stipend_category = await db.accounting_categories.find_one({"category_id": "training_expense"})
+    if not stipend_category:
+        stipend_category = {
+            "category_id": "training_expense",
+            "name": "Training / HR Development Expense",
+            "type": "expense",
+            "description": "Stipends and training-related expenses",
+            "created_at": now.isoformat()
+        }
+        await db.accounting_categories.insert_one(stipend_category)
+    
+    # Create stipend payment record
+    stipend_payment = {
+        "stipend_id": stipend_id,
+        "employee_id": data.employee_id,
+        "employee_name": employee.get("name", "Unknown"),
+        "month_year": data.month_year,
+        "amount": data.amount,
+        "account_id": data.account_id,
+        "account_name": account.get("account_name") or account.get("name", "Unknown"),
+        "payment_date": data.payment_date,
+        "notes": data.notes,
+        "payment_type": "stipend",
+        "statutory_applicable": False,  # No PF/TDS/ESI
+        "compliance_excluded": True,  # Not in payroll compliance reports
+        "paid_by": user.user_id,
+        "paid_by_name": user_doc.get("name", "Unknown"),
+        "created_at": now
+    }
+    
+    # Check if day is locked
+    day_closing = await db.accounting_daily_closings.find_one({"date": data.payment_date, "is_locked": True})
+    if day_closing:
+        raise HTTPException(status_code=400, detail=f"Day {data.payment_date} is locked")
+    
+    # Create cashbook entry
+    transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
+    cashbook_entry = {
+        "transaction_id": transaction_id,
+        "transaction_date": data.payment_date,
+        "transaction_type": "outflow",
+        "category_id": "training_expense",
+        "amount": data.amount,
+        "mode": "bank_transfer",
+        "account_id": data.account_id,
+        "project_id": None,
+        "paid_to": employee.get("name", "Employee"),
+        "vendor_id": None,
+        "remarks": data.notes or f"Stipend for {data.month_year}: {employee.get('name', 'Trainee')}",
+        "system_generated": True,
+        "source_module": "stipend",
+        "source_id": stipend_id,
+        "reference_type": "stipend_payment",
+        "reference_id": stipend_id,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", "Unknown")
+    }
+    
+    await db.accounting_transactions.insert_one(cashbook_entry)
+    
+    # Update account balance
+    await db.accounting_accounts.update_one(
+        {"account_id": data.account_id},
+        {"$inc": {"current_balance": -data.amount}}
+    )
+    
+    stipend_payment["transaction_id"] = transaction_id
+    await db.finance_stipend_payments.insert_one(stipend_payment)
+    
+    del stipend_payment["_id"]
+    return {
+        "success": True,
+        "payment": stipend_payment,
+        "transaction_id": transaction_id
+    }
+
+
+@api_router.get("/finance/stipend-payments")
+async def get_stipend_payments(request: Request, employee_id: Optional[str] = None, month_year: Optional[str] = None):
+    """Get stipend payment history"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.salaries.view_all"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if employee_id:
+        query["employee_id"] = employee_id
+    if month_year:
+        query["month_year"] = month_year
+    
+    payments = await db.finance_stipend_payments.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return payments
+
+
+# ============ INCENTIVE ENGINE (PROJECT-LINKED) ============
+
+@api_router.post("/finance/incentives")
+async def create_incentive(data: IncentiveRequest, request: Request):
+    """
+    Create incentive record for employee.
+    - Booking incentive: Triggered on booking amount received
+    - Execution incentive: Triggered on milestones (50% collection, completion, review)
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.incentives.create"):
+        # Fallback to salary manage permission
+        if not has_permission(user_doc, "finance.salaries.manage"):
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    if data.incentive_type not in INCENTIVE_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid incentive type. Must be one of: {list(INCENTIVE_TYPES.keys())}")
+    
+    incentive_info = INCENTIVE_TYPES[data.incentive_type]
+    
+    # Verify employee
+    employee = await db.users.find_one({"user_id": data.employee_id})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    # Verify project if project-linked
+    project = None
+    if incentive_info["project_linked"]:
+        if not data.project_id:
+            raise HTTPException(status_code=400, detail="Project ID required for project-linked incentives")
+        project = await db.projects.find_one({"project_id": data.project_id})
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+    
+    now = datetime.now(timezone.utc)
+    incentive_id = f"inc_{uuid.uuid4().hex[:12]}"
+    
+    # Calculate amount if percentage-based
+    final_amount = data.amount
+    if data.calculation_type == "percentage" and data.percentage_of:
+        final_amount = (data.percentage_of * data.amount) / 100
+    
+    incentive_record = {
+        "incentive_id": incentive_id,
+        "employee_id": data.employee_id,
+        "employee_name": employee.get("name", "Unknown"),
+        "incentive_type": data.incentive_type,
+        "incentive_type_name": incentive_info["name"],
+        "project_id": data.project_id,
+        "project_name": project.get("project_name") if project else None,
+        "project_linked": incentive_info["project_linked"],
+        "ledger_category": incentive_info["ledger"],
+        "calculation_type": data.calculation_type,
+        "percentage_of": data.percentage_of,
+        "calculated_amount": final_amount,
+        "amount": final_amount,
+        "trigger_event": data.trigger_event,
+        "notes": data.notes,
+        "status": "pending",  # pending, approved, paid, cancelled
+        "payment_id": None,
+        "transaction_id": None,
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", "Unknown"),
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.finance_incentives.insert_one(incentive_record)
+    del incentive_record["_id"]
+    
+    return {
+        "success": True,
+        "incentive": incentive_record
+    }
+
+
+@api_router.get("/finance/incentives")
+async def get_incentives(
+    request: Request, 
+    employee_id: Optional[str] = None, 
+    project_id: Optional[str] = None,
+    status: Optional[str] = None,
+    incentive_type: Optional[str] = None
+):
+    """Get incentives with filters"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check if can view all or only own
+    can_view_all = has_permission(user_doc, "finance.incentives.view_all") or has_permission(user_doc, "finance.salaries.view_all")
+    
+    query = {}
+    if not can_view_all:
+        query["employee_id"] = user.user_id
+    else:
+        if employee_id:
+            query["employee_id"] = employee_id
+    
+    if project_id:
+        query["project_id"] = project_id
+    if status:
+        query["status"] = status
+    if incentive_type:
+        query["incentive_type"] = incentive_type
+    
+    incentives = await db.finance_incentives.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    
+    # Calculate summary
+    total_pending = sum(i.get("amount", 0) for i in incentives if i.get("status") == "pending")
+    total_approved = sum(i.get("amount", 0) for i in incentives if i.get("status") == "approved")
+    total_paid = sum(i.get("amount", 0) for i in incentives if i.get("status") == "paid")
+    
+    return {
+        "incentives": incentives,
+        "summary": {
+            "total_pending": total_pending,
+            "total_approved": total_approved,
+            "total_paid": total_paid,
+            "total_count": len(incentives)
+        }
+    }
+
+
+@api_router.put("/finance/incentives/{incentive_id}/approve")
+async def approve_incentive(incentive_id: str, request: Request):
+    """Approve a pending incentive"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.incentives.approve") and not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    incentive = await db.finance_incentives.find_one({"incentive_id": incentive_id})
+    if not incentive:
+        raise HTTPException(status_code=404, detail="Incentive not found")
+    
+    if incentive.get("status") != "pending":
+        raise HTTPException(status_code=400, detail=f"Incentive status is {incentive.get('status')}, cannot approve")
+    
+    now = datetime.now(timezone.utc)
+    await db.finance_incentives.update_one(
+        {"incentive_id": incentive_id},
+        {"$set": {
+            "status": "approved",
+            "approved_by": user.user_id,
+            "approved_by_name": user_doc.get("name", "Unknown"),
+            "approved_at": now,
+            "updated_at": now
+        }}
+    )
+    
+    return {"success": True, "message": "Incentive approved"}
+
+
+@api_router.post("/finance/incentives/{incentive_id}/payout")
+async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, request: Request):
+    """Process incentive payout"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.incentives.pay") and not has_permission(user_doc, "finance.salaries.pay"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    incentive = await db.finance_incentives.find_one({"incentive_id": incentive_id})
+    if not incentive:
+        raise HTTPException(status_code=404, detail="Incentive not found")
+    
+    if incentive.get("status") not in ["pending", "approved"]:
+        raise HTTPException(status_code=400, detail=f"Incentive status is {incentive.get('status')}, cannot payout")
+    
+    # Verify account
+    account = await db.accounting_accounts.find_one({"account_id": data.account_id})
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    now = datetime.now(timezone.utc)
+    payment_id = f"incp_{uuid.uuid4().hex[:12]}"
+    transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
+    
+    # Determine category based on incentive type
+    category_id = "project_expense" if incentive.get("project_linked") else "hr_expense"
+    
+    # Ensure category exists
+    category = await db.accounting_categories.find_one({"category_id": category_id})
+    if not category:
+        await db.accounting_categories.insert_one({
+            "category_id": category_id,
+            "name": "Project Expense" if category_id == "project_expense" else "HR Expense",
+            "type": "expense",
+            "created_at": now.isoformat()
+        })
+    
+    # Create cashbook entry
+    cashbook_entry = {
+        "transaction_id": transaction_id,
+        "transaction_date": data.payment_date,
+        "transaction_type": "outflow",
+        "category_id": category_id,
+        "amount": incentive.get("amount", 0),
+        "mode": "bank_transfer",
+        "account_id": data.account_id,
+        "project_id": incentive.get("project_id"),
+        "paid_to": incentive.get("employee_name", "Employee"),
+        "remarks": data.notes or f"Incentive payout: {incentive.get('incentive_type_name')} - {incentive.get('employee_name')}",
+        "system_generated": True,
+        "source_module": "incentive",
+        "source_id": incentive_id,
+        "reference_type": "incentive_payout",
+        "reference_id": payment_id,
+        "is_cashbook_entry": True,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", "Unknown")
+    }
+    
+    # Check if day is locked
+    day_closing = await db.accounting_daily_closings.find_one({"date": data.payment_date, "is_locked": True})
+    if day_closing:
+        raise HTTPException(status_code=400, detail=f"Day {data.payment_date} is locked")
+    
+    await db.accounting_transactions.insert_one(cashbook_entry)
+    
+    # Update account balance
+    await db.accounting_accounts.update_one(
+        {"account_id": data.account_id},
+        {"$inc": {"current_balance": -incentive.get("amount", 0)}}
+    )
+    
+    # Update incentive record
+    await db.finance_incentives.update_one(
+        {"incentive_id": incentive_id},
+        {"$set": {
+            "status": "paid",
+            "payment_id": payment_id,
+            "transaction_id": transaction_id,
+            "paid_by": user.user_id,
+            "paid_by_name": user_doc.get("name", "Unknown"),
+            "paid_at": now,
+            "payment_date": data.payment_date,
+            "payment_account_id": data.account_id,
+            "payment_notes": data.notes,
+            "updated_at": now
+        }}
+    )
+    
+    return {
+        "success": True,
+        "payment_id": payment_id,
+        "transaction_id": transaction_id,
+        "amount": incentive.get("amount", 0)
+    }
+
+
+# ============ EXTERNAL COMMISSION MANAGEMENT ============
+
+@api_router.post("/finance/commissions")
+async def create_commission(data: CommissionRequest, request: Request):
+    """Create commission record for external parties (referrals, channel partners)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.commissions.create") and not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if data.commission_type not in COMMISSION_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid commission type. Must be one of: {list(COMMISSION_TYPES.keys())}")
+    
+    commission_info = COMMISSION_TYPES[data.commission_type]
+    
+    # Verify project if linked
+    project = None
+    if data.project_id:
+        project = await db.projects.find_one({"project_id": data.project_id})
+    
+    now = datetime.now(timezone.utc)
+    commission_id = f"com_{uuid.uuid4().hex[:12]}"
+    
+    # Calculate amount if percentage-based
+    final_amount = data.amount
+    if data.calculation_type == "percentage" and data.percentage_of:
+        final_amount = (data.percentage_of * data.amount) / 100
+    
+    commission_record = {
+        "commission_id": commission_id,
+        "recipient_type": data.recipient_type,
+        "recipient_id": data.recipient_id,
+        "recipient_name": data.recipient_name,
+        "recipient_contact": data.recipient_contact,
+        "commission_type": data.commission_type,
+        "commission_type_name": commission_info["name"],
+        "ledger_category": commission_info["ledger"],
+        "project_id": data.project_id,
+        "project_name": project.get("project_name") if project else None,
+        "calculation_type": data.calculation_type,
+        "percentage_of": data.percentage_of,
+        "calculated_amount": final_amount,
+        "amount": final_amount,
+        "notes": data.notes,
+        "status": "pending",  # pending, approved, paid, cancelled
+        "payment_id": None,
+        "transaction_id": None,
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", "Unknown"),
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.finance_commissions.insert_one(commission_record)
+    del commission_record["_id"]
+    
+    return {
+        "success": True,
+        "commission": commission_record
+    }
+
+
+@api_router.get("/finance/commissions")
+async def get_commissions(
+    request: Request,
+    project_id: Optional[str] = None,
+    status: Optional[str] = None,
+    commission_type: Optional[str] = None
+):
+    """Get commission records with filters"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.commissions.view") and not has_permission(user_doc, "finance.salaries.view_all"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if project_id:
+        query["project_id"] = project_id
+    if status:
+        query["status"] = status
+    if commission_type:
+        query["commission_type"] = commission_type
+    
+    commissions = await db.finance_commissions.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    
+    total_pending = sum(c.get("amount", 0) for c in commissions if c.get("status") == "pending")
+    total_paid = sum(c.get("amount", 0) for c in commissions if c.get("status") == "paid")
+    
+    return {
+        "commissions": commissions,
+        "summary": {
+            "total_pending": total_pending,
+            "total_paid": total_paid,
+            "total_count": len(commissions)
+        }
+    }
+
+
+@api_router.post("/finance/commissions/{commission_id}/payout")
+async def payout_commission(commission_id: str, data: CommissionPayoutRequest, request: Request):
+    """Process commission payout"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.commissions.pay") and not has_permission(user_doc, "finance.salaries.pay"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    commission = await db.finance_commissions.find_one({"commission_id": commission_id})
+    if not commission:
+        raise HTTPException(status_code=404, detail="Commission not found")
+    
+    if commission.get("status") == "paid":
+        raise HTTPException(status_code=400, detail="Commission already paid")
+    
+    # Verify account
+    account = await db.accounting_accounts.find_one({"account_id": data.account_id})
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    now = datetime.now(timezone.utc)
+    payment_id = f"comp_{uuid.uuid4().hex[:12]}"
+    transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
+    
+    # Determine category
+    category_id = "project_expense" if commission.get("project_id") else "business_development_expense"
+    
+    # Ensure category exists
+    category = await db.accounting_categories.find_one({"category_id": category_id})
+    if not category:
+        await db.accounting_categories.insert_one({
+            "category_id": category_id,
+            "name": "Business Development Expense" if category_id == "business_development_expense" else "Project Expense",
+            "type": "expense",
+            "created_at": now.isoformat()
+        })
+    
+    # Create cashbook entry
+    cashbook_entry = {
+        "transaction_id": transaction_id,
+        "transaction_date": data.payment_date,
+        "transaction_type": "outflow",
+        "category_id": category_id,
+        "amount": commission.get("amount", 0),
+        "mode": "bank_transfer",
+        "account_id": data.account_id,
+        "project_id": commission.get("project_id"),
+        "paid_to": commission.get("recipient_name", "Recipient"),
+        "remarks": data.notes or f"Commission payout: {commission.get('commission_type_name')} - {commission.get('recipient_name')}",
+        "system_generated": True,
+        "source_module": "commission",
+        "source_id": commission_id,
+        "reference_type": "commission_payout",
+        "reference_id": payment_id,
+        "is_cashbook_entry": True,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", "Unknown")
+    }
+    
+    # Check if day is locked
+    day_closing = await db.accounting_daily_closings.find_one({"date": data.payment_date, "is_locked": True})
+    if day_closing:
+        raise HTTPException(status_code=400, detail=f"Day {data.payment_date} is locked")
+    
+    await db.accounting_transactions.insert_one(cashbook_entry)
+    
+    # Update account balance
+    await db.accounting_accounts.update_one(
+        {"account_id": data.account_id},
+        {"$inc": {"current_balance": -commission.get("amount", 0)}}
+    )
+    
+    # Update commission record
+    await db.finance_commissions.update_one(
+        {"commission_id": commission_id},
+        {"$set": {
+            "status": "paid",
+            "payment_id": payment_id,
+            "transaction_id": transaction_id,
+            "paid_by": user.user_id,
+            "paid_by_name": user_doc.get("name", "Unknown"),
+            "paid_at": now,
+            "payment_date": data.payment_date,
+            "payment_account_id": data.account_id,
+            "payment_notes": data.notes,
+            "updated_at": now
+        }}
+    )
+    
+    return {
+        "success": True,
+        "payment_id": payment_id,
+        "transaction_id": transaction_id,
+        "amount": commission.get("amount", 0)
+    }
+
+
+# ============ UNIFIED EMPLOYEE EARNINGS VISIBILITY ============
+
+@api_router.get("/finance/employee-earnings/{employee_id}")
+async def get_employee_earnings(employee_id: str, request: Request, year: Optional[str] = None):
+    """
+    Get unified view of employee earnings:
+    - Fixed salary/stipend
+    - Incentives earned/paid/pending
+    - Deductions applied
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check if viewing own or all
+    can_view_all = has_permission(user_doc, "finance.salaries.view_all")
+    if employee_id != user.user_id and not can_view_all:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get employee details
+    employee = await db.users.find_one({"user_id": employee_id}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "employee_classification": 1})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    # Get salary master
+    salary_master = await db.finance_salary_master.find_one({"employee_id": employee_id}, {"_id": 0})
+    
+    # Build date filter
+    current_year = year or datetime.now().strftime("%Y")
+    year_start = f"{current_year}-01"
+    year_end = f"{current_year}-12"
+    
+    # Get salary cycles for the year
+    salary_cycles = await db.finance_salary_cycles.find({
+        "employee_id": employee_id,
+        "month_year": {"$gte": year_start, "$lte": year_end}
+    }, {"_id": 0}).sort("month_year", -1).to_list(12)
+    
+    # Get stipend payments
+    stipend_payments = await db.finance_stipend_payments.find({
+        "employee_id": employee_id,
+        "month_year": {"$gte": year_start, "$lte": year_end}
+    }, {"_id": 0}).to_list(100)
+    
+    # Get incentives
+    incentives = await db.finance_incentives.find({
+        "employee_id": employee_id
+    }, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Calculate totals
+    total_gross_salary = sum(c.get("gross_salary", c.get("monthly_salary", 0)) for c in salary_cycles)
+    total_deductions = sum(c.get("total_deductions", 0) for c in salary_cycles)
+    total_net_paid = sum(c.get("total_salary_paid", 0) + c.get("total_advances", 0) for c in salary_cycles)
+    total_stipends = sum(s.get("amount", 0) for s in stipend_payments)
+    
+    incentives_earned = sum(i.get("amount", 0) for i in incentives)
+    incentives_paid = sum(i.get("amount", 0) for i in incentives if i.get("status") == "paid")
+    incentives_pending = sum(i.get("amount", 0) for i in incentives if i.get("status") in ["pending", "approved"])
+    
+    return {
+        "employee": employee,
+        "classification": employee.get("employee_classification", "permanent"),
+        "salary_master": salary_master,
+        "year": current_year,
+        "earnings_summary": {
+            "total_gross_salary": total_gross_salary,
+            "total_deductions": total_deductions,
+            "total_net_paid": total_net_paid,
+            "total_stipends": total_stipends,
+            "incentives_earned": incentives_earned,
+            "incentives_paid": incentives_paid,
+            "incentives_pending": incentives_pending,
+            "total_earnings": total_net_paid + total_stipends + incentives_paid
+        },
+        "salary_cycles": salary_cycles,
+        "stipend_payments": stipend_payments,
+        "incentives": incentives
+    }
+
+
+@api_router.get("/finance/incentive-types")
+async def get_incentive_types(request: Request):
+    """Get available incentive types"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    return {
+        "incentive_types": INCENTIVE_TYPES,
+        "commission_types": COMMISSION_TYPES
+    }
+
+
 # ============ PROMOTION ELIGIBILITY & FLAGGING ============
 
 # Eligibility thresholds (configurable)

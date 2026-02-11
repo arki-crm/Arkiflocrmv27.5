@@ -642,6 +642,13 @@ export default function SpatialBOQCanvas() {
 
   // Handle mouse up
   const handleMouseUp = () => {
+    // End panning (Item #1)
+    if (isPanning) {
+      setIsPanning(false);
+      setPanStart(null);
+      return;
+    }
+
     if (isDrawing && tool === 'wall') {
       if (wallDrawMode === 'rectangle' || wallDrawMode === 'square') {
         // Create 4 walls for rectangle/square

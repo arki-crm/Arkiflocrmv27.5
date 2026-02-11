@@ -9,7 +9,31 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Financial Mapping Fix VERIFIED ✅
+## Current Status: Finance Widget Alignment VERIFIED ✅
+**As of February 11, 2026**
+
+### Latest Fixes: Revenue Baseline & Liability Calculation
+
+| Issue | Description | Fix | Status |
+|-------|-------------|-----|--------|
+| **Revenue Baseline Mismatch** | Financial Summary and Profit Visibility were pulling from different sources | Both widgets now use `signoff_value` as single baseline. `get_project_profit` updated to use signoff_value and exclude non-cashbook entries from actual_cost | ✅ VERIFIED |
+| **Remaining Liability Calculation** | Was incorrectly calculated as planned-actual | Now pulls from `finance_liabilities` collection (status: open OR partially_settled). Ensures no negative values | ✅ VERIFIED |
+
+**Correct Mapping Applied:**
+- Projected Profit = Sign-off Locked Value – Planned Cost
+- Realised Profit = Sign-off Collected Amount – Actual Cost
+- Execution Margin = Based only on Sign-off Locked Value
+- Remaining Liability = Sum of `amount_remaining` from open/partially_settled liabilities
+
+**Verification (iteration_54.json):** 13/13 tests passed
+- Both widgets use same `signoff_value` baseline ✅
+- `remaining_liability` from `finance_liabilities` collection ✅
+- Liability includes both `open` and `partially_settled` status ✅
+- No negative liability values ✅
+
+---
+
+## Previous Status: Financial Mapping Fix VERIFIED ✅
 **As of February 10, 2026**
 
 ### Latest Fix: Financial Value Mapping in Project Finance

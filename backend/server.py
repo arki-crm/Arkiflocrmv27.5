@@ -21564,9 +21564,18 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         ).to_list(100)
         planned_cost = sum(v.get("planned_amount", 0) for v in vendor_mappings)
         
-        # Get actual cost from cashbook (outflows linked to this project)
+        # Get actual cost from cashbook (EXCLUDE credit purchase daybook entries)
         actual_outflow_pipeline = [
-            {"$match": {"project_id": project_id, "transaction_type": "outflow"}},
+            {"$match": {
+                "project_id": project_id, 
+                "transaction_type": "outflow",
+                # Exclude non-cashbook entries
+                "$or": [
+                    {"is_cashbook_entry": {"$ne": False}},
+                    {"is_cashbook_entry": {"$exists": False}}
+                ],
+                "entry_type": {"$nin": ["purchase_invoice", "purchase_invoice_credit"]}
+            }},
             {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
         ]
         actual_result = await db.accounting_transactions.aggregate(actual_outflow_pipeline).to_list(1)
@@ -21580,6 +21589,15 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         inflow_result = await db.accounting_transactions.aggregate(inflow_pipeline).to_list(1)
         total_received = inflow_result[0]["total"] if inflow_result else 0
         
+        # Get actual remaining liability from finance_liabilities collection
+        # Include both "open" and "partially_settled" - real unpaid obligations
+        liability_pipeline = [
+            {"$match": {"project_id": project_id, "status": {"$in": ["open", "partially_settled"]}}},
+            {"$group": {"_id": None, "total": {"$sum": "$amount_remaining"}}}
+        ]
+        liability_result = await db.finance_liabilities.aggregate(liability_pipeline).to_list(1)
+        remaining_liability = max(0, liability_result[0]["total"] if liability_result else 0)
+        
         # Financial value lifecycle:
         # - presales_budget (project_value): Initial estimate from presales/lead
         # - booked_value: Value at booking/agreement (locked at first payment)
@@ -21589,7 +21607,6 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         signoff_value = p.get("signoff_value") or p.get("contract_value") or booked_value or presales_budget
         signoff_locked = p.get("signoff_locked", False)
         
-        remaining_liability = planned_cost - actual_cost
         safe_surplus = total_received - actual_cost
         
         result.append({
@@ -21610,7 +21627,7 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
             "total_received": total_received,
             "planned_cost": planned_cost,
             "actual_cost": actual_cost,
-            "remaining_liability": remaining_liability,
+            "remaining_liability": remaining_liability,  # From actual liabilities, not calculated
             "safe_surplus": safe_surplus,
             "has_overspend": actual_cost > planned_cost if planned_cost > 0 else False
         })

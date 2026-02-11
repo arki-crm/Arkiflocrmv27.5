@@ -1,0 +1,65 @@
+{
+  "summary": "Finance Widget Fixes Verified - All 13 backend tests passed. Both Financial Summary and Profit Visibility widgets now use signoff_value as baseline. Remaining liability correctly comes from finance_liabilities collection.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "test_01_login_works - Authentication working",
+    "test_02_project_profit_returns_signoff_value - proj_17942869 returns signoff_value=300000",
+    "test_03_project_finance_list_returns_signoff_value - List endpoint returns signoff_value",
+    "test_04_project_finance_detail_returns_signoff_value - Detail endpoint returns signoff_value in summary",
+    "test_05_both_widgets_use_same_signoff_value_baseline - Both widgets use signoff_value=300000",
+    "test_06_remaining_liability_from_collection - remaining_liability=150000 from finance_liabilities",
+    "test_07_remaining_liability_in_list_endpoint - List endpoint returns remaining_liability=150000",
+    "test_08_remaining_liability_never_negative - No negative liabilities found",
+    "test_09_profit_calculations_correct - Projected=120000, Realised=135000",
+    "test_10_proj_4aaba062_signoff_value - signoff_value=214000 verified",
+    "test_11_actual_cost_excludes_non_cashbook_entries - actual_cost consistent across endpoints",
+    "test_12_profit_response_has_all_required_fields - All 13 required fields present",
+    "test_13_liability_includes_open_and_partially_settled - Liability query verified"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_finance_widget_fixes.py",
+    "/app/test_reports/pytest/finance_widget_fixes_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_finance_widget_fixes.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "N/A (backend only testing requested)"
+  },
+  "test_credentials": {
+    "founder_login": {
+      "email": "sidheeq.arkidots@gmail.com",
+      "password": "founder123"
+    }
+  },
+  "seed_data_creation": "None - used existing test projects proj_17942869 and proj_4aaba062",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Finance widget fixes verified. Key changes: 1) Both Financial Summary and Profit Visibility use signoff_value as baseline, 2) remaining_liability comes from finance_liabilities collection (includes open and partially_settled status), 3) actual_cost excludes is_cashbook_entry=False entries. Test projects: proj_17942869 (signoff_value=300000, remaining_liability=150000), proj_4aaba062 (signoff_value=214000, signoff_locked=true).",
+  "verified_data": {
+    "proj_17942869": {
+      "signoff_value": 300000,
+      "remaining_liability": 150000,
+      "actual_cost": 30000,
+      "projected_profit": 120000,
+      "realised_profit": 135000
+    },
+    "proj_4aaba062": {
+      "signoff_value": 214000,
+      "signoff_locked": true,
+      "remaining_liability": 0,
+      "actual_cost": 40000
+    }
+  }
+}

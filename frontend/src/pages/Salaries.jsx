@@ -897,11 +897,16 @@ export default function Salaries() {
                               <p className="text-xs text-gray-500">{cycle.employee_role}</p>
                             </div>
                           </td>
-                          <td className="text-right py-3 px-4">{formatCurrency(cycle.monthly_salary)}</td>
-                          <td className="text-right py-3 px-4 text-amber-600">
-                            {cycle.total_advances > 0 ? formatCurrency(cycle.total_advances) : '-'}
+                          <td className="text-right py-3 px-4">{formatCurrency(cycle.gross_salary || cycle.monthly_salary)}</td>
+                          <td className="text-right py-3 px-4 text-red-600">
+                            {(cycle.total_deductions || 0) > 0 ? (
+                              <span title={cycle.deductions?.map(d => `${d.type_name}: ₹${d.amount}`).join('\n')}>
+                                -{formatCurrency(cycle.total_deductions)}
+                              </span>
+                            ) : '-'}
                           </td>
-                          <td className="text-right py-3 px-4 text-green-600">{formatCurrency(cycle.total_salary_paid)}</td>
+                          <td className="text-right py-3 px-4 font-medium">{formatCurrency(cycle.net_payable || cycle.monthly_salary)}</td>
+                          <td className="text-right py-3 px-4 text-green-600">{formatCurrency((cycle.total_salary_paid || 0) + (cycle.total_advances || 0))}</td>
                           <td className="text-right py-3 px-4 font-medium">
                             {cycle.balance_payable > 0 ? (
                               <span className="text-red-600">{formatCurrency(cycle.balance_payable)}</span>

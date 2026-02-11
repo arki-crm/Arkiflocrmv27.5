@@ -54,7 +54,10 @@ import {
   Wrench,
   Settings,
   Clock,
-  History
+  History,
+  Package,
+  Lock,
+  ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';

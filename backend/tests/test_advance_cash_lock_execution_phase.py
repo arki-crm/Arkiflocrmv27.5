@@ -284,13 +284,14 @@ class TestAdvanceCashLockExecutionPhase:
         
         data = response.json()
         
+        # Actual field names have _all suffix for aggregated totals
         required_top_level = [
             "default_lock_percentage",
             "monthly_operating_expense",
-            "total_received",
-            "total_locked",
-            "total_commitments",
-            "total_safe_to_use",
+            "total_received_all",
+            "total_locked_all",
+            "total_commitments_all",
+            "total_safe_all",
             "safe_use_warning",
             "safe_use_months",
             "projects"
@@ -301,9 +302,9 @@ class TestAdvanceCashLockExecutionPhase:
         
         print(f"\n✓ Bulk endpoint has all required top-level fields")
         print(f"  Default Lock %: {data.get('default_lock_percentage')}")
-        print(f"  Total Received (All Projects): {data.get('total_received')}")
-        print(f"  Total Locked: {data.get('total_locked')}")
-        print(f"  Total Safe to Use: {data.get('total_safe_to_use')}")
+        print(f"  Total Received (All Projects): {data.get('total_received_all')}")
+        print(f"  Total Locked: {data.get('total_locked_all')}")
+        print(f"  Total Safe to Use: {data.get('total_safe_all')}")
 
 
 if __name__ == "__main__":

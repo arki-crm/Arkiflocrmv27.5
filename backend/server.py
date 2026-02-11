@@ -30345,6 +30345,8 @@ async def create_incentive(data: IncentiveRequest, request: Request):
     Create incentive record for employee.
     - Booking incentive: Triggered on booking amount received
     - Execution incentive: Triggered on milestones (50% collection, completion, review)
+    - ENFORCED: Only internal employees (permanent, probation, trainee) can receive incentives
+    - Freelancers and Channel Partners should use Commission workflow instead
     """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
@@ -30363,6 +30365,19 @@ async def create_incentive(data: IncentiveRequest, request: Request):
     employee = await db.users.find_one({"user_id": data.employee_id})
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
+    
+    # ENFORCED: Classification-based eligibility for incentives
+    emp_classification = employee.get("employee_classification", "permanent")
+    if emp_classification not in INCENTIVE_ELIGIBLE_CLASSIFICATIONS:
+        classification_guidance = {
+            "freelancer": "Freelancers should receive payments via Commission workflow instead of Incentives.",
+            "channel_partner": "Channel Partners should receive payments via Commission workflow instead of Incentives."
+        }
+        guidance = classification_guidance.get(emp_classification, f"Classification '{emp_classification}' is not eligible for incentives.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Employee '{employee.get('name')}' is classified as '{emp_classification}'. {guidance}"
+        )
     
     # Verify project if project-linked
     project = None

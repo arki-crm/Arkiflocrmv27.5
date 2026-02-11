@@ -29811,6 +29811,21 @@ EMPLOYEE_CLASSIFICATIONS = [
     "channel_partner" # Channel Partner → Commission
 ]
 
+# Classification-based rules
+SALARY_ELIGIBLE_CLASSIFICATIONS = ["permanent", "probation"]  # Can receive salary payments
+STIPEND_ELIGIBLE_CLASSIFICATIONS = ["trainee"]  # Can receive stipend payments
+INCENTIVE_ELIGIBLE_CLASSIFICATIONS = ["permanent", "probation", "trainee"]  # Can receive internal incentives
+STATUTORY_EXEMPT_CLASSIFICATIONS = ["freelancer", "channel_partner", "trainee"]  # No PF/ESI/Professional Tax
+
+# Default statutory deductions for permanent employees (configurable)
+DEFAULT_STATUTORY_DEDUCTIONS = {
+    "permanent": ["pf", "esi", "professional_tax"],
+    "probation": ["pf", "esi"],  # Professional tax usually after confirmation
+    "trainee": [],
+    "freelancer": [],
+    "channel_partner": []
+}
+
 # Deduction Types with ledger mapping
 DEDUCTION_TYPES = {
     "leave": {"name": "Leave Deduction", "ledger_impact": "expense_reduction", "statutory": False},

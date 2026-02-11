@@ -6,17 +6,15 @@ import {
   ArrowLeft, Plus, Trash2, Save, Download, Grid,
   Square, ZoomIn, ZoomOut, MousePointer,
   Eye, Package, FileText, ChevronLeft, ChevronRight,
-  DoorOpen, PanelTop, Layers, Move, ArrowUp, ArrowDown,
-  ArrowLeftIcon, ArrowRightIcon
+  DoorOpen, PanelTop, Layers, Move, Maximize2, X,
+  RectangleHorizontal, SquareIcon, Pencil, GripVertical
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
+import { Card, CardContent } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Separator } from '../components/ui/separator';
 import {
@@ -31,8 +29,10 @@ const API = process.env.REACT_APP_BACKEND_URL;
 // Scale: pixels per mm
 const DEFAULT_SCALE = 0.15;
 const WALL_THICKNESS = 150;
-const SNAP_THRESHOLD = 20;
+const SNAP_THRESHOLD = 100; // mm - magnetic snap distance
+const CORNER_SNAP_THRESHOLD = 150; // mm - for corner joining
 const MOVE_STEP = 10; // mm per arrow key press
+const ENDPOINT_HANDLE_SIZE = 12; // pixels
 
 // Module colors
 const MODULE_COLORS = {
@@ -59,6 +59,41 @@ const CARCASS_MATERIALS = {
   mdf: { name: 'MDF', grade: 'Standard' }
 };
 
+// Carcass finish options (NEW - Item #8)
+const CARCASS_FINISHES = {
+  laminate: { name: 'Laminate', description: 'Standard laminate finish' },
+  pu_white: { name: 'PU White', description: 'White polyurethane paint' },
+  pu_color: { name: 'PU Colored', description: 'Colored polyurethane paint' },
+  melamine: { name: 'Melamine', description: 'Pre-laminated melamine' },
+  veneer: { name: 'Veneer', description: 'Natural wood veneer' },
+  raw: { name: 'Raw/Unfinished', description: 'No carcass finish' }
+};
+
+// Door types library (Item #5)
+const DOOR_TYPES = [
+  { id: 'single_swing', name: 'Single Swing', width: 900, height: 2100, icon: '🚪' },
+  { id: 'double_swing', name: 'Double Swing', width: 1500, height: 2100, icon: '🚪🚪' },
+  { id: 'sliding', name: 'Sliding Door', width: 1200, height: 2100, icon: '↔️' },
+  { id: 'pocket', name: 'Pocket Door', width: 900, height: 2100, icon: '📥' },
+  { id: 'french', name: 'French Door', width: 1800, height: 2100, icon: '🏠' }
+];
+
+// Window types library (Item #5)
+const WINDOW_TYPES = [
+  { id: 'standard', name: 'Standard Window', width: 1200, height: 1200, icon: '🪟' },
+  { id: 'large', name: 'Large Window', width: 1800, height: 1500, icon: '🪟' },
+  { id: 'small', name: 'Small Window', width: 600, height: 600, icon: '◽' },
+  { id: 'floor_ceiling', name: 'Floor to Ceiling', width: 1500, height: 2400, icon: '📐' },
+  { id: 'bay', name: 'Bay Window', width: 2000, height: 1200, icon: '🏠' }
+];
+
+// Wall drawing modes (Item #4)
+const WALL_DRAW_MODES = {
+  rectangle: { name: 'Rectangle Room', icon: RectangleHorizontal, desc: 'Drag to create 4 walls' },
+  square: { name: 'Square Room', icon: SquareIcon, desc: 'Create equal-sided room' },
+  free: { name: 'Free Line Draw', icon: Pencil, desc: 'Draw individual walls' }
+};
+
 export default function SpatialBOQCanvas() {
   const { id: projectId } = useParams();
   const navigate = useNavigate();
@@ -83,17 +118,28 @@ export default function SpatialBOQCanvas() {
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(true);
 
-  // Drawing state
+  // Wall drawing state
+  const [wallDrawMode, setWallDrawMode] = useState('free'); // rectangle, square, free
+  const [showWallModePanel, setShowWallModePanel] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
   const [tempWall, setTempWall] = useState(null);
+  const [tempRectWalls, setTempRectWalls] = useState(null);
 
-  // Drag state for modules
+  // Drag state for modules/walls/openings
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
+  const [dragType, setDragType] = useState(null); // 'module', 'wall', 'wall_endpoint', 'door', 'window'
+  const [dragEndpoint, setDragEndpoint] = useState(null); // 'start' or 'end' for wall endpoints
 
-  // Elevation view
-  const [showElevationView, setShowElevationView] = useState(false);
+  // Elevation view - full screen mode (Item #9)
+  const [showElevationModal, setShowElevationModal] = useState(false);
+
+  // Door/Window library panel (Item #5)
+  const [showDoorLibrary, setShowDoorLibrary] = useState(false);
+  const [showWindowLibrary, setShowWindowLibrary] = useState(false);
+  const [selectedDoorType, setSelectedDoorType] = useState(null);
+  const [selectedWindowType, setSelectedWindowType] = useState(null);
 
   // Modals
   const [showSummaryModal, setShowSummaryModal] = useState(false);
@@ -121,11 +167,9 @@ export default function SpatialBOQCanvas() {
         }
       }
 
-      // Arrow keys for module movement
-      if (selectedItem.type === 'module' && document.activeElement.tagName !== 'INPUT') {
-        const module = selectedItem.item;
+      // Arrow keys for movement (modules, doors, windows)
+      if (['module', 'door', 'window'].includes(selectedItem.type) && document.activeElement.tagName !== 'INPUT') {
         let dx = 0, dy = 0;
-
         switch (e.key) {
           case 'ArrowUp': dy = -MOVE_STEP; break;
           case 'ArrowDown': dy = MOVE_STEP; break;
@@ -133,24 +177,29 @@ export default function SpatialBOQCanvas() {
           case 'ArrowRight': dx = MOVE_STEP; break;
           default: return;
         }
-
         e.preventDefault();
-        updateModule(module.module_id, {
-          x: module.x + dx,
-          y: module.y + dy
-        });
+
+        if (selectedItem.type === 'module') {
+          const module = selectedItem.item;
+          const newX = module.x + dx;
+          const newY = module.y + dy;
+          const snapped = snapModuleToWall(newX, newY, module.width, module.depth);
+          updateModule(module.module_id, snapped);
+        } else {
+          // Door or window - move along wall
+          moveOpeningAlongWall(selectedItem, dx, dy);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItem]);
+  }, [selectedItem, layout]);
 
   // Fetch data
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-
       const [projectRes, libraryRes] = await Promise.all([
         axios.get(`${API}/api/projects/${projectId}`, { withCredentials: true }),
         axios.get(`${API}/api/spatial/module-library`, { withCredentials: true })
@@ -188,7 +237,6 @@ export default function SpatialBOQCanvas() {
           canvas_height: 4000
         });
       }
-
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to load data');
     } finally {
@@ -210,40 +258,133 @@ export default function SpatialBOQCanvas() {
     };
   };
 
+  // Find nearest corner from all walls for magnetic snap (Item #3)
+  const findNearestCorner = (x, y) => {
+    if (!layout?.walls?.length) return null;
+    let nearest = null;
+    let minDist = CORNER_SNAP_THRESHOLD;
+
+    for (const wall of layout.walls) {
+      // Check start point
+      const distStart = Math.sqrt(Math.pow(x - wall.start_x, 2) + Math.pow(y - wall.start_y, 2));
+      if (distStart < minDist) {
+        minDist = distStart;
+        nearest = { x: wall.start_x, y: wall.start_y };
+      }
+      // Check end point
+      const distEnd = Math.sqrt(Math.pow(x - wall.end_x, 2) + Math.pow(y - wall.end_y, 2));
+      if (distEnd < minDist) {
+        minDist = distEnd;
+        nearest = { x: wall.end_x, y: wall.end_y };
+      }
+    }
+    return nearest;
+  };
+
+  // Magnetic snap module to wall (Item #2 & #7)
+  const snapModuleToWall = (x, y, width, depth) => {
+    if (!layout?.walls?.length) return { x, y, wall_id: null };
+
+    let bestSnap = { x, y, wall_id: null, distance: Infinity };
+
+    for (const wall of layout.walls) {
+      const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+      
+      if (isHorizontal) {
+        // Horizontal wall - snap module Y to wall Y
+        const wallY = wall.start_y;
+        const distTop = Math.abs(y - wallY);
+        const distBottom = Math.abs((y + depth) - wallY);
+        
+        if (distTop < SNAP_THRESHOLD && distTop < bestSnap.distance) {
+          // Snap top of module to wall
+          bestSnap = { x, y: wallY, wall_id: wall.wall_id, distance: distTop };
+        }
+        if (distBottom < SNAP_THRESHOLD && distBottom < bestSnap.distance) {
+          // Snap bottom of module to wall
+          bestSnap = { x, y: wallY - depth, wall_id: wall.wall_id, distance: distBottom };
+        }
+      } else {
+        // Vertical wall - snap module X to wall X
+        const wallX = wall.start_x;
+        const distLeft = Math.abs(x - wallX);
+        const distRight = Math.abs((x + width) - wallX);
+        
+        if (distLeft < SNAP_THRESHOLD && distLeft < bestSnap.distance) {
+          bestSnap = { x: wallX, y, wall_id: wall.wall_id, distance: distLeft };
+        }
+        if (distRight < SNAP_THRESHOLD && distRight < bestSnap.distance) {
+          bestSnap = { x: wallX - width, y, wall_id: wall.wall_id, distance: distRight };
+        }
+      }
+    }
+
+    return { x: bestSnap.x, y: bestSnap.y, wall_id: bestSnap.wall_id };
+  };
+
   // Handle mouse down
   const handleMouseDown = (e) => {
     if (e.button !== 0) return;
-
     const canvas = screenToCanvas(e.clientX, e.clientY);
 
     if (tool === 'wall') {
+      // Check for wall endpoint click (for resizing)
+      const endpoint = findWallEndpointAt(canvas.x, canvas.y);
+      if (endpoint) {
+        setSelectedItem({ type: 'wall', item: endpoint.wall });
+        setIsDragging(true);
+        setDragType('wall_endpoint');
+        setDragEndpoint(endpoint.endpoint);
+        return;
+      }
+
+      // Start drawing wall
       setIsDrawing(true);
-      setDrawStart(canvas);
-      setTempWall({ start: canvas, end: canvas });
-    } else if (tool === 'door' || tool === 'window') {
-      addOpening(canvas.x, canvas.y, tool);
+      // Snap to nearest corner if close (Item #3)
+      const snappedStart = findNearestCorner(canvas.x, canvas.y) || canvas;
+      setDrawStart(snappedStart);
+      
+      if (wallDrawMode === 'rectangle' || wallDrawMode === 'square') {
+        setTempRectWalls({ start: snappedStart, end: snappedStart });
+      } else {
+        setTempWall({ start: snappedStart, end: snappedStart });
+      }
+    } else if (tool === 'door' && selectedDoorType) {
+      addOpening(canvas.x, canvas.y, 'door', selectedDoorType);
+    } else if (tool === 'window' && selectedWindowType) {
+      addOpening(canvas.x, canvas.y, 'window', selectedWindowType);
     } else if (tool === 'module' && selectedModuleType) {
       addModule(canvas.x, canvas.y);
     } else if (tool === 'select') {
-      const clickedModule = findModuleAt(canvas.x, canvas.y);
+      // Check for wall click first (for dragging)
       const clickedWall = findWallAt(canvas.x, canvas.y);
+      const clickedModule = findModuleAt(canvas.x, canvas.y);
       const clickedDoor = findDoorAt(canvas.x, canvas.y);
       const clickedWindow = findWindowAt(canvas.x, canvas.y);
 
       if (clickedModule) {
         setSelectedItem({ type: 'module', item: clickedModule });
         setIsDragging(true);
+        setDragType('module');
         setDragStart({ x: canvas.x - clickedModule.x, y: canvas.y - clickedModule.y });
       } else if (clickedDoor) {
         setSelectedItem({ type: 'door', item: clickedDoor });
+        setIsDragging(true);
+        setDragType('door');
+        setDragStart({ x: canvas.x - clickedDoor.x, y: canvas.y - clickedDoor.y });
       } else if (clickedWindow) {
         setSelectedItem({ type: 'window', item: clickedWindow });
+        setIsDragging(true);
+        setDragType('window');
+        setDragStart({ x: canvas.x - clickedWindow.x, y: canvas.y - clickedWindow.y });
       } else if (clickedWall) {
         setSelectedItem({ type: 'wall', item: clickedWall });
-        setShowElevationView(true);
+        setIsDragging(true);
+        setDragType('wall');
+        setDragStart({ x: canvas.x, y: canvas.y, wall_start_x: clickedWall.start_x, wall_start_y: clickedWall.start_y, wall_end_x: clickedWall.end_x, wall_end_y: clickedWall.end_y });
       } else {
         setSelectedItem(null);
-        setShowElevationView(false);
+        setShowElevationModal(false);
       }
     }
   };
@@ -254,70 +395,220 @@ export default function SpatialBOQCanvas() {
 
     // Drawing wall
     if (isDrawing && tool === 'wall') {
-      const dx = Math.abs(canvas.x - drawStart.x);
-      const dy = Math.abs(canvas.y - drawStart.y);
+      // Snap end point to nearest corner if close
+      let endPoint = findNearestCorner(canvas.x, canvas.y) || canvas;
 
-      let endPoint;
-      if (dx > dy) {
-        endPoint = { x: canvas.x, y: drawStart.y };
+      if (wallDrawMode === 'rectangle') {
+        setTempRectWalls({ start: drawStart, end: endPoint });
+      } else if (wallDrawMode === 'square') {
+        // Make it square
+        const size = Math.max(Math.abs(endPoint.x - drawStart.x), Math.abs(endPoint.y - drawStart.y));
+        const signX = endPoint.x > drawStart.x ? 1 : -1;
+        const signY = endPoint.y > drawStart.y ? 1 : -1;
+        endPoint = { x: drawStart.x + size * signX, y: drawStart.y + size * signY };
+        setTempRectWalls({ start: drawStart, end: endPoint });
       } else {
-        endPoint = { x: drawStart.x, y: canvas.y };
+        // Free line - constrain to horizontal/vertical
+        const dx = Math.abs(endPoint.x - drawStart.x);
+        const dy = Math.abs(endPoint.y - drawStart.y);
+        if (dx > dy) {
+          endPoint = { x: endPoint.x, y: drawStart.y };
+        } else {
+          endPoint = { x: drawStart.x, y: endPoint.y };
+        }
+        const length = Math.sqrt(Math.pow(endPoint.x - drawStart.x, 2) + Math.pow(endPoint.y - drawStart.y, 2));
+        setTempWall({ start: drawStart, end: endPoint, length: Math.round(length) });
       }
+    }
 
-      const length = Math.sqrt(
-        Math.pow(endPoint.x - drawStart.x, 2) +
-        Math.pow(endPoint.y - drawStart.y, 2)
-      );
+    // Dragging wall endpoint (Item #1)
+    if (isDragging && dragType === 'wall_endpoint' && selectedItem?.type === 'wall') {
+      const wall = selectedItem.item;
+      const snapped = findNearestCorner(canvas.x, canvas.y);
+      const newPos = snapped || canvas;
+      
+      if (dragEndpoint === 'start') {
+        updateWallPosition(wall.wall_id, { start_x: newPos.x, start_y: newPos.y });
+      } else {
+        updateWallPosition(wall.wall_id, { end_x: newPos.x, end_y: newPos.y });
+      }
+    }
 
-      setTempWall({
-        start: drawStart,
-        end: endPoint,
-        length: Math.round(length)
+    // Dragging entire wall (Item #1)
+    if (isDragging && dragType === 'wall' && selectedItem?.type === 'wall') {
+      const wall = selectedItem.item;
+      const dx = canvas.x - dragStart.x;
+      const dy = canvas.y - dragStart.y;
+      updateWallPosition(wall.wall_id, {
+        start_x: dragStart.wall_start_x + dx,
+        start_y: dragStart.wall_start_y + dy,
+        end_x: dragStart.wall_end_x + dx,
+        end_y: dragStart.wall_end_y + dy
       });
     }
 
-    // Dragging module
-    if (isDragging && selectedItem?.type === 'module') {
+    // Dragging module with magnetic snap (Item #2)
+    if (isDragging && dragType === 'module' && selectedItem?.type === 'module') {
+      const module = selectedItem.item;
       const newX = canvas.x - dragStart.x;
       const newY = canvas.y - dragStart.y;
-      updateModule(selectedItem.item.module_id, { x: Math.round(newX), y: Math.round(newY) });
+      const snapped = snapModuleToWall(newX, newY, module.width, module.depth);
+      updateModule(module.module_id, snapped);
+    }
+
+    // Dragging door (Item #6)
+    if (isDragging && dragType === 'door' && selectedItem?.type === 'door') {
+      const door = selectedItem.item;
+      const newX = canvas.x - dragStart.x;
+      const newY = canvas.y - dragStart.y;
+      // Find nearest wall and snap to it
+      const nearestWall = findNearestWall(newX + door.width / 2, newY + door.depth / 2);
+      if (nearestWall) {
+        const snappedPos = snapOpeningToWall(newX, newY, door.width, door.depth, nearestWall);
+        updateOpening('door', door.door_id, { x: snappedPos.x, y: snappedPos.y, wall_id: nearestWall.wall_id });
+      } else {
+        updateOpening('door', door.door_id, { x: Math.round(newX), y: Math.round(newY) });
+      }
+    }
+
+    // Dragging window (Item #6)
+    if (isDragging && dragType === 'window' && selectedItem?.type === 'window') {
+      const win = selectedItem.item;
+      const newX = canvas.x - dragStart.x;
+      const newY = canvas.y - dragStart.y;
+      const nearestWall = findNearestWall(newX + win.width / 2, newY + win.depth / 2);
+      if (nearestWall) {
+        const snappedPos = snapOpeningToWall(newX, newY, win.width, win.depth, nearestWall);
+        updateOpening('window', win.window_id, { x: snappedPos.x, y: snappedPos.y, wall_id: nearestWall.wall_id });
+      } else {
+        updateOpening('window', win.window_id, { x: Math.round(newX), y: Math.round(newY) });
+      }
+    }
+  };
+
+  // Snap opening to wall
+  const snapOpeningToWall = (x, y, width, depth, wall) => {
+    const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+    if (isHorizontal) {
+      // Constrain X to wall bounds
+      const minX = Math.min(wall.start_x, wall.end_x);
+      const maxX = Math.max(wall.start_x, wall.end_x) - width;
+      return {
+        x: Math.max(minX, Math.min(maxX, x)),
+        y: wall.start_y - depth / 2
+      };
+    } else {
+      const minY = Math.min(wall.start_y, wall.end_y);
+      const maxY = Math.max(wall.start_y, wall.end_y) - depth;
+      return {
+        x: wall.start_x - width / 2,
+        y: Math.max(minY, Math.min(maxY, y))
+      };
+    }
+  };
+
+  // Move opening along wall (Item #6)
+  const moveOpeningAlongWall = (item, dx, dy) => {
+    const opening = item.item;
+    const key = item.type === 'door' ? 'door_id' : 'window_id';
+    const id = opening[key];
+    
+    // Find attached wall
+    const wall = layout?.walls?.find(w => w.wall_id === opening.wall_id);
+    if (wall) {
+      const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+      let newX = opening.x + (isHorizontal ? dx : 0);
+      let newY = opening.y + (isHorizontal ? 0 : dy);
+      
+      // Constrain to wall
+      if (isHorizontal) {
+        const minX = Math.min(wall.start_x, wall.end_x);
+        const maxX = Math.max(wall.start_x, wall.end_x) - opening.width;
+        newX = Math.max(minX, Math.min(maxX, newX));
+      } else {
+        const minY = Math.min(wall.start_y, wall.end_y);
+        const maxY = Math.max(wall.start_y, wall.end_y) - opening.height;
+        newY = Math.max(minY, Math.min(maxY, newY));
+      }
+      
+      updateOpening(item.type, id, { x: newX, y: newY });
+    } else {
+      updateOpening(item.type, id, { x: opening.x + dx, y: opening.y + dy });
     }
   };
 
   // Handle mouse up
   const handleMouseUp = () => {
-    if (isDrawing && tool === 'wall' && tempWall && tempWall.length > 100) {
-      const newWall = {
-        wall_id: `wall_${Date.now().toString(36)}`,
-        start_x: tempWall.start.x,
-        start_y: tempWall.start.y,
-        end_x: tempWall.end.x,
-        end_y: tempWall.end.y,
-        length: tempWall.length,
-        thickness: WALL_THICKNESS,
-        doors: [],
-        windows: []
-      };
-
-      setLayout(prev => ({
-        ...prev,
-        walls: [...prev.walls, newWall]
-      }));
-      setHasChanges(true);
+    if (isDrawing && tool === 'wall') {
+      if (wallDrawMode === 'rectangle' || wallDrawMode === 'square') {
+        // Create 4 walls for rectangle/square
+        if (tempRectWalls) {
+          const { start, end } = tempRectWalls;
+          const minLen = Math.min(Math.abs(end.x - start.x), Math.abs(end.y - start.y));
+          if (minLen > 100) {
+            const walls = [
+              createWall(start.x, start.y, end.x, start.y), // Top
+              createWall(end.x, start.y, end.x, end.y),     // Right
+              createWall(end.x, end.y, start.x, end.y),     // Bottom
+              createWall(start.x, end.y, start.x, start.y)  // Left
+            ];
+            setLayout(prev => ({ ...prev, walls: [...prev.walls, ...walls] }));
+            setHasChanges(true);
+          }
+        }
+      } else if (tempWall && tempWall.length > 100) {
+        const newWall = createWall(tempWall.start.x, tempWall.start.y, tempWall.end.x, tempWall.end.y);
+        setLayout(prev => ({ ...prev, walls: [...prev.walls, newWall] }));
+        setHasChanges(true);
+      }
     }
 
     setIsDrawing(false);
     setTempWall(null);
+    setTempRectWalls(null);
     setIsDragging(false);
     setDragStart(null);
+    setDragType(null);
+    setDragEndpoint(null);
+  };
+
+  // Create wall helper
+  const createWall = (startX, startY, endX, endY) => {
+    const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+    return {
+      wall_id: `wall_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 4)}`,
+      start_x: startX,
+      start_y: startY,
+      end_x: endX,
+      end_y: endY,
+      length: Math.round(length),
+      thickness: WALL_THICKNESS
+    };
+  };
+
+  // Find wall endpoint at position (for resizing)
+  const findWallEndpointAt = (x, y) => {
+    if (!layout?.walls) return null;
+    const threshold = ENDPOINT_HANDLE_SIZE / scale;
+    
+    for (const wall of layout.walls) {
+      const distStart = Math.sqrt(Math.pow(x - wall.start_x, 2) + Math.pow(y - wall.start_y, 2));
+      if (distStart < threshold) {
+        return { wall, endpoint: 'start' };
+      }
+      const distEnd = Math.sqrt(Math.pow(x - wall.end_x, 2) + Math.pow(y - wall.end_y, 2));
+      if (distEnd < threshold) {
+        return { wall, endpoint: 'end' };
+      }
+    }
+    return null;
   };
 
   // Find module at position
   const findModuleAt = (x, y) => {
     if (!layout?.modules) return null;
     return layout.modules.find(m => {
-      return x >= m.x && x <= m.x + m.width &&
-             y >= m.y && y <= m.y + m.depth;
+      return x >= m.x && x <= m.x + m.width && y >= m.y && y <= m.y + m.depth;
     });
   };
 
@@ -325,10 +616,10 @@ export default function SpatialBOQCanvas() {
   const findWallAt = (x, y) => {
     if (!layout?.walls) return null;
     return layout.walls.find(w => {
-      const minX = Math.min(w.start_x, w.end_x) - 50;
-      const maxX = Math.max(w.start_x, w.end_x) + 50;
-      const minY = Math.min(w.start_y, w.end_y) - 50;
-      const maxY = Math.max(w.start_y, w.end_y) + 50;
+      const minX = Math.min(w.start_x, w.end_x) - WALL_THICKNESS / 2;
+      const maxX = Math.max(w.start_x, w.end_x) + WALL_THICKNESS / 2;
+      const minY = Math.min(w.start_y, w.end_y) - WALL_THICKNESS / 2;
+      const maxY = Math.max(w.start_y, w.end_y) + WALL_THICKNESS / 2;
       return x >= minX && x <= maxX && y >= minY && y <= maxY;
     });
   };
@@ -337,8 +628,7 @@ export default function SpatialBOQCanvas() {
   const findDoorAt = (x, y) => {
     if (!layout?.doors) return null;
     return layout.doors.find(d => {
-      return x >= d.x && x <= d.x + d.width &&
-             y >= d.y && y <= d.y + d.depth;
+      return x >= d.x && x <= d.x + d.width && y >= d.y && y <= d.y + d.depth;
     });
   };
 
@@ -346,68 +636,8 @@ export default function SpatialBOQCanvas() {
   const findWindowAt = (x, y) => {
     if (!layout?.windows) return null;
     return layout.windows.find(w => {
-      return x >= w.x && x <= w.x + w.width &&
-             y >= w.y && y <= w.y + w.depth;
+      return x >= w.x && x <= w.x + w.width && y >= w.y && y <= w.y + w.depth;
     });
-  };
-
-  // Add module
-  const addModule = (x, y) => {
-    if (!selectedModuleType || !moduleLibrary.module_types) return;
-
-    const moduleType = moduleLibrary.module_types[selectedModuleType];
-    if (!moduleType) return;
-
-    const newModule = {
-      module_id: `mod_${Date.now().toString(36)}`,
-      module_type: selectedModuleType,
-      wall_id: null,
-      position_on_wall: 0,
-      x: Math.round(x),
-      y: Math.round(y),
-      width: moduleType.default_width,
-      height: moduleType.default_height,
-      depth: moduleType.default_depth,
-      rotation: 0,
-      finish_type: 'laminate',
-      shutter_type: 'flat',
-      carcass_material: 'plywood_710',
-      custom_name: null,
-      notes: null
-    };
-
-    setLayout(prev => ({
-      ...prev,
-      modules: [...prev.modules, newModule]
-    }));
-    setHasChanges(true);
-    setSelectedItem({ type: 'module', item: newModule });
-  };
-
-  // Add door or window opening
-  const addOpening = (x, y, type) => {
-    const nearestWall = findNearestWall(x, y);
-    if (!nearestWall) {
-      toast.error('Place openings on a wall');
-      return;
-    }
-
-    const opening = {
-      [`${type}_id`]: `${type}_${Date.now().toString(36)}`,
-      wall_id: nearestWall.wall_id,
-      x: Math.round(x),
-      y: Math.round(y),
-      width: type === 'door' ? 900 : 1200,
-      height: type === 'door' ? 2100 : 1200,
-      depth: WALL_THICKNESS
-    };
-
-    const key = type === 'door' ? 'doors' : 'windows';
-    setLayout(prev => ({
-      ...prev,
-      [key]: [...(prev[key] || []), opening]
-    }));
-    setHasChanges(true);
   };
 
   // Find nearest wall
@@ -418,7 +648,7 @@ export default function SpatialBOQCanvas() {
 
     for (const wall of layout.walls) {
       const dist = distanceToWall(x, y, wall);
-      if (dist < minDist && dist < 200) {
+      if (dist < minDist && dist < 300) {
         minDist = dist;
         nearest = wall;
       }
@@ -433,42 +663,124 @@ export default function SpatialBOQCanvas() {
     const length = Math.sqrt(dx * dx + dy * dy);
     if (length === 0) return Infinity;
 
-    const t = Math.max(0, Math.min(1,
-      ((x - wall.start_x) * dx + (y - wall.start_y) * dy) / (length * length)
-    ));
-
+    const t = Math.max(0, Math.min(1, ((x - wall.start_x) * dx + (y - wall.start_y) * dy) / (length * length)));
     const nearestX = wall.start_x + t * dx;
     const nearestY = wall.start_y + t * dy;
 
     return Math.sqrt((x - nearestX) ** 2 + (y - nearestY) ** 2);
   };
 
+  // Add module with wall snap (Item #7)
+  const addModule = (x, y) => {
+    if (!selectedModuleType || !moduleLibrary.module_types) return;
+
+    const moduleType = moduleLibrary.module_types[selectedModuleType];
+    if (!moduleType) return;
+
+    // Snap to nearest wall
+    const snapped = snapModuleToWall(x, y, moduleType.default_width, moduleType.default_depth);
+
+    const newModule = {
+      module_id: `mod_${Date.now().toString(36)}`,
+      module_type: selectedModuleType,
+      wall_id: snapped.wall_id,
+      position_on_wall: 0,
+      x: Math.round(snapped.x),
+      y: Math.round(snapped.y),
+      width: moduleType.default_width,
+      height: moduleType.default_height,
+      depth: moduleType.default_depth,
+      rotation: 0,
+      finish_type: 'laminate',
+      shutter_type: 'flat',
+      carcass_material: 'plywood_710',
+      carcass_finish: 'laminate', // NEW (Item #8)
+      custom_name: null,
+      notes: null
+    };
+
+    setLayout(prev => ({ ...prev, modules: [...prev.modules, newModule] }));
+    setHasChanges(true);
+    setSelectedItem({ type: 'module', item: newModule });
+  };
+
+  // Add door or window with type selection (Item #5)
+  const addOpening = (x, y, type, typeInfo) => {
+    const nearestWall = findNearestWall(x, y);
+    if (!nearestWall) {
+      toast.error('Place openings near a wall');
+      return;
+    }
+
+    const snappedPos = snapOpeningToWall(x, y, typeInfo.width, WALL_THICKNESS, nearestWall);
+
+    const opening = {
+      [`${type}_id`]: `${type}_${Date.now().toString(36)}`,
+      type_id: typeInfo.id,
+      type_name: typeInfo.name,
+      wall_id: nearestWall.wall_id,
+      x: Math.round(snappedPos.x),
+      y: Math.round(snappedPos.y),
+      width: typeInfo.width,
+      height: typeInfo.height,
+      depth: WALL_THICKNESS
+    };
+
+    const key = type === 'door' ? 'doors' : 'windows';
+    setLayout(prev => ({ ...prev, [key]: [...(prev[key] || []), opening] }));
+    setHasChanges(true);
+    setSelectedItem({ type, item: opening });
+  };
+
   // Update module
   const updateModule = (moduleId, updates) => {
     setLayout(prev => ({
       ...prev,
-      modules: prev.modules.map(m =>
-        m.module_id === moduleId ? { ...m, ...updates } : m
-      )
+      modules: prev.modules.map(m => m.module_id === moduleId ? { ...m, ...updates } : m)
     }));
     setHasChanges(true);
 
     if (selectedItem?.item?.module_id === moduleId) {
-      setSelectedItem(prev => ({
-        ...prev,
-        item: { ...prev.item, ...updates }
-      }));
+      setSelectedItem(prev => ({ ...prev, item: { ...prev.item, ...updates } }));
     }
   };
 
-  // Update wall
+  // Update wall position (Item #1)
+  const updateWallPosition = (wallId, updates) => {
+    setLayout(prev => ({
+      ...prev,
+      walls: prev.walls.map(w => {
+        if (w.wall_id !== wallId) return w;
+        const updated = { ...w, ...updates };
+        // Recalculate length
+        updated.length = Math.round(Math.sqrt(
+          Math.pow(updated.end_x - updated.start_x, 2) +
+          Math.pow(updated.end_y - updated.start_y, 2)
+        ));
+        return updated;
+      })
+    }));
+    setHasChanges(true);
+
+    if (selectedItem?.item?.wall_id === wallId) {
+      setSelectedItem(prev => {
+        const updated = { ...prev.item, ...updates };
+        updated.length = Math.round(Math.sqrt(
+          Math.pow(updated.end_x - updated.start_x, 2) +
+          Math.pow(updated.end_y - updated.start_y, 2)
+        ));
+        return { ...prev, item: updated };
+      });
+    }
+  };
+
+  // Update wall (legacy - for length edits)
   const updateWall = (wallId, updates) => {
     setLayout(prev => ({
       ...prev,
       walls: prev.walls.map(w => {
         if (w.wall_id !== wallId) return w;
         const updated = { ...w, ...updates };
-        // Recalculate end point based on new length
         if (updates.length !== undefined) {
           const dx = w.end_x - w.start_x;
           const dy = w.end_y - w.start_y;
@@ -485,10 +797,23 @@ export default function SpatialBOQCanvas() {
     setHasChanges(true);
 
     if (selectedItem?.item?.wall_id === wallId) {
-      setSelectedItem(prev => ({
-        ...prev,
-        item: { ...prev.item, ...updates }
-      }));
+      setSelectedItem(prev => ({ ...prev, item: { ...prev.item, ...updates } }));
+    }
+  };
+
+  // Update opening (door/window)
+  const updateOpening = (type, id, updates) => {
+    const key = type === 'door' ? 'doors' : 'windows';
+    const idKey = type === 'door' ? 'door_id' : 'window_id';
+    
+    setLayout(prev => ({
+      ...prev,
+      [key]: prev[key].map(item => item[idKey] === id ? { ...item, ...updates } : item)
+    }));
+    setHasChanges(true);
+
+    if (selectedItem?.item?.[idKey] === id) {
+      setSelectedItem(prev => ({ ...prev, item: { ...prev.item, ...updates } }));
     }
   };
 
@@ -519,7 +844,7 @@ export default function SpatialBOQCanvas() {
     }
 
     setSelectedItem(null);
-    setShowElevationView(false);
+    setShowElevationModal(false);
     setHasChanges(true);
   };
 
@@ -529,11 +854,12 @@ export default function SpatialBOQCanvas() {
 
     try {
       setSaving(true);
-
       const payload = {
         room_name: roomName,
         walls: layout.walls,
         modules: layout.modules,
+        doors: layout.doors,
+        windows: layout.windows,
         canvas_width: layout.canvas_width || 5000,
         canvas_height: layout.canvas_height || 4000,
         scale: scale
@@ -660,6 +986,12 @@ export default function SpatialBOQCanvas() {
     }).format(amount || 0);
   };
 
+  // Get modules on selected wall for elevation view (Item #7 fix)
+  const getModulesOnWall = (wallId) => {
+    if (!layout?.modules || !wallId) return [];
+    return layout.modules.filter(m => m.wall_id === wallId);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center">
@@ -671,7 +1003,7 @@ export default function SpatialBOQCanvas() {
   return (
     <TooltipProvider>
       <div className="h-screen flex flex-col bg-slate-100 overflow-hidden">
-        {/* Header with Live Pricing */}
+        {/* Header */}
         <div className="bg-white border-b px-4 py-2 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${projectId}`)}>
@@ -683,13 +1015,11 @@ export default function SpatialBOQCanvas() {
                 <Grid className="h-5 w-5" />
                 Composer
               </h1>
-              <p className="text-sm text-slate-500">
-                {project?.project_name} • {roomName}
-              </p>
+              <p className="text-sm text-slate-500">{project?.project_name} • {roomName}</p>
             </div>
           </div>
 
-          {/* Live Pricing Summary - Always visible in header */}
+          {/* Live Pricing Summary */}
           {summary && (
             <div className="flex items-center gap-4 bg-slate-50 rounded-lg px-4 py-2">
               <div className="text-center">
@@ -760,13 +1090,17 @@ export default function SpatialBOQCanvas() {
               <TooltipContent side="right">Select (V)</TooltipContent>
             </Tooltip>
 
+            {/* Wall tool with mode selector (Item #4) */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant={tool === 'wall' ? 'secondary' : 'ghost'}
                   size="sm"
                   className="w-9 h-9 p-0"
-                  onClick={() => setTool('wall')}
+                  onClick={() => {
+                    setTool('wall');
+                    setShowWallModePanel(true);
+                  }}
                 >
                   <Square className="h-4 w-4" />
                 </Button>
@@ -774,13 +1108,17 @@ export default function SpatialBOQCanvas() {
               <TooltipContent side="right">Draw Wall (W)</TooltipContent>
             </Tooltip>
 
+            {/* Door tool with library (Item #5) */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant={tool === 'door' ? 'secondary' : 'ghost'}
                   size="sm"
                   className="w-9 h-9 p-0"
-                  onClick={() => setTool('door')}
+                  onClick={() => {
+                    setTool('door');
+                    setShowDoorLibrary(true);
+                  }}
                 >
                   <DoorOpen className="h-4 w-4" />
                 </Button>
@@ -788,13 +1126,17 @@ export default function SpatialBOQCanvas() {
               <TooltipContent side="right">Add Door (D)</TooltipContent>
             </Tooltip>
 
+            {/* Window tool with library (Item #5) */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant={tool === 'window' ? 'secondary' : 'ghost'}
                   size="sm"
                   className="w-9 h-9 p-0"
-                  onClick={() => setTool('window')}
+                  onClick={() => {
+                    setTool('window');
+                    setShowWindowLibrary(true);
+                  }}
                 >
                   <PanelTop className="h-4 w-4" />
                 </Button>
@@ -849,6 +1191,93 @@ export default function SpatialBOQCanvas() {
               </Tooltip>
             )}
           </div>
+
+          {/* Wall Drawing Options Panel (Item #4) */}
+          {showWallModePanel && tool === 'wall' && (
+            <div className="w-44 bg-white border-r p-2 shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-medium">Draw Mode</h4>
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => setShowWallModePanel(false)}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="space-y-1">
+                {Object.entries(WALL_DRAW_MODES).map(([key, mode]) => (
+                  <button
+                    key={key}
+                    onClick={() => setWallDrawMode(key)}
+                    className={`w-full text-left p-2 rounded text-xs transition-colors ${
+                      wallDrawMode === key ? 'bg-blue-100 border-blue-300 border' : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <mode.icon className="h-4 w-4" />
+                      <span className="font-medium">{mode.name}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5 ml-6">{mode.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Door Library Panel (Item #5) */}
+          {showDoorLibrary && tool === 'door' && (
+            <div className="w-44 bg-white border-r p-2 shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-medium">Door Types</h4>
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => setShowDoorLibrary(false)}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="space-y-1">
+                {DOOR_TYPES.map((door) => (
+                  <button
+                    key={door.id}
+                    onClick={() => setSelectedDoorType(door)}
+                    className={`w-full text-left p-2 rounded text-xs transition-colors ${
+                      selectedDoorType?.id === door.id ? 'bg-amber-100 border-amber-300 border' : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{door.icon}</span>
+                      <span className="font-medium">{door.name}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5 ml-7">{door.width}×{door.height}mm</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Window Library Panel (Item #5) */}
+          {showWindowLibrary && tool === 'window' && (
+            <div className="w-44 bg-white border-r p-2 shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-medium">Window Types</h4>
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => setShowWindowLibrary(false)}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="space-y-1">
+                {WINDOW_TYPES.map((win) => (
+                  <button
+                    key={win.id}
+                    onClick={() => setSelectedWindowType(win)}
+                    className={`w-full text-left p-2 rounded text-xs transition-colors ${
+                      selectedWindowType?.id === win.id ? 'bg-cyan-100 border-cyan-300 border' : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{win.icon}</span>
+                      <span className="font-medium">{win.name}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5 ml-7">{win.width}×{win.height}mm</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Collapsible Module Library Panel */}
           <div className={`bg-white border-r shrink-0 flex flex-col transition-all duration-200 ${leftPanelCollapsed ? 'w-0 overflow-hidden' : 'w-52'}`}>
@@ -908,7 +1337,7 @@ export default function SpatialBOQCanvas() {
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
-              style={{ cursor: tool === 'wall' ? 'crosshair' : tool === 'module' ? 'copy' : isDragging ? 'grabbing' : 'default' }}
+              style={{ cursor: tool === 'wall' ? 'crosshair' : tool === 'module' ? 'copy' : tool === 'door' || tool === 'window' ? 'crosshair' : isDragging ? 'grabbing' : 'default' }}
             >
               {/* Grid */}
               <defs>
@@ -923,7 +1352,7 @@ export default function SpatialBOQCanvas() {
               <rect width="100%" height="100%" fill="url(#grid)" />
 
               <g transform={`translate(${panOffset.x}, ${panOffset.y})`}>
-                {/* Walls */}
+                {/* Walls - Sharp corners (Item #10) */}
                 {layout?.walls?.map(wall => {
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
                   return (
@@ -935,11 +1364,13 @@ export default function SpatialBOQCanvas() {
                         y2={wall.end_y * scale}
                         stroke={isSelected ? '#3b82f6' : '#374151'}
                         strokeWidth={wall.thickness * scale}
-                        strokeLinecap="round"
+                        strokeLinecap="square"
+                        style={{ cursor: 'move' }}
                       />
+                      {/* Dimension label */}
                       <text
                         x={(wall.start_x + wall.end_x) / 2 * scale}
-                        y={(wall.start_y + wall.end_y) / 2 * scale - 10}
+                        y={(wall.start_y + wall.end_y) / 2 * scale - 12}
                         fontSize="10"
                         fill="#374151"
                         textAnchor="middle"
@@ -947,11 +1378,34 @@ export default function SpatialBOQCanvas() {
                       >
                         {wall.length}mm
                       </text>
+                      {/* Endpoint handles (Item #1) */}
+                      {isSelected && (
+                        <>
+                          <circle
+                            cx={wall.start_x * scale}
+                            cy={wall.start_y * scale}
+                            r={ENDPOINT_HANDLE_SIZE / 2}
+                            fill="#3b82f6"
+                            stroke="white"
+                            strokeWidth="2"
+                            style={{ cursor: 'nwse-resize' }}
+                          />
+                          <circle
+                            cx={wall.end_x * scale}
+                            cy={wall.end_y * scale}
+                            r={ENDPOINT_HANDLE_SIZE / 2}
+                            fill="#3b82f6"
+                            stroke="white"
+                            strokeWidth="2"
+                            style={{ cursor: 'nwse-resize' }}
+                          />
+                        </>
+                      )}
                     </g>
                   );
                 })}
 
-                {/* Temp wall while drawing */}
+                {/* Temp wall while drawing (free mode) */}
                 {tempWall && (
                   <g>
                     <line
@@ -961,7 +1415,7 @@ export default function SpatialBOQCanvas() {
                       y2={tempWall.end.y * scale}
                       stroke="#3b82f6"
                       strokeWidth={WALL_THICKNESS * scale}
-                      strokeLinecap="round"
+                      strokeLinecap="square"
                       strokeDasharray="5,5"
                     />
                     <text
@@ -977,21 +1431,42 @@ export default function SpatialBOQCanvas() {
                   </g>
                 )}
 
+                {/* Temp rectangle/square while drawing (Item #4) */}
+                {tempRectWalls && (
+                  <rect
+                    x={Math.min(tempRectWalls.start.x, tempRectWalls.end.x) * scale}
+                    y={Math.min(tempRectWalls.start.y, tempRectWalls.end.y) * scale}
+                    width={Math.abs(tempRectWalls.end.x - tempRectWalls.start.x) * scale}
+                    height={Math.abs(tempRectWalls.end.y - tempRectWalls.start.y) * scale}
+                    fill="none"
+                    stroke="#3b82f6"
+                    strokeWidth={WALL_THICKNESS * scale}
+                    strokeDasharray="5,5"
+                  />
+                )}
+
                 {/* Doors */}
                 {layout?.doors?.map(door => {
                   const isSelected = selectedItem?.type === 'door' && selectedItem.item.door_id === door.door_id;
                   return (
-                    <g key={door.door_id}>
+                    <g key={door.door_id} style={{ cursor: 'move' }}>
                       <rect
                         x={door.x * scale}
                         y={door.y * scale}
                         width={door.width * scale}
                         height={door.depth * scale}
                         fill={MODULE_COLORS.door}
-                        fillOpacity="0.8"
+                        fillOpacity="0.9"
                         stroke={isSelected ? '#1e40af' : MODULE_COLORS.door}
-                        strokeWidth={isSelected ? 2 : 1}
-                        rx="2"
+                        strokeWidth={isSelected ? 3 : 1}
+                      />
+                      {/* Door swing arc */}
+                      <path
+                        d={`M ${door.x * scale} ${(door.y + door.depth) * scale} A ${door.width * scale * 0.8} ${door.width * scale * 0.8} 0 0 1 ${(door.x + door.width * 0.8) * scale} ${(door.y + door.depth + door.width * 0.3) * scale}`}
+                        fill="none"
+                        stroke={MODULE_COLORS.door}
+                        strokeWidth="1"
+                        strokeDasharray="3,2"
                       />
                       <text
                         x={(door.x + door.width / 2) * scale}
@@ -1000,8 +1475,9 @@ export default function SpatialBOQCanvas() {
                         fill="white"
                         textAnchor="middle"
                         dominantBaseline="middle"
+                        fontWeight="500"
                       >
-                        Door
+                        {door.type_name || 'Door'}
                       </text>
                     </g>
                   );
@@ -1011,27 +1487,36 @@ export default function SpatialBOQCanvas() {
                 {layout?.windows?.map(win => {
                   const isSelected = selectedItem?.type === 'window' && selectedItem.item.window_id === win.window_id;
                   return (
-                    <g key={win.window_id}>
+                    <g key={win.window_id} style={{ cursor: 'move' }}>
                       <rect
                         x={win.x * scale}
                         y={win.y * scale}
                         width={win.width * scale}
                         height={win.depth * scale}
                         fill={MODULE_COLORS.window}
-                        fillOpacity="0.6"
+                        fillOpacity="0.7"
                         stroke={isSelected ? '#1e40af' : MODULE_COLORS.window}
-                        strokeWidth={isSelected ? 2 : 1}
-                        rx="2"
+                        strokeWidth={isSelected ? 3 : 1}
+                      />
+                      {/* Window pane lines */}
+                      <line
+                        x1={(win.x + win.width / 2) * scale}
+                        y1={win.y * scale}
+                        x2={(win.x + win.width / 2) * scale}
+                        y2={(win.y + win.depth) * scale}
+                        stroke="white"
+                        strokeWidth="1"
                       />
                       <text
                         x={(win.x + win.width / 2) * scale}
                         y={(win.y + win.depth / 2) * scale}
-                        fontSize="9"
+                        fontSize="8"
                         fill="white"
                         textAnchor="middle"
                         dominantBaseline="middle"
+                        fontWeight="500"
                       >
-                        Win
+                        {win.type_name || 'Window'}
                       </text>
                     </g>
                   );
@@ -1055,11 +1540,21 @@ export default function SpatialBOQCanvas() {
                         width={module.width * scale}
                         height={module.depth * scale}
                         fill={color}
-                        fillOpacity="0.7"
+                        fillOpacity="0.8"
                         stroke={isSelected ? '#1e40af' : color}
                         strokeWidth={isSelected ? 3 : 1}
-                        rx="2"
                       />
+                      {/* Wall pin indicator */}
+                      {module.wall_id && (
+                        <circle
+                          cx={module.width * scale / 2}
+                          cy="4"
+                          r="3"
+                          fill="#22c55e"
+                          stroke="white"
+                          strokeWidth="1"
+                        />
+                      )}
                       <text
                         x={module.width * scale / 2}
                         y={module.depth * scale / 2}
@@ -1086,11 +1581,24 @@ export default function SpatialBOQCanvas() {
               </g>
             </svg>
 
-            {/* Movement hint when module selected */}
+            {/* Movement hints */}
             {selectedItem?.type === 'module' && (
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
                 <Move className="h-3 w-3" />
                 Drag to move • Arrow keys for fine adjustment • Delete to remove
+                {selectedItem.item.wall_id && <span className="text-green-400 ml-1">• Pinned to wall</span>}
+              </div>
+            )}
+            {(selectedItem?.type === 'door' || selectedItem?.type === 'window') && (
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
+                <GripVertical className="h-3 w-3" />
+                Drag to move along wall • Arrow keys to slide • Delete to remove
+              </div>
+            )}
+            {selectedItem?.type === 'wall' && (
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
+                <Move className="h-3 w-3" />
+                Drag wall to reposition • Drag endpoints to resize • Delete to remove
               </div>
             )}
           </div>
@@ -1104,7 +1612,7 @@ export default function SpatialBOQCanvas() {
           </button>
 
           {/* Collapsible Properties Panel */}
-          <div className={`bg-white border-l shrink-0 flex flex-col transition-all duration-200 ${rightPanelCollapsed ? 'w-0 overflow-hidden' : 'w-60'}`}>
+          <div className={`bg-white border-l shrink-0 flex flex-col transition-all duration-200 ${rightPanelCollapsed ? 'w-0 overflow-hidden' : 'w-64'}`}>
             <div className="p-2 border-b">
               <h3 className="font-medium text-sm">Properties</h3>
             </div>
@@ -1152,7 +1660,7 @@ export default function SpatialBOQCanvas() {
                     </div>
 
                     <div>
-                      <Label className="text-[10px]">Finish</Label>
+                      <Label className="text-[10px]">Shutter Finish</Label>
                       <Select
                         value={selectedItem.item.finish_type}
                         onValueChange={(v) => updateModule(selectedItem.item.module_id, { finish_type: v })}
@@ -1169,7 +1677,7 @@ export default function SpatialBOQCanvas() {
                     </div>
 
                     <div>
-                      <Label className="text-[10px]">Shutter</Label>
+                      <Label className="text-[10px]">Shutter Type</Label>
                       <Select
                         value={selectedItem.item.shutter_type}
                         onValueChange={(v) => updateModule(selectedItem.item.module_id, { shutter_type: v })}
@@ -1202,6 +1710,24 @@ export default function SpatialBOQCanvas() {
                       </Select>
                     </div>
 
+                    {/* NEW: Carcass Finish (Item #8) */}
+                    <div>
+                      <Label className="text-[10px]">Carcass Finish</Label>
+                      <Select
+                        value={selectedItem.item.carcass_finish || 'laminate'}
+                        onValueChange={(v) => updateModule(selectedItem.item.module_id, { carcass_finish: v })}
+                      >
+                        <SelectTrigger className="h-7 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(CARCASS_FINISHES).map(([key, c]) => (
+                            <SelectItem key={key} value={key}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     <Separator />
 
                     <div className="grid grid-cols-2 gap-2">
@@ -1223,6 +1749,18 @@ export default function SpatialBOQCanvas() {
                           className="h-7 text-xs"
                         />
                       </div>
+                    </div>
+
+                    {/* Wall Pin Status */}
+                    <div className="bg-slate-50 rounded p-2">
+                      <Label className="text-[10px] text-slate-500">Wall Pin</Label>
+                      <p className="text-xs font-medium">
+                        {selectedItem.item.wall_id ? (
+                          <span className="text-green-600">Pinned to wall</span>
+                        ) : (
+                          <span className="text-slate-400">Not pinned</span>
+                        )}
+                      </p>
                     </div>
                   </>
                 )}
@@ -1248,60 +1786,54 @@ export default function SpatialBOQCanvas() {
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <Label className="text-[10px]">Start X</Label>
-                        <p className="text-slate-600">{Math.round(selectedItem.item.start_x)}</p>
+                        <Input
+                          type="number"
+                          value={Math.round(selectedItem.item.start_x)}
+                          onChange={(e) => updateWallPosition(selectedItem.item.wall_id, { start_x: parseInt(e.target.value) || 0 })}
+                          className="h-7 text-xs"
+                        />
                       </div>
                       <div>
                         <Label className="text-[10px]">Start Y</Label>
-                        <p className="text-slate-600">{Math.round(selectedItem.item.start_y)}</p>
+                        <Input
+                          type="number"
+                          value={Math.round(selectedItem.item.start_y)}
+                          onChange={(e) => updateWallPosition(selectedItem.item.wall_id, { start_y: parseInt(e.target.value) || 0 })}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <Label className="text-[10px]">End X</Label>
+                        <Input
+                          type="number"
+                          value={Math.round(selectedItem.item.end_x)}
+                          onChange={(e) => updateWallPosition(selectedItem.item.wall_id, { end_x: parseInt(e.target.value) || 0 })}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px]">End Y</Label>
+                        <Input
+                          type="number"
+                          value={Math.round(selectedItem.item.end_y)}
+                          onChange={(e) => updateWallPosition(selectedItem.item.wall_id, { end_y: parseInt(e.target.value) || 0 })}
+                          className="h-7 text-xs"
+                        />
                       </div>
                     </div>
 
-                    {/* Wall Elevation View */}
-                    {showElevationView && (
-                      <div className="mt-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Layers className="h-4 w-4 text-slate-500" />
-                          <Label className="text-xs font-medium">Elevation View</Label>
-                        </div>
-                        <div className="bg-slate-100 rounded-lg p-3 h-32 flex items-end justify-center gap-1">
-                          {/* Simplified elevation showing modules on this wall */}
-                          {layout?.modules
-                            ?.filter(m => m.wall_id === selectedItem.item.wall_id)
-                            .map(m => {
-                              const modInfo = moduleLibrary.module_types?.[m.module_type] || {};
-                              const color = MODULE_COLORS[m.module_type] || '#888';
-                              const heightPercent = (m.height / 2400) * 100;
-                              const widthPercent = (m.width / selectedItem.item.length) * 100;
-
-                              return (
-                                <div
-                                  key={m.module_id}
-                                  className="flex flex-col items-center"
-                                  style={{ width: `${Math.max(widthPercent, 15)}%` }}
-                                >
-                                  <div
-                                    className="rounded-t text-[8px] text-white flex items-center justify-center"
-                                    style={{
-                                      backgroundColor: color,
-                                      height: `${heightPercent}%`,
-                                      minHeight: 20,
-                                      width: '100%'
-                                    }}
-                                  >
-                                    {modInfo.name?.substring(0, 3)}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          {!layout?.modules?.some(m => m.wall_id === selectedItem.item.wall_id) && (
-                            <p className="text-xs text-slate-400">No modules on this wall</p>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-500 text-center mt-1">
-                          Wall: {selectedItem.item.length}mm
-                        </p>
-                      </div>
-                    )}
+                    {/* Full-Screen Elevation Button (Item #9) */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => setShowElevationModal(true)}
+                    >
+                      <Maximize2 className="h-4 w-4 mr-2" />
+                      View 2D Elevation
+                    </Button>
                   </>
                 )}
 
@@ -1310,6 +1842,7 @@ export default function SpatialBOQCanvas() {
                   <>
                     <div>
                       <Label className="text-xs text-slate-500">{selectedItem.type === 'door' ? 'Door' : 'Window'}</Label>
+                      <p className="font-medium text-sm">{selectedItem.item.type_name || (selectedItem.type === 'door' ? 'Door' : 'Window')}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
@@ -1319,17 +1852,8 @@ export default function SpatialBOQCanvas() {
                           value={selectedItem.item.width}
                           className="h-7 text-xs"
                           onChange={(e) => {
-                            const key = selectedItem.type === 'door' ? 'doors' : 'windows';
-                            const idKey = selectedItem.type === 'door' ? 'door_id' : 'window_id';
-                            setLayout(prev => ({
-                              ...prev,
-                              [key]: prev[key].map(item =>
-                                item[idKey] === selectedItem.item[idKey]
-                                  ? { ...item, width: parseInt(e.target.value) || 0 }
-                                  : item
-                              )
-                            }));
-                            setHasChanges(true);
+                            const key = selectedItem.type === 'door' ? 'door_id' : 'window_id';
+                            updateOpening(selectedItem.type, selectedItem.item[key], { width: parseInt(e.target.value) || 0 });
                           }}
                         />
                       </div>
@@ -1340,20 +1864,47 @@ export default function SpatialBOQCanvas() {
                           value={selectedItem.item.height}
                           className="h-7 text-xs"
                           onChange={(e) => {
-                            const key = selectedItem.type === 'door' ? 'doors' : 'windows';
-                            const idKey = selectedItem.type === 'door' ? 'door_id' : 'window_id';
-                            setLayout(prev => ({
-                              ...prev,
-                              [key]: prev[key].map(item =>
-                                item[idKey] === selectedItem.item[idKey]
-                                  ? { ...item, height: parseInt(e.target.value) || 0 }
-                                  : item
-                              )
-                            }));
-                            setHasChanges(true);
+                            const key = selectedItem.type === 'door' ? 'door_id' : 'window_id';
+                            updateOpening(selectedItem.type, selectedItem.item[key], { height: parseInt(e.target.value) || 0 });
                           }}
                         />
                       </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-[10px]">X (mm)</Label>
+                        <Input
+                          type="number"
+                          value={Math.round(selectedItem.item.x)}
+                          className="h-7 text-xs"
+                          onChange={(e) => {
+                            const key = selectedItem.type === 'door' ? 'door_id' : 'window_id';
+                            updateOpening(selectedItem.type, selectedItem.item[key], { x: parseInt(e.target.value) || 0 });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px]">Y (mm)</Label>
+                        <Input
+                          type="number"
+                          value={Math.round(selectedItem.item.y)}
+                          className="h-7 text-xs"
+                          onChange={(e) => {
+                            const key = selectedItem.type === 'door' ? 'door_id' : 'window_id';
+                            updateOpening(selectedItem.type, selectedItem.item[key], { y: parseInt(e.target.value) || 0 });
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded p-2">
+                      <Label className="text-[10px] text-slate-500">Attached Wall</Label>
+                      <p className="text-xs font-medium">
+                        {selectedItem.item.wall_id ? (
+                          <span className="text-green-600">On wall</span>
+                        ) : (
+                          <span className="text-amber-600">Floating</span>
+                        )}
+                      </p>
                     </div>
                   </>
                 )}
@@ -1368,6 +1919,76 @@ export default function SpatialBOQCanvas() {
             </ScrollArea>
           </div>
         </div>
+
+        {/* Full-Screen Elevation Modal (Item #9) */}
+        <Dialog open={showElevationModal} onOpenChange={setShowElevationModal}>
+          <DialogContent className="max-w-4xl h-[80vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Layers className="h-5 w-5" />
+                2D Wall Elevation View
+              </DialogTitle>
+              <DialogDescription>
+                Wall: {selectedItem?.item?.length || 0}mm • {roomName}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 bg-slate-100 rounded-lg p-6 min-h-[400px] flex flex-col">
+              {/* Ceiling line */}
+              <div className="border-t-2 border-slate-400 border-dashed mb-2">
+                <span className="text-xs text-slate-500 ml-2">Ceiling (2400mm)</span>
+              </div>
+              
+              {/* Modules on wall */}
+              <div className="flex-1 flex items-end justify-center gap-2 relative">
+                {selectedItem?.type === 'wall' && getModulesOnWall(selectedItem.item.wall_id).length > 0 ? (
+                  getModulesOnWall(selectedItem.item.wall_id).map(m => {
+                    const modInfo = moduleLibrary.module_types?.[m.module_type] || {};
+                    const color = MODULE_COLORS[m.module_type] || '#888';
+                    const heightPercent = (m.height / 2400) * 100;
+                    const widthPercent = Math.max((m.width / (selectedItem.item.length || 3000)) * 100, 10);
+
+                    return (
+                      <div
+                        key={m.module_id}
+                        className="flex flex-col items-center"
+                        style={{ width: `${widthPercent}%`, maxWidth: '200px' }}
+                      >
+                        <div
+                          className="rounded-t text-white flex flex-col items-center justify-center p-2"
+                          style={{
+                            backgroundColor: color,
+                            height: `${Math.max(heightPercent * 3, 80)}px`,
+                            width: '100%'
+                          }}
+                        >
+                          <span className="font-medium text-sm">{modInfo.name}</span>
+                          <span className="text-xs opacity-80">{m.width}×{m.height}mm</span>
+                        </div>
+                        <span className="text-xs text-slate-600 mt-1">{m.finish_type}</span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-20">
+                    <Package className="h-12 w-12 mx-auto mb-4 text-slate-300" />
+                    <p className="text-slate-500">No modules pinned to this wall</p>
+                    <p className="text-xs text-slate-400 mt-1">Place modules near walls to auto-pin them</p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Floor line */}
+              <div className="border-t-4 border-slate-600 mt-4">
+                <span className="text-xs text-slate-500 ml-2">Floor (0mm)</span>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowElevationModal(false)}>
+                Exit Elevation View
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Summary Modal */}
         <Dialog open={showSummaryModal} onOpenChange={setShowSummaryModal}>

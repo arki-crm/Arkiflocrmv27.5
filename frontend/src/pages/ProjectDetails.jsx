@@ -1138,6 +1138,14 @@ const ProjectDetails = () => {
                     </>
                   )}
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/projects/${id}/spatial-boq`)}
+                  data-testid="open-spatial-canvas"
+                >
+                  <Grid className="h-4 w-4 mr-2" />
+                  Spatial Canvas
+                </Button>
               </div>
             </CardHeader>
             <CardContent>

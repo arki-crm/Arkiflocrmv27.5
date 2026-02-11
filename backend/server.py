@@ -25488,10 +25488,22 @@ async def get_project_lock_status(project_id: str, request: Request):
     # Build receipt query for execution phase only
     receipt_query = {"project_id": project_id, "status": {"$ne": "cancelled"}}
     
+    # Parse signoff_locked_at for date comparison
+    signoff_datetime = None
     if signoff_locked_at:
+        if isinstance(signoff_locked_at, str):
+            from datetime import datetime as dt
+            try:
+                signoff_datetime = dt.fromisoformat(signoff_locked_at.replace('Z', '+00:00'))
+            except:
+                pass
+        else:
+            signoff_datetime = signoff_locked_at
+    
+    if signoff_datetime:
         # Get receipts created after signoff OR linked to execution stages
         receipt_query["$or"] = [
-            {"created_at": {"$gte": signoff_locked_at}},  # After signoff
+            {"created_at": {"$gte": signoff_datetime}},  # After signoff
             {"stage_name": {"$regex": "|".join(execution_stages), "$options": "i"}}  # Execution stage
         ]
     else:

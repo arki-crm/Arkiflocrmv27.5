@@ -2064,68 +2064,211 @@ export default function SpatialBOQCanvas() {
           </div>
         </div>
 
-        {/* Full-Screen Elevation Modal (Item #9) */}
+        {/* Full-Screen Editable Elevation Modal (Item #3 - Editable Elevation) */}
         <Dialog open={showElevationModal} onOpenChange={setShowElevationModal}>
-          <DialogContent className="max-w-4xl h-[80vh]">
+          <DialogContent className="max-w-5xl h-[85vh]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Layers className="h-5 w-5" />
                 2D Wall Elevation View
+                <span className="text-xs font-normal text-slate-500 ml-2">(Drag modules to adjust position)</span>
               </DialogTitle>
               <DialogDescription>
-                Wall: {selectedItem?.item?.length || 0}mm • {roomName}
+                Wall: {selectedItem?.item?.length || 0}mm • {roomName} • Ceiling Height: 2400mm
               </DialogDescription>
             </DialogHeader>
-            <div className="flex-1 bg-slate-100 rounded-lg p-6 min-h-[400px] flex flex-col">
-              {/* Ceiling line */}
-              <div className="border-t-2 border-slate-400 border-dashed mb-2">
-                <span className="text-xs text-slate-500 ml-2">Ceiling (2400mm)</span>
-              </div>
-              
-              {/* Modules on wall */}
-              <div className="flex-1 flex items-end justify-center gap-2 relative">
-                {selectedItem?.type === 'wall' && getModulesOnWall(selectedItem.item.wall_id).length > 0 ? (
-                  getModulesOnWall(selectedItem.item.wall_id).map(m => {
+            <div className="flex-1 bg-slate-100 rounded-lg overflow-hidden relative" style={{ minHeight: '450px' }}>
+              {selectedItem?.type === 'wall' && (
+                <svg
+                  width="100%"
+                  height="100%"
+                  viewBox="0 0 1000 500"
+                  preserveAspectRatio="xMidYMid meet"
+                  style={{ backgroundColor: '#f1f5f9' }}
+                >
+                  {/* Background grid */}
+                  <defs>
+                    <pattern id="elevationGrid" width="50" height="50" patternUnits="userSpaceOnUse">
+                      <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e2e8f0" strokeWidth="1" />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#elevationGrid)" />
+
+                  {/* Ceiling line */}
+                  <line x1="50" y1="30" x2="950" y2="30" stroke="#94a3b8" strokeWidth="2" strokeDasharray="8,4" />
+                  <text x="55" y="22" fontSize="11" fill="#64748b">Ceiling (2400mm)</text>
+
+                  {/* Floor line */}
+                  <line x1="50" y1="450" x2="950" y2="450" stroke="#374151" strokeWidth="4" />
+                  <text x="55" y="472" fontSize="11" fill="#64748b">Floor (0mm)</text>
+
+                  {/* Wall background */}
+                  <rect x="50" y="30" width="900" height="420" fill="#fafafa" stroke="#cbd5e1" strokeWidth="1" />
+
+                  {/* Height markers */}
+                  {[0, 600, 1200, 1800, 2400].map((h, i) => {
+                    const yPos = 450 - (h / 2400) * 420;
+                    return (
+                      <g key={i}>
+                        <line x1="45" y1={yPos} x2="50" y2={yPos} stroke="#94a3b8" strokeWidth="1" />
+                        <text x="10" y={yPos + 4} fontSize="9" fill="#64748b">{h}mm</text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Width markers */}
+                  {selectedItem?.item?.length && [0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
+                    const xPos = 50 + pct * 900;
+                    const mm = Math.round(pct * selectedItem.item.length);
+                    return (
+                      <g key={i}>
+                        <line x1={xPos} y1="450" x2={xPos} y2="455" stroke="#94a3b8" strokeWidth="1" />
+                        <text x={xPos} y="468" fontSize="9" fill="#64748b" textAnchor="middle">{mm}mm</text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Modules - Draggable (Item #3) */}
+                  {getModulesOnWall(selectedItem?.item?.wall_id).map(m => {
                     const modInfo = moduleLibrary.module_types?.[m.module_type] || {};
                     const color = MODULE_COLORS[m.module_type] || '#888';
-                    const heightPercent = (m.height / 2400) * 100;
-                    const widthPercent = Math.max((m.width / (selectedItem.item.length || 3000)) * 100, 10);
+                    const wallLength = selectedItem?.item?.length || 3000;
+                    
+                    // Calculate position relative to wall
+                    const wall = selectedItem?.item;
+                    const wallStartX = Math.min(wall?.start_x || 0, wall?.end_x || 0);
+                    const moduleRelativeX = m.x - wallStartX;
+                    
+                    // Scale to SVG coordinates
+                    const svgX = 50 + (moduleRelativeX / wallLength) * 900;
+                    const svgWidth = (m.width / wallLength) * 900;
+                    const svgHeight = (m.height / 2400) * 420;
+                    const svgY = 450 - svgHeight - (m.elevation_offset || 0) / 2400 * 420;
+                    
+                    const isBeingDragged = elevationDragModule === m.module_id;
 
                     return (
-                      <div
+                      <g
                         key={m.module_id}
-                        className="flex flex-col items-center"
-                        style={{ width: `${widthPercent}%`, maxWidth: '200px' }}
+                        style={{ cursor: 'grab' }}
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          setElevationDragModule(m.module_id);
+                          const svgRect = e.currentTarget.ownerSVGElement.getBoundingClientRect();
+                          const svgX = (e.clientX - svgRect.left) / svgRect.width * 1000;
+                          const svgY = (e.clientY - svgRect.top) / svgRect.height * 500;
+                          setElevationDragStart({ svgX, svgY, moduleX: m.x, moduleElevation: m.elevation_offset || 0 });
+                        }}
                       >
-                        <div
-                          className="rounded-t text-white flex flex-col items-center justify-center p-2"
-                          style={{
-                            backgroundColor: color,
-                            height: `${Math.max(heightPercent * 3, 80)}px`,
-                            width: '100%'
-                          }}
+                        <rect
+                          x={Math.max(50, Math.min(950 - svgWidth, svgX))}
+                          y={Math.max(30, Math.min(450 - svgHeight, svgY))}
+                          width={svgWidth}
+                          height={svgHeight}
+                          fill={color}
+                          fillOpacity={isBeingDragged ? 0.9 : 0.8}
+                          stroke={isBeingDragged ? '#1e40af' : color}
+                          strokeWidth={isBeingDragged ? 3 : 1}
+                          rx="2"
+                        />
+                        <text
+                          x={Math.max(50, Math.min(950 - svgWidth, svgX)) + svgWidth / 2}
+                          y={Math.max(30, Math.min(450 - svgHeight, svgY)) + svgHeight / 2 - 8}
+                          fontSize="11"
+                          fill="white"
+                          textAnchor="middle"
+                          fontWeight="500"
                         >
-                          <span className="font-medium text-sm">{modInfo.name}</span>
-                          <span className="text-xs opacity-80">{m.width}×{m.height}mm</span>
-                        </div>
-                        <span className="text-xs text-slate-600 mt-1">{m.finish_type}</span>
-                      </div>
+                          {modInfo.name || m.module_type}
+                        </text>
+                        <text
+                          x={Math.max(50, Math.min(950 - svgWidth, svgX)) + svgWidth / 2}
+                          y={Math.max(30, Math.min(450 - svgHeight, svgY)) + svgHeight / 2 + 8}
+                          fontSize="9"
+                          fill="white"
+                          fillOpacity="0.8"
+                          textAnchor="middle"
+                        >
+                          {m.width}×{m.height}mm
+                        </text>
+                      </g>
                     );
-                  })
-                ) : (
-                  <div className="text-center py-20">
+                  })}
+
+                  {/* Drag overlay to capture mouse events */}
+                  {elevationDragModule && (
+                    <rect
+                      x="0"
+                      y="0"
+                      width="1000"
+                      height="500"
+                      fill="transparent"
+                      style={{ cursor: 'grabbing' }}
+                      onMouseMove={(e) => {
+                        if (!elevationDragModule || !elevationDragStart) return;
+                        const svgRect = e.currentTarget.ownerSVGElement.getBoundingClientRect();
+                        const currentSvgX = (e.clientX - svgRect.left) / svgRect.width * 1000;
+                        const currentSvgY = (e.clientY - svgRect.top) / svgRect.height * 500;
+                        
+                        const deltaSvgX = currentSvgX - elevationDragStart.svgX;
+                        const deltaSvgY = currentSvgY - elevationDragStart.svgY;
+                        
+                        const wallLength = selectedItem?.item?.length || 3000;
+                        const deltaX = (deltaSvgX / 900) * wallLength;
+                        const deltaElevation = -(deltaSvgY / 420) * 2400;
+                        
+                        // Calculate new position
+                        const wall = selectedItem?.item;
+                        const wallStartX = Math.min(wall?.start_x || 0, wall?.end_x || 0);
+                        const wallEndX = Math.max(wall?.start_x || 0, wall?.end_x || 0);
+                        const module = layout.modules.find(m => m.module_id === elevationDragModule);
+                        if (!module) return;
+                        
+                        // Constrain X within wall bounds
+                        let newX = elevationDragStart.moduleX + deltaX;
+                        newX = Math.max(wallStartX, Math.min(wallEndX - module.width, newX));
+                        
+                        // Constrain elevation (0 to ceiling - module height)
+                        let newElevation = elevationDragStart.moduleElevation + deltaElevation;
+                        newElevation = Math.max(0, Math.min(2400 - module.height, newElevation));
+                        
+                        // Update module position
+                        updateModule(elevationDragModule, { 
+                          x: Math.round(newX),
+                          elevation_offset: Math.round(newElevation)
+                        });
+                      }}
+                      onMouseUp={() => {
+                        setElevationDragModule(null);
+                        setElevationDragStart(null);
+                      }}
+                      onMouseLeave={() => {
+                        setElevationDragModule(null);
+                        setElevationDragStart(null);
+                      }}
+                    />
+                  )}
+                </svg>
+              )}
+
+              {/* Empty state */}
+              {selectedItem?.type === 'wall' && getModulesOnWall(selectedItem.item.wall_id).length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
                     <Package className="h-12 w-12 mx-auto mb-4 text-slate-300" />
                     <p className="text-slate-500">No modules pinned to this wall</p>
                     <p className="text-xs text-slate-400 mt-1">Place modules near walls to auto-pin them</p>
                   </div>
-                )}
-              </div>
-              
-              {/* Floor line */}
-              <div className="border-t-4 border-slate-600 mt-4">
-                <span className="text-xs text-slate-500 ml-2">Floor (0mm)</span>
-              </div>
+                </div>
+              )}
             </div>
+            
+            {/* Info bar */}
+            <div className="bg-slate-50 rounded px-3 py-2 text-xs text-slate-600 flex items-center gap-4">
+              <Move className="h-4 w-4" />
+              <span>Drag modules to adjust horizontal position and height • Changes sync to plan view</span>
+            </div>
+            
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowElevationModal(false)}>
                 Exit Elevation View

@@ -212,7 +212,8 @@ class TestBookingAdvanceSignoffReclassification:
         assert response.status_code == 200, f"Failed: {response.text}"
         
         data = response.json()
-        receipts = data.get("receipts", [])
+        # Receipts endpoint returns array directly
+        receipts = data if isinstance(data, list) else data.get("receipts", [])
         
         print(f"\nReceipts for proj_0a79eb51: {len(receipts)} records")
         

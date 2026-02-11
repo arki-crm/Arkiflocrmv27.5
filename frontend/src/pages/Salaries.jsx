@@ -2006,10 +2006,10 @@ export default function Salaries() {
               </div>
               <div>
                 <Label>Project (Optional)</Label>
-                <Select value={incentiveData.project_id} onValueChange={v => setIncentiveData(prev => ({ ...prev, project_id: v }))}>
+                <Select value={incentiveData.project_id || "none"} onValueChange={v => setIncentiveData(prev => ({ ...prev, project_id: v === "none" ? "" : v }))}>
                   <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {projects.map(p => (
                       <SelectItem key={p.project_id} value={p.project_id}>{p.project_name || p.name}</SelectItem>
                     ))}

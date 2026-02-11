@@ -160,6 +160,9 @@ const ProjectDetails = () => {
   const [isAdjustingTimeline, setIsAdjustingTimeline] = useState(false);
   const [timelineHistory, setTimelineHistory] = useState([]);
   
+  // BOQ Builder state
+  const [boqSummary, setBoqSummary] = useState(null);
+  
   // Settings state
   const [gstApplicable, setGstApplicable] = useState(false);
   const [gstNumber, setGstNumber] = useState('');

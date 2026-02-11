@@ -9,7 +9,35 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Cash Lock UI Fix VERIFIED ✅
+## Current Status: Employee Compensation & Payout Architecture COMPLETE ✅
+**As of February 11, 2026**
+
+### New Feature: Unified Compensation System
+
+| Component | Features | Status |
+|-----------|----------|--------|
+| **Salary Deductions** | 10 deduction types (leave, late attendance, loss recovery, advance recovery, penalty, TDS, PF, ESI, professional tax, custom) with proper ledger mapping | ✅ |
+| **Employee Classifications** | 5 types: permanent, probation, trainee, freelancer, channel_partner - drives payroll logic | ✅ |
+| **Stipend Management** | Trainee stipends without statutory deductions, classified as Training/HR Development Expense | ✅ |
+| **Incentive Engine** | Project-linked incentives (booking, 50% collection, completion, review) with create/approve/payout flow | ✅ |
+| **Commission Management** | External commissions for referrals, channel partners, associates with payout tracking | ✅ |
+| **Employee Earnings View** | Unified view of salary, incentives (earned/paid/pending), and deductions | ✅ |
+| **Cashbook/Daybook** | Net salary only in cashbook, proper ledger entries for all deduction types | ✅ |
+| **Compliance Ready** | TDS, PF, ESI, Professional Tax fields exist (can be inactive) | ✅ |
+
+**Ledger Impact Mapping:**
+| Deduction Type | Ledger Impact |
+|----------------|---------------|
+| Leave/Penalty | Expense reduction |
+| Advance Recovery | Employee receivable cleared |
+| Loss Recovery | Company income/adjustment |
+| TDS/PF/ESI | Statutory payable |
+
+**Verification (iteration_58.json):** 100% pass rate (20/20 backend + all frontend tests)
+
+---
+
+## Previous Status: Cash Lock UI Fix VERIFIED ✅
 **As of February 11, 2026**
 
 ### Latest Fix: Cash Lock UI Rendering

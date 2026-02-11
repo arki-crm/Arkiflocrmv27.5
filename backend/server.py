@@ -28924,6 +28924,26 @@ async def create_salary_payment(data: SalaryPaymentCreate, request: Request):
     if data.payment_type not in PAYMENT_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid payment type. Must be one of: {PAYMENT_TYPES}")
     
+    # Verify employee exists and check classification
+    employee = await db.users.find_one({"user_id": data.employee_id})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    emp_classification = employee.get("employee_classification", "permanent")
+    
+    # Classification-based validation: Only salary-eligible employees can receive salary payments
+    if emp_classification not in SALARY_ELIGIBLE_CLASSIFICATIONS:
+        classification_guidance = {
+            "trainee": "Trainees should receive Stipend payments instead of Salary.",
+            "freelancer": "Freelancers should receive Professional Fee payments via Commission workflow.",
+            "channel_partner": "Channel Partners should receive Commission payments."
+        }
+        guidance = classification_guidance.get(emp_classification, f"Classification '{emp_classification}' is not eligible for salary payments.")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Employee '{employee.get('name')}' is classified as '{emp_classification}'. {guidance}"
+        )
+    
     # Verify employee salary exists
     salary_master = await db.finance_salary_master.find_one({"employee_id": data.employee_id})
     if not salary_master:

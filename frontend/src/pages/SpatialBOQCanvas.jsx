@@ -402,6 +402,22 @@ export default function SpatialBOQCanvas() {
 
   // Handle mouse down
   const handleMouseDown = (e) => {
+    // Middle mouse button for pan (Item #1)
+    if (e.button === 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+      return;
+    }
+
+    // Spacebar + Left click for pan (Item #1)
+    if (e.button === 0 && spacePressed) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+      return;
+    }
+
     if (e.button !== 0) return;
     const canvas = screenToCanvas(e.clientX, e.clientY);
 

@@ -1308,6 +1308,120 @@ export default function Salaries() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Classifications Tab */}
+        <TabsContent value="classifications" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <UserCheck className="h-5 w-5" />
+                    Employee Classifications
+                  </CardTitle>
+                  <CardDescription>Manage employee types and payment workflows</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Classification Overview Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+                {classificationSummary && Object.entries(classificationSummary.by_classification || {}).map(([cls, data]) => (
+                  <Card key={cls} className={`border-l-4 ${
+                    cls === 'permanent' ? 'border-l-green-500' :
+                    cls === 'probation' ? 'border-l-blue-500' :
+                    cls === 'trainee' ? 'border-l-purple-500' :
+                    cls === 'freelancer' ? 'border-l-orange-500' :
+                    'border-l-pink-500'
+                  }`}>
+                    <CardContent className="pt-4">
+                      <div className="text-2xl font-bold">{data.count}</div>
+                      <div className="text-sm font-medium capitalize">{cls.replace('_', ' ')}</div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        {getPaymentMethodLabel(cls)} workflow
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {data.is_salary_eligible && <Badge variant="outline" className="text-xs">Salary</Badge>}
+                        {data.is_stipend_eligible && <Badge variant="outline" className="text-xs">Stipend</Badge>}
+                        {data.is_incentive_eligible && <Badge variant="outline" className="text-xs">Incentive</Badge>}
+                        {data.is_statutory_exempt && <Badge variant="outline" className="text-xs bg-amber-50">No Statutory</Badge>}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Payment Workflow Rules */}
+              <Card className="mb-6 bg-slate-50">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Payment Workflow Rules (Enforced)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+                    {classificationSummary?.workflow_guidance && Object.entries(classificationSummary.workflow_guidance).map(([cls, rules]) => (
+                      <div key={cls} className="p-3 bg-white rounded-lg border">
+                        <div className="font-medium capitalize mb-1">{cls.replace('_', ' ')}</div>
+                        <div className="text-xs space-y-1 text-slate-600">
+                          <p><span className="font-medium">Payment:</span> {rules.payment_method}</p>
+                          <p><span className="font-medium">Statutory:</span> {rules.statutory_deductions}</p>
+                          <p><span className="font-medium">Can Receive:</span> {rules.can_receive?.join(', ')}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Employee List by Classification */}
+              <div className="space-y-4">
+                {classificationSummary && Object.entries(classificationSummary.by_classification || {}).map(([cls, data]) => (
+                  data.employees?.length > 0 && (
+                    <Card key={cls}>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          {getClassificationBadge(cls)}
+                          <span className="text-slate-500 font-normal">({data.count} employees)</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="divide-y">
+                          {data.employees.map(emp => (
+                            <div key={emp.user_id} className="flex items-center justify-between py-2">
+                              <div>
+                                <p className="font-medium">{emp.name}</p>
+                                <p className="text-sm text-slate-500">{emp.role} • {emp.email}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => fetchClassificationHistory(emp)}
+                                  data-testid={`view-history-${emp.user_id}`}
+                                >
+                                  <History className="h-4 w-4 mr-1" />
+                                  History
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => openClassificationModal(emp)}
+                                  data-testid={`change-classification-${emp.user_id}`}
+                                >
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Change
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Add Salary Modal */}

@@ -1745,6 +1745,18 @@ export default function SpatialBOQCanvas() {
                 Drag wall to reposition • Drag endpoints to resize • Delete to remove
               </div>
             )}
+            
+            {/* Pan/Zoom hint (Item #1 & #2) */}
+            {!selectedItem && (
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
+                <span>Scroll to zoom • Middle-click or Space+drag to pan • Ctrl+0 to reset</span>
+              </div>
+            )}
+            
+            {/* Zoom indicator */}
+            <div className="absolute top-3 right-3 bg-white/90 px-2 py-1 rounded text-xs font-medium text-slate-600 shadow-sm">
+              {Math.round(scale * 100 / DEFAULT_SCALE)}%
+            </div>
           </div>
 
           {/* Panel Toggle - Right */}

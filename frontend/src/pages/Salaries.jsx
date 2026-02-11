@@ -375,6 +375,168 @@ export default function Salaries() {
     setShowExitModal(true);
   };
 
+  // ============ INCENTIVE HANDLERS ============
+  const handleCreateIncentive = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...incentiveData,
+        amount: parseFloat(incentiveData.amount) || 0,
+        percentage_of: incentiveData.calculation_type === 'percentage' ? parseFloat(incentiveData.percentage_of) || 0 : null,
+        project_id: incentiveData.project_id || null
+      };
+      
+      await axios.post(`${API}/api/finance/incentives`, payload, { withCredentials: true });
+      toast.success('Incentive created successfully');
+      setShowIncentiveModal(false);
+      setIncentiveData({
+        employee_id: '',
+        incentive_type: 'booking',
+        project_id: '',
+        amount: '',
+        calculation_type: 'fixed',
+        percentage_of: '',
+        trigger_event: '',
+        notes: ''
+      });
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to create incentive');
+    }
+  };
+  
+  const handleApproveIncentive = async (incentiveId) => {
+    try {
+      await axios.put(`${API}/api/finance/incentives/${incentiveId}/approve`, {}, { withCredentials: true });
+      toast.success('Incentive approved');
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to approve incentive');
+    }
+  };
+  
+  const handlePayoutIncentive = async (e) => {
+    e.preventDefault();
+    if (!selectedIncentive) return;
+    
+    try {
+      await axios.post(`${API}/api/finance/incentives/${selectedIncentive.incentive_id}/payout`, {
+        incentive_id: selectedIncentive.incentive_id,
+        ...payoutData
+      }, { withCredentials: true });
+      toast.success('Incentive paid successfully');
+      setShowPayoutModal(false);
+      setSelectedIncentive(null);
+      setPayoutData({ account_id: '', payment_date: new Date().toISOString().split('T')[0], notes: '' });
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to process payout');
+    }
+  };
+  
+  // ============ COMMISSION HANDLERS ============
+  const handleCreateCommission = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...commissionData,
+        amount: parseFloat(commissionData.amount) || 0,
+        percentage_of: commissionData.calculation_type === 'percentage' ? parseFloat(commissionData.percentage_of) || 0 : null,
+        project_id: commissionData.project_id || null
+      };
+      
+      await axios.post(`${API}/api/finance/commissions`, payload, { withCredentials: true });
+      toast.success('Commission created successfully');
+      setShowCommissionModal(false);
+      setCommissionData({
+        recipient_type: 'referral',
+        recipient_name: '',
+        recipient_contact: '',
+        commission_type: 'referral',
+        project_id: '',
+        amount: '',
+        calculation_type: 'fixed',
+        percentage_of: '',
+        notes: ''
+      });
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to create commission');
+    }
+  };
+  
+  const handlePayoutCommission = async (e) => {
+    e.preventDefault();
+    if (!selectedCommission) return;
+    
+    try {
+      await axios.post(`${API}/api/finance/commissions/${selectedCommission.commission_id}/payout`, {
+        commission_id: selectedCommission.commission_id,
+        ...payoutData
+      }, { withCredentials: true });
+      toast.success('Commission paid successfully');
+      setShowPayoutModal(false);
+      setSelectedCommission(null);
+      setPayoutData({ account_id: '', payment_date: new Date().toISOString().split('T')[0], notes: '' });
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to process payout');
+    }
+  };
+  
+  // ============ DEDUCTION HANDLERS ============
+  const handleAddDeduction = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        employee_id: deductionData.employee_id,
+        month_year: deductionData.month_year,
+        gross_salary: parseFloat(deductionData.gross_salary) || 0,
+        deductions: deductionData.deductions.map(d => ({
+          deduction_type: d.type,
+          amount: parseFloat(d.amount) || 0,
+          reason: d.reason || '',
+          custom_label: d.custom_label || null,
+          auto_calculated: false
+        }))
+      };
+      
+      await axios.post(`${API}/api/finance/salary-processing`, payload, { withCredentials: true });
+      toast.success('Salary processed with deductions');
+      setShowDeductionModal(false);
+      setDeductionData({
+        employee_id: '',
+        month_year: getCurrentMonth(),
+        gross_salary: '',
+        deductions: []
+      });
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to process salary');
+    }
+  };
+  
+  const addDeductionRow = () => {
+    setDeductionData(prev => ({
+      ...prev,
+      deductions: [...prev.deductions, { type: 'leave', amount: '', reason: '', custom_label: '' }]
+    }));
+  };
+  
+  const removeDeductionRow = (index) => {
+    setDeductionData(prev => ({
+      ...prev,
+      deductions: prev.deductions.filter((_, i) => i !== index)
+    }));
+  };
+  
+  const updateDeductionRow = (index, field, value) => {
+    setDeductionData(prev => ({
+      ...prev,
+      deductions: prev.deductions.map((d, i) => i === index ? { ...d, [field]: value } : d)
+    }));
+  };
+
   const getRiskBadge = (status) => {
     switch (status) {
       case 'safe': return <Badge className="bg-green-100 text-green-800">Safe</Badge>;

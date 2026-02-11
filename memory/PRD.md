@@ -9,10 +9,45 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Employee Compensation & Payout Architecture COMPLETE ✅
+## Current Status: Employee Classification Feature COMPLETE ✅
 **As of February 11, 2026**
 
-### New Feature: Unified Compensation System
+### New Feature: Functional Employee Classification
+
+The Employee Classification system is now **fully functional** with enforced business logic:
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Classification Types** | 5 types: permanent, probation, trainee, freelancer, channel_partner | ✅ |
+| **Salary Eligibility** | Only permanent & probation employees can receive salary payments | ✅ ENFORCED |
+| **Stipend Routing** | Only trainee employees can receive stipend payments | ✅ ENFORCED |
+| **Incentive Eligibility** | Only permanent, probation, trainee employees eligible; freelancer/channel_partner must use Commission | ✅ ENFORCED |
+| **Statutory Deductions** | Auto-calculated PF/ESI for permanent/probation; exempt for trainee/freelancer/channel_partner | ✅ ENFORCED |
+| **Salary Cycles Filter** | GET /api/finance/salary-cycles now filters to salary-eligible employees only | ✅ |
+| **Classification UI** | New "Classifications" tab in Salaries page with summary cards, workflow rules, change modal, history | ✅ |
+
+**Payment Workflow Rules (Enforced):**
+| Classification | Payment Method | Statutory Deductions | Can Receive |
+|----------------|----------------|----------------------|-------------|
+| Permanent | Salary | PF, ESI, Professional Tax (auto-calculated) | Salary, Incentives |
+| Probation | Salary | PF, ESI (auto-calculated) | Salary, Incentives |
+| Trainee | Stipend | None (exempt) | Stipend, Incentives |
+| Freelancer | Commission | None (exempt) | Commission only |
+| Channel Partner | Commission | None (exempt) | Commission only |
+
+**New API Endpoints:**
+- `GET /api/hr/classification-summary` - Breakdown with workflow guidance
+- `GET /api/hr/employees/{user_id}/classification-history` - Change history log
+- `PUT /api/hr/employees/{user_id}/classification` - Update with history tracking
+
+**Verification (iteration_59.json):** 100% pass rate (18/18 backend + all frontend tests)
+
+---
+
+## Previous Status: Employee Compensation & Payout Architecture COMPLETE ✅
+**As of February 11, 2026**
+
+### Unified Compensation System
 
 | Component | Features | Status |
 |-----------|----------|--------|

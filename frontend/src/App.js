@@ -131,6 +131,7 @@ const AppRouter = () => {
         <Route path="/leads/:id" element={<LeadDetails />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:id" element={<ProjectDetails />} />
+        <Route path="/projects/:id/boq" element={<BOQBuilder />} />
         <Route path="/academy" element={<Academy />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/users" element={<Users />} />

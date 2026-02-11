@@ -1272,20 +1272,40 @@ export default function SpatialBOQCanvas() {
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" className="w-9 h-9 p-0" onClick={() => setScale(s => Math.min(s * 1.2, 0.5))}>
+                <Button variant="ghost" size="sm" className="w-9 h-9 p-0" onClick={() => {
+                  const rect = svgRef.current?.getBoundingClientRect();
+                  const centerX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+                  const centerY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+                  zoomAtCursor(Math.min(scale * 1.2, 0.5), centerX, centerY);
+                }}>
                   <ZoomIn className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="right">Zoom In</TooltipContent>
+              <TooltipContent side="right">Zoom In (Ctrl +)</TooltipContent>
             </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" className="w-9 h-9 p-0" onClick={() => setScale(s => Math.max(s / 1.2, 0.05))}>
+                <Button variant="ghost" size="sm" className="w-9 h-9 p-0" onClick={() => {
+                  const rect = svgRef.current?.getBoundingClientRect();
+                  const centerX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+                  const centerY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+                  zoomAtCursor(Math.max(scale / 1.2, 0.05), centerX, centerY);
+                }}>
                   <ZoomOut className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="right">Zoom Out</TooltipContent>
+              <TooltipContent side="right">Zoom Out (Ctrl -)</TooltipContent>
+            </Tooltip>
+
+            {/* Reset Zoom (Item #2) */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-9 h-9 p-0 text-xs font-medium" onClick={resetZoomToFit}>
+                  <span className="text-[10px]">FIT</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Reset Zoom (Ctrl 0)</TooltipContent>
             </Tooltip>
 
             <div className="flex-1" />

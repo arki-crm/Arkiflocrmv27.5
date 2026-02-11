@@ -7413,7 +7413,7 @@ async def get_project_boq(project_id: str, request: Request):
     }
     
     await db.project_boqs.insert_one(new_boq)
-    del new_boq["_id"] if "_id" in new_boq else None
+    new_boq.pop("_id", None)  # Remove _id if present
     
     return new_boq
 

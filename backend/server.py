@@ -25477,44 +25477,27 @@ async def get_project_lock_status(project_id: str, request: Request):
     effective_lock_pct = lock_override.get("lock_percentage", default_lock_pct) if lock_override else default_lock_pct
     is_overridden = lock_override is not None
     
-    # EXECUTION-PHASE ONLY: Calculate total received from execution-phase receipts
-    # Execution phases are: Production, Delivery, Installation, Handover
-    # These are receipts collected AFTER design sign-off OR linked to execution stages
-    execution_stages = ["production", "production payment", "delivery", "installation", "handover", 
-                       "final payment", "final", "post-production", "completion"]
+    # EXECUTION-PHASE LIQUIDITY LOGIC:
+    # - Before Sign-off: Booking advances are EXCLUDED from cash lock (not yet execution phase)
+    # - After Sign-off: ALL receipts (including booking advances) are reclassified as execution liquidity
+    # This ensures booking advances remain excluded until BOQ Sign-off is locked
     
+    signoff_locked = project.get("signoff_locked", False)
     signoff_locked_at = project.get("signoff_locked_at")
     
-    # Build receipt query for execution phase only
-    receipt_query = {"project_id": project_id, "status": {"$ne": "cancelled"}}
-    
-    # Parse signoff_locked_at for date comparison
-    signoff_datetime = None
-    if signoff_locked_at:
-        if isinstance(signoff_locked_at, str):
-            from datetime import datetime as dt
-            try:
-                signoff_datetime = dt.fromisoformat(signoff_locked_at.replace('Z', '+00:00'))
-            except:
-                pass
-        else:
-            signoff_datetime = signoff_locked_at
-    
-    if signoff_datetime:
-        # Get receipts created after signoff OR linked to execution stages
-        receipt_query["$or"] = [
-            {"created_at": {"$gte": signoff_datetime}},  # After signoff
-            {"stage_name": {"$regex": "|".join(execution_stages), "$options": "i"}}  # Execution stage
-        ]
+    if signoff_locked:
+        # PROJECT IS SIGNED OFF: All collected receipts become execution liquidity
+        # Booking advances are automatically reclassified into execution received
+        execution_receipts = await db.finance_receipts.find(
+            {"project_id": project_id, "status": {"$ne": "cancelled"}},
+            {"_id": 0, "amount": 1, "receipt_id": 1, "stage_name": 1, "created_at": 1}
+        ).to_list(1000)
+        total_execution_received = sum(r.get("amount", 0) for r in execution_receipts)
     else:
-        # If not signed off, only get receipts explicitly linked to execution stages
-        receipt_query["stage_name"] = {"$regex": "|".join(execution_stages), "$options": "i"}
-    
-    execution_receipts = await db.finance_receipts.find(
-        receipt_query,
-        {"_id": 0, "amount": 1, "receipt_id": 1, "stage_name": 1, "created_at": 1}
-    ).to_list(1000)
-    total_execution_received = sum(r.get("amount", 0) for r in execution_receipts)
+        # PROJECT NOT SIGNED OFF: No receipts count as execution liquidity
+        # Booking advances remain excluded from cash lock calculations
+        execution_receipts = []
+        total_execution_received = 0
     
     # EXECUTION COMMITMENTS:
     # 1. Execution ledger purchase invoices (unpaid liabilities)

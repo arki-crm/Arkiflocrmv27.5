@@ -944,6 +944,18 @@ const ProjectDetails = () => {
             </div>
           )}
           
+          {/* Composer Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/projects/${id}/spatial-boq`)}
+            className="text-violet-600 border-violet-300 hover:bg-violet-50"
+            data-testid="open-composer-btn"
+          >
+            <Grid className="w-4 h-4 mr-1.5" />
+            Open Composer
+          </Button>
+          
           {/* Current Stage Badge */}
           {project?.stage && (
             <span 

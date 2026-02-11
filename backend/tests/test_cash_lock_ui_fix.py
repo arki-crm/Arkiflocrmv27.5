@@ -30,7 +30,7 @@ class TestCashLockUIFix:
         project_id = "proj_0a79eb51"
         
         response = requests.get(
-            f"{BASE_URL}/api/finance/projects/{project_id}/lock-status",
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
             headers=self.headers
         )
         
@@ -46,7 +46,7 @@ class TestCashLockUIFix:
         project_id = "proj_0a79eb51"
         
         response = requests.get(
-            f"{BASE_URL}/api/finance/projects/{project_id}/lock-status",
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
             headers=self.headers
         )
         
@@ -78,7 +78,7 @@ class TestCashLockUIFix:
         project_id = "proj_0a79eb51"
         
         response = requests.get(
-            f"{BASE_URL}/api/finance/projects/{project_id}/lock-status",
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
             headers=self.headers
         )
         
@@ -96,7 +96,7 @@ class TestCashLockUIFix:
         project_id = "proj_0a79eb51"
         
         response = requests.get(
-            f"{BASE_URL}/api/finance/projects/{project_id}/lock-status",
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
             headers=self.headers
         )
         
@@ -117,7 +117,7 @@ class TestCashLockUIFix:
         project_id = "proj_0a79eb51"
         
         response = requests.get(
-            f"{BASE_URL}/api/finance/projects/{project_id}/lock-status",
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
             headers=self.headers
         )
         
@@ -147,7 +147,7 @@ class TestCashLockUIFix:
         project_id = "proj_0a79eb51"
         
         response = requests.get(
-            f"{BASE_URL}/api/finance/projects/{project_id}/lock-status",
+            f"{BASE_URL}/api/finance/project-lock-status/{project_id}",
             headers=self.headers
         )
         

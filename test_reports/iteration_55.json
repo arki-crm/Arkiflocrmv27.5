@@ -1,0 +1,76 @@
+{
+  "summary": "Advance Cash Lock Execution-Phase Filtering - All 9 tests passed. Cash lock now correctly filters to execution-phase receipts only. Pre-signoff receipts are excluded, and commitments come from execution_ledger liabilities.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "test_01_login_works - Authentication working",
+    "test_02_proj_0a79eb51_lock_status_execution_phase_only - Pre-signoff receipt (25000) excluded, post-signoff receipt (5000) included",
+    "test_03_proj_0a79eb51_safe_to_use_calculation - Safe to Use = 750 (5000 - 85% locked)",
+    "test_04_proj_17942869_not_signed_off_zero_execution_receipts - Unsigned project shows 0 execution receipts",
+    "test_05_bulk_lock_status_execution_phase_filtering - Bulk endpoint also filters to execution phase",
+    "test_06_execution_stage_named_receipts_included - Execution stage name matching documented",
+    "test_07_commitments_from_execution_ledger_only - Commitments from execution_ledger + expense_requests",
+    "test_08_response_structure_complete - All 19 required fields present",
+    "test_09_bulk_response_structure_complete - Bulk endpoint structure verified"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_advance_cash_lock_execution_phase.py",
+    "/app/test_reports/pytest/advance_cash_lock_execution_phase_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_advance_cash_lock_execution_phase.py"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 tests passed)",
+    "frontend": "N/A (backend only testing requested)"
+  },
+  "test_credentials": {
+    "founder_login": {
+      "email": "sidheeq.arkidots@gmail.com",
+      "password": "founder123"
+    }
+  },
+  "seed_data_creation": "None - used existing test projects",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Advance Cash Lock execution-phase filtering verified. Key changes: 1) Total Received only counts receipts after signoff_locked_at OR with execution stage names, 2) Pre-signoff receipts are excluded from cash lock calculations, 3) Commitments come from execution_ledger liabilities (source='execution_ledger') + approved expense requests. Test projects: proj_0a79eb51 (signoff_locked_at=2026-01-31T19:15:51, pre-signoff receipt=25000 EXCLUDED, post-signoff receipt=5000 INCLUDED, safe_to_use=750), proj_17942869 (not signed off, 0 execution receipts).",
+  "verified_data": {
+    "proj_0a79eb51": {
+      "signoff_locked_at": "2026-01-31T19:15:51",
+      "pre_signoff_receipt": 25000,
+      "post_signoff_receipt": 5000,
+      "total_received_execution_phase": 5000,
+      "lock_percentage": 85,
+      "gross_locked": 4250,
+      "net_locked": 4250,
+      "safe_to_use": 750,
+      "total_commitments": 0
+    },
+    "proj_17942869": {
+      "signoff_locked": false,
+      "signoff_locked_at": null,
+      "total_received_execution_phase": 0,
+      "reason": "Not signed off and no execution-stage named receipts"
+    }
+  },
+  "execution_phase_logic": {
+    "receipt_inclusion_criteria": [
+      "Receipt created_at >= signoff_locked_at (after design signoff)",
+      "OR receipt stage_name matches execution stages (production, delivery, installation, handover, final payment, etc.)"
+    ],
+    "commitment_sources": [
+      "finance_liabilities with source='execution_ledger' and status in ['open', 'partially_settled']",
+      "finance_expense_requests with status='approved'"
+    ],
+    "safe_to_use_formula": "max(0, Execution Received - Net Locked - Total Commitments)"
+  }
+}

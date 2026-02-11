@@ -193,6 +193,17 @@ const ProjectDetails = () => {
       setGstApplicable(response.data.gst_applicable || false);
       setGstNumber(response.data.gst_number || '');
       
+      // Fetch BOQ summary
+      try {
+        const boqRes = await axios.get(`${API}/projects/${id}/boq/summary`, {
+          withCredentials: true
+        });
+        setBoqSummary(boqRes.data);
+      } catch (boqErr) {
+        // BOQ might not exist yet, which is fine
+        setBoqSummary(null);
+      }
+      
       // Fetch user milestone permissions from substages endpoint
       try {
         const substagesRes = await axios.get(`${API}/projects/${id}/substages`, {

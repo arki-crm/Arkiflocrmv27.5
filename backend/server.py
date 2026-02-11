@@ -30051,6 +30051,7 @@ async def process_salary_with_deductions(data: SalaryProcessingRequest, request:
     """
     Process salary with structured deductions.
     Creates proper ledger entries for different deduction types.
+    ENFORCED: Classification-based statutory deduction rules
     """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
@@ -30063,12 +30064,96 @@ async def process_salary_with_deductions(data: SalaryProcessingRequest, request:
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
+    # Get employee classification and validate
+    emp_classification = employee.get("employee_classification", "permanent")
+    
+    # Classification-based validation for salary processing
+    if emp_classification not in SALARY_ELIGIBLE_CLASSIFICATIONS:
+        classification_guidance = {
+            "trainee": "Trainees should receive Stipend payments. Use the Stipend workflow.",
+            "freelancer": "Freelancers should receive Professional Fee payments via Commission workflow.",
+            "channel_partner": "Channel Partners should receive Commission payments."
+        }
+        guidance = classification_guidance.get(emp_classification, f"Classification '{emp_classification}' is not eligible for salary processing.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Employee '{employee.get('name')}' is classified as '{emp_classification}'. {guidance}"
+        )
+    
     # Verify salary master exists
     salary_master = await db.finance_salary_master.find_one({"employee_id": data.employee_id})
     if not salary_master:
         raise HTTPException(status_code=404, detail="Salary record not found")
     
     now = datetime.now(timezone.utc)
+    
+    # Get default statutory deductions for this classification
+    default_statutory = DEFAULT_STATUTORY_DEDUCTIONS.get(emp_classification, [])
+    provided_deduction_types = [d.deduction_type for d in data.deductions]
+    
+    # Auto-add missing statutory deductions for permanent/probation employees
+    # Only if no statutory deductions were explicitly provided
+    has_any_statutory = any(DEDUCTION_TYPES.get(dt, {}).get("statutory", False) for dt in provided_deduction_types)
+    
+    auto_added_deductions = []
+    if not has_any_statutory and emp_classification in ["permanent", "probation"]:
+        # Check if we should auto-add based on salary thresholds
+        # PF: Typically for salary > 15000 (configurable)
+        # ESI: Typically for salary <= 21000 (configurable)
+        gross = data.gross_salary
+        
+        for statutory_type in default_statutory:
+            if statutory_type == "pf" and gross >= 15000:
+                # Standard PF is 12% of basic (assuming basic = 50% of gross for simplicity)
+                pf_amount = round(gross * 0.5 * 0.12, 0)
+                auto_added_deductions.append({
+                    "deduction_type": "pf",
+                    "amount": pf_amount,
+                    "reason": "Auto-calculated PF (12% of basic)",
+                    "auto_calculated": True
+                })
+            elif statutory_type == "esi" and gross <= 21000:
+                # ESI is 0.75% of gross for employee contribution
+                esi_amount = round(gross * 0.0075, 0)
+                auto_added_deductions.append({
+                    "deduction_type": "esi", 
+                    "amount": esi_amount,
+                    "reason": "Auto-calculated ESI (0.75% of gross)",
+                    "auto_calculated": True
+                })
+            elif statutory_type == "professional_tax":
+                # Professional tax is typically a fixed amount based on state
+                pt_amount = 200 if gross >= 15000 else 0
+                if pt_amount > 0:
+                    auto_added_deductions.append({
+                        "deduction_type": "professional_tax",
+                        "amount": pt_amount,
+                        "reason": "Auto-calculated Professional Tax",
+                        "auto_calculated": True
+                    })
+    
+    # Validate statutory deductions for exempt classifications
+    if emp_classification in STATUTORY_EXEMPT_CLASSIFICATIONS:
+        statutory_in_request = [d for d in data.deductions if DEDUCTION_TYPES.get(d.deduction_type, {}).get("statutory", False)]
+        if statutory_in_request:
+            statutory_names = [DEDUCTION_TYPES[d.deduction_type]["name"] for d in statutory_in_request]
+            raise HTTPException(
+                status_code=400,
+                detail=f"Employee '{employee.get('name')}' is classified as '{emp_classification}' and is exempt from statutory deductions. Remove: {', '.join(statutory_names)}"
+            )
+    
+    # Combine provided deductions with auto-added ones
+    all_deductions = list(data.deductions)
+    for auto_ded in auto_added_deductions:
+        # Convert to StructuredDeduction-like object
+        class AutoDeduction:
+            def __init__(self, d):
+                self.deduction_type = d["deduction_type"]
+                self.amount = d["amount"]
+                self.reason = d["reason"]
+                self.custom_label = None
+                self.auto_calculated = d["auto_calculated"]
+        all_deductions.append(AutoDeduction(auto_ded))
     
     # Calculate deductions breakdown
     deduction_breakdown = []

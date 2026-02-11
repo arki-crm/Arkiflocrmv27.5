@@ -28878,8 +28878,8 @@ async def get_salary_history(employee_id: str, request: Request, months: int = 1
 
 
 @api_router.get("/finance/salary-cycles")
-async def get_salary_cycles(request: Request, month_year: Optional[str] = None, employee_id: Optional[str] = None):
-    """Get salary cycles with summary"""
+async def get_salary_cycles(request: Request, month_year: Optional[str] = None, employee_id: Optional[str] = None, include_all: bool = False):
+    """Get salary cycles with summary - filtered to salary-eligible employees only"""
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
@@ -28894,14 +28894,21 @@ async def get_salary_cycles(request: Request, month_year: Optional[str] = None, 
     
     cycles = await db.finance_salary_cycles.find(query, {"_id": 0}).sort("month_year", -1).to_list(500)
     
-    # Enrich with employee details
+    # Enrich with employee details and filter by classification
+    filtered_cycles = []
     for cycle in cycles:
-        emp = await db.users.find_one({"user_id": cycle["employee_id"]}, {"_id": 0, "name": 1, "role": 1})
+        emp = await db.users.find_one({"user_id": cycle["employee_id"]}, {"_id": 0, "name": 1, "role": 1, "employee_classification": 1})
         if emp:
             cycle["employee_name"] = emp.get("name", "Unknown")
             cycle["employee_role"] = emp.get("role", "")
+            cycle["employee_classification"] = emp.get("employee_classification", "permanent")
+            
+            # Filter: Only include salary-eligible classifications unless include_all is True
+            emp_classification = emp.get("employee_classification", "permanent")
+            if include_all or emp_classification in SALARY_ELIGIBLE_CLASSIFICATIONS:
+                filtered_cycles.append(cycle)
     
-    return cycles
+    return filtered_cycles
 
 
 @api_router.post("/finance/salary-payments")

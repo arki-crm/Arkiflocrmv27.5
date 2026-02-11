@@ -163,9 +163,68 @@ export default function SpatialBOQCanvas() {
     }
   }, [selectedItem]);
 
-  // Keyboard event handler
+  // Zoom helper - zoom centered on cursor position (Item #2)
+  const zoomAtCursor = useCallback((newScale, cursorX, cursorY) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) {
+      setScale(newScale);
+      return;
+    }
+
+    // Calculate cursor position relative to canvas
+    const cursorCanvasX = cursorX - rect.left;
+    const cursorCanvasY = cursorY - rect.top;
+
+    // Calculate offset adjustment to keep cursor point fixed
+    const scaleRatio = newScale / scale;
+    const newPanX = cursorCanvasX - (cursorCanvasX - panOffset.x) * scaleRatio;
+    const newPanY = cursorCanvasY - (cursorCanvasY - panOffset.y) * scaleRatio;
+
+    setScale(newScale);
+    setPanOffset({ x: newPanX, y: newPanY });
+  }, [scale, panOffset]);
+
+  // Reset zoom to fit canvas (Item #2)
+  const resetZoomToFit = useCallback(() => {
+    setScale(DEFAULT_SCALE);
+    setPanOffset({ x: 50, y: 50 });
+  }, []);
+
+  // Keyboard event handler - enhanced with zoom shortcuts and spacebar pan
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Spacebar for pan mode (Item #1)
+      if (e.code === 'Space' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        setSpacePressed(true);
+        return;
+      }
+
+      // Zoom keyboard shortcuts (Item #2)
+      if ((e.ctrlKey || e.metaKey) && document.activeElement.tagName !== 'INPUT') {
+        const rect = svgRef.current?.getBoundingClientRect();
+        const centerX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+        const centerY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          const newScale = Math.min(scale * 1.2, 0.5);
+          zoomAtCursor(newScale, centerX, centerY);
+          return;
+        }
+        if (e.key === '-') {
+          e.preventDefault();
+          const newScale = Math.max(scale / 1.2, 0.05);
+          zoomAtCursor(newScale, centerX, centerY);
+          return;
+        }
+        if (e.key === '0') {
+          e.preventDefault();
+          resetZoomToFit();
+          return;
+        }
+      }
+
       if (!selectedItem) return;
 
       // Delete key
@@ -201,9 +260,19 @@ export default function SpatialBOQCanvas() {
       }
     };
 
+    const handleKeyUp = (e) => {
+      if (e.code === 'Space') {
+        setSpacePressed(false);
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItem, layout]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [selectedItem, layout, scale, zoomAtCursor, resetZoomToFit]);
 
   // Fetch data
   const fetchData = useCallback(async () => {

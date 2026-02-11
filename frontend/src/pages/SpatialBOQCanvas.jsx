@@ -485,6 +485,15 @@ export default function SpatialBOQCanvas() {
 
   // Handle mouse move
   const handleMouseMove = (e) => {
+    // Handle panning (Item #1)
+    if (isPanning && panStart) {
+      setPanOffset({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y
+      });
+      return;
+    }
+
     const canvas = screenToCanvas(e.clientX, e.clientY);
 
     // Drawing wall

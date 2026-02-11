@@ -7271,6 +7271,568 @@ async def add_lead_quotation_history(lead_id: str, entry: QuotationHistoryEntry,
     
     return {"success": True, "entry": new_entry}
 
+
+# ============ BOQ BUILDER (PHASE-1 CANVAS MODEL) ============
+
+# BOQ Status Constants
+BOQ_STATUSES = ["draft", "under_review", "locked"]
+
+# Default BOQ Rooms Template
+DEFAULT_BOQ_ROOMS = [
+    "Kitchen",
+    "Living Room", 
+    "Dining Room",
+    "Master Bedroom",
+    "Bedroom 2",
+    "Bedroom 3",
+    "Wardrobes",
+    "TV Unit",
+    "Wall Paneling",
+    "Misc / Custom"
+]
+
+# BOQ Unit Options
+BOQ_UNITS = ["sqft", "rft", "nos", "set", "lump sum"]
+
+
+class BOQItem(BaseModel):
+    """Single line item in BOQ room"""
+    item_id: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    width: Optional[float] = None
+    height: Optional[float] = None
+    depth: Optional[float] = None
+    quantity: float = 1
+    unit: str = "nos"
+    unit_price: float = 0
+    total_price: Optional[float] = None  # Auto-calculated
+
+
+class BOQRoom(BaseModel):
+    """Room section in BOQ"""
+    room_id: Optional[str] = None
+    name: str
+    items: List[BOQItem] = []
+    subtotal: Optional[float] = None  # Auto-calculated
+
+
+class BOQCreate(BaseModel):
+    """Request model for creating/updating BOQ"""
+    rooms: List[BOQRoom]
+    notes: Optional[str] = None
+
+
+class BOQStatusUpdate(BaseModel):
+    """Request model for status change"""
+    status: str
+    change_notes: Optional[str] = None
+
+
+class BOQRoomAdd(BaseModel):
+    """Request model for adding a room"""
+    name: str
+    position: Optional[int] = None  # Insert position, None = append
+
+
+def calculate_boq_totals(rooms: list) -> tuple:
+    """Calculate room subtotals and grand total"""
+    grand_total = 0
+    for room in rooms:
+        subtotal = 0
+        for item in room.get("items", []):
+            # Calculate item total: quantity * unit_price
+            item_total = item.get("quantity", 1) * item.get("unit_price", 0)
+            item["total_price"] = round(item_total, 2)
+            subtotal += item_total
+        room["subtotal"] = round(subtotal, 2)
+        grand_total += subtotal
+    return rooms, round(grand_total, 2)
+
+
+@api_router.get("/projects/{project_id}/boq")
+async def get_project_boq(project_id: str, request: Request):
+    """
+    Get BOQ for a project. Creates new draft if none exists.
+    Returns current version with room-wise item breakdown.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check project access
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Permission check - must have project access
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Find existing BOQ (most recent version)
+    boq = await db.project_boqs.find_one(
+        {"project_id": project_id},
+        {"_id": 0},
+        sort=[("version", -1)]
+    )
+    
+    if boq:
+        # Recalculate totals to ensure consistency
+        rooms, grand_total = calculate_boq_totals(boq.get("rooms", []))
+        boq["rooms"] = rooms
+        boq["grand_total"] = grand_total
+        return boq
+    
+    # No BOQ exists - create new draft with default rooms
+    now = datetime.now(timezone.utc)
+    boq_id = f"boq_{uuid.uuid4().hex[:12]}"
+    
+    # Create default rooms structure
+    default_rooms = []
+    for i, room_name in enumerate(DEFAULT_BOQ_ROOMS):
+        default_rooms.append({
+            "room_id": f"room_{uuid.uuid4().hex[:8]}",
+            "name": room_name,
+            "items": [],
+            "subtotal": 0
+        })
+    
+    new_boq = {
+        "boq_id": boq_id,
+        "project_id": project_id,
+        "version": 1,
+        "status": "draft",
+        "rooms": default_rooms,
+        "grand_total": 0,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "updated_by": user.user_id,
+        "updated_by_name": user.name,
+        "notes": None
+    }
+    
+    await db.project_boqs.insert_one(new_boq)
+    del new_boq["_id"] if "_id" in new_boq else None
+    
+    return new_boq
+
+
+@api_router.put("/projects/{project_id}/boq")
+async def save_project_boq(project_id: str, data: BOQCreate, request: Request):
+    """
+    Save BOQ changes. Creates new version if status allows editing.
+    Auto-calculates all totals.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Permission check - designers can edit draft
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get current BOQ
+    current_boq = await db.project_boqs.find_one(
+        {"project_id": project_id},
+        sort=[("version", -1)]
+    )
+    
+    if not current_boq:
+        raise HTTPException(status_code=404, detail="BOQ not found. Create one first.")
+    
+    # Check if editable
+    if current_boq.get("status") == "locked":
+        raise HTTPException(status_code=400, detail="BOQ is locked and cannot be edited")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Prepare rooms with IDs
+    rooms_data = []
+    for room in data.rooms:
+        room_dict = room.model_dump()
+        if not room_dict.get("room_id"):
+            room_dict["room_id"] = f"room_{uuid.uuid4().hex[:8]}"
+        
+        # Ensure all items have IDs
+        for item in room_dict.get("items", []):
+            if not item.get("item_id"):
+                item["item_id"] = f"item_{uuid.uuid4().hex[:8]}"
+        
+        rooms_data.append(room_dict)
+    
+    # Calculate totals
+    rooms_data, grand_total = calculate_boq_totals(rooms_data)
+    
+    # Update current version
+    await db.project_boqs.update_one(
+        {"_id": current_boq["_id"]},
+        {
+            "$set": {
+                "rooms": rooms_data,
+                "grand_total": grand_total,
+                "updated_at": now.isoformat(),
+                "updated_by": user.user_id,
+                "updated_by_name": user.name,
+                "notes": data.notes
+            }
+        }
+    )
+    
+    # Log to version history
+    history_entry = {
+        "version": current_boq["version"],
+        "edited_at": now.isoformat(),
+        "edited_by": user.user_id,
+        "edited_by_name": user.name,
+        "grand_total": grand_total,
+        "room_count": len(rooms_data),
+        "notes": data.notes
+    }
+    
+    await db.project_boqs.update_one(
+        {"_id": current_boq["_id"]},
+        {"$push": {"edit_history": history_entry}}
+    )
+    
+    return {
+        "success": True,
+        "boq_id": current_boq["boq_id"],
+        "version": current_boq["version"],
+        "grand_total": grand_total,
+        "updated_at": now.isoformat()
+    }
+
+
+@api_router.put("/projects/{project_id}/boq/status")
+async def update_boq_status(project_id: str, data: BOQStatusUpdate, request: Request):
+    """
+    Update BOQ status. Status transitions:
+    - draft → under_review (Designer/Design Manager)
+    - under_review → draft (revert for edits)
+    - under_review → locked (Admin/Founder only)
+    - locked → cannot change
+    
+    When locked, creates a new version snapshot for history.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if data.status not in BOQ_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {BOQ_STATUSES}")
+    
+    # Get current BOQ
+    current_boq = await db.project_boqs.find_one(
+        {"project_id": project_id},
+        sort=[("version", -1)]
+    )
+    
+    if not current_boq:
+        raise HTTPException(status_code=404, detail="BOQ not found")
+    
+    current_status = current_boq.get("status", "draft")
+    new_status = data.status
+    
+    # Validate transitions
+    if current_status == "locked":
+        raise HTTPException(status_code=400, detail="BOQ is locked and status cannot be changed")
+    
+    # Permission checks based on transition
+    if new_status == "locked":
+        # Only Admin/Founder can lock
+        if user_doc.get("role") not in ["Admin", "Founder"] and not is_founder(user_doc):
+            raise HTTPException(status_code=403, detail="Only Admin or Founder can lock a BOQ")
+    
+    if new_status == "under_review":
+        # Designer or Design Manager can move to review
+        if not has_permission(user_doc, "projects.view"):
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc)
+    
+    update_data = {
+        "status": new_status,
+        "updated_at": now.isoformat(),
+        "updated_by": user.user_id,
+        "updated_by_name": user.name,
+        f"{new_status}_at": now.isoformat(),
+        f"{new_status}_by": user.user_id,
+        f"{new_status}_by_name": user.name
+    }
+    
+    # If locking, also update project's signoff_value placeholder
+    if new_status == "locked":
+        grand_total = current_boq.get("grand_total", 0)
+        
+        # Create a new locked version snapshot
+        new_version = current_boq["version"] + 1
+        locked_snapshot = {
+            "boq_id": current_boq["boq_id"],
+            "project_id": project_id,
+            "version": new_version,
+            "status": "locked",
+            "rooms": current_boq.get("rooms", []),
+            "grand_total": grand_total,
+            "created_by": current_boq.get("created_by"),
+            "created_by_name": current_boq.get("created_by_name"),
+            "created_at": current_boq.get("created_at"),
+            "locked_at": now.isoformat(),
+            "locked_by": user.user_id,
+            "locked_by_name": user.name,
+            "lock_notes": data.change_notes,
+            "is_locked_version": True
+        }
+        
+        await db.project_boqs.insert_one(locked_snapshot)
+        
+        # Update project with BOQ signoff value (read-only placeholder)
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {
+                "$set": {
+                    "boq_locked_value": grand_total,
+                    "boq_locked_at": now.isoformat(),
+                    "boq_version": new_version
+                }
+            }
+        )
+    
+    await db.project_boqs.update_one(
+        {"_id": current_boq["_id"]},
+        {"$set": update_data}
+    )
+    
+    # Log status change
+    status_log = {
+        "from_status": current_status,
+        "to_status": new_status,
+        "changed_at": now.isoformat(),
+        "changed_by": user.user_id,
+        "changed_by_name": user.name,
+        "notes": data.change_notes
+    }
+    
+    await db.project_boqs.update_one(
+        {"_id": current_boq["_id"]},
+        {"$push": {"status_history": status_log}}
+    )
+    
+    return {
+        "success": True,
+        "status": new_status,
+        "previous_status": current_status,
+        "updated_at": now.isoformat()
+    }
+
+
+@api_router.post("/projects/{project_id}/boq/rooms")
+async def add_boq_room(project_id: str, data: BOQRoomAdd, request: Request):
+    """Add a new room to BOQ"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get current BOQ
+    current_boq = await db.project_boqs.find_one(
+        {"project_id": project_id},
+        sort=[("version", -1)]
+    )
+    
+    if not current_boq:
+        raise HTTPException(status_code=404, detail="BOQ not found")
+    
+    if current_boq.get("status") == "locked":
+        raise HTTPException(status_code=400, detail="Cannot add room to locked BOQ")
+    
+    now = datetime.now(timezone.utc)
+    new_room = {
+        "room_id": f"room_{uuid.uuid4().hex[:8]}",
+        "name": data.name,
+        "items": [],
+        "subtotal": 0
+    }
+    
+    rooms = current_boq.get("rooms", [])
+    
+    if data.position is not None and 0 <= data.position <= len(rooms):
+        rooms.insert(data.position, new_room)
+    else:
+        rooms.append(new_room)
+    
+    await db.project_boqs.update_one(
+        {"_id": current_boq["_id"]},
+        {
+            "$set": {
+                "rooms": rooms,
+                "updated_at": now.isoformat(),
+                "updated_by": user.user_id,
+                "updated_by_name": user.name
+            }
+        }
+    )
+    
+    return {"success": True, "room": new_room, "room_count": len(rooms)}
+
+
+@api_router.delete("/projects/{project_id}/boq/rooms/{room_id}")
+async def delete_boq_room(project_id: str, room_id: str, request: Request):
+    """Delete a room from BOQ"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    current_boq = await db.project_boqs.find_one(
+        {"project_id": project_id},
+        sort=[("version", -1)]
+    )
+    
+    if not current_boq:
+        raise HTTPException(status_code=404, detail="BOQ not found")
+    
+    if current_boq.get("status") == "locked":
+        raise HTTPException(status_code=400, detail="Cannot delete room from locked BOQ")
+    
+    rooms = current_boq.get("rooms", [])
+    rooms = [r for r in rooms if r.get("room_id") != room_id]
+    
+    # Recalculate grand total
+    _, grand_total = calculate_boq_totals(rooms)
+    
+    now = datetime.now(timezone.utc)
+    await db.project_boqs.update_one(
+        {"_id": current_boq["_id"]},
+        {
+            "$set": {
+                "rooms": rooms,
+                "grand_total": grand_total,
+                "updated_at": now.isoformat(),
+                "updated_by": user.user_id,
+                "updated_by_name": user.name
+            }
+        }
+    )
+    
+    return {"success": True, "room_count": len(rooms), "grand_total": grand_total}
+
+
+@api_router.get("/projects/{project_id}/boq/versions")
+async def get_boq_versions(project_id: str, request: Request):
+    """Get all BOQ versions for a project"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    versions = await db.project_boqs.find(
+        {"project_id": project_id},
+        {
+            "_id": 0,
+            "boq_id": 1,
+            "version": 1,
+            "status": 1,
+            "grand_total": 1,
+            "created_at": 1,
+            "created_by_name": 1,
+            "updated_at": 1,
+            "updated_by_name": 1,
+            "locked_at": 1,
+            "locked_by_name": 1,
+            "is_locked_version": 1,
+            "edit_history": 1,
+            "status_history": 1
+        }
+    ).sort("version", -1).to_list(50)
+    
+    return {"versions": versions, "count": len(versions)}
+
+
+@api_router.get("/projects/{project_id}/boq/versions/{version}")
+async def get_boq_version(project_id: str, version: int, request: Request):
+    """Get a specific BOQ version (read-only for historical versions)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    boq = await db.project_boqs.find_one(
+        {"project_id": project_id, "version": version},
+        {"_id": 0}
+    )
+    
+    if not boq:
+        raise HTTPException(status_code=404, detail=f"BOQ version {version} not found")
+    
+    # Recalculate totals
+    rooms, grand_total = calculate_boq_totals(boq.get("rooms", []))
+    boq["rooms"] = rooms
+    boq["grand_total"] = grand_total
+    
+    return boq
+
+
+@api_router.get("/projects/{project_id}/boq/summary")
+async def get_boq_summary(project_id: str, request: Request):
+    """
+    Get BOQ summary for financial integration (read-only).
+    Returns totals and status without full item details.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get latest BOQ
+    boq = await db.project_boqs.find_one(
+        {"project_id": project_id},
+        {"_id": 0},
+        sort=[("version", -1)]
+    )
+    
+    if not boq:
+        return {
+            "has_boq": False,
+            "status": None,
+            "grand_total": 0,
+            "room_count": 0,
+            "item_count": 0,
+            "version": 0
+        }
+    
+    # Calculate totals
+    rooms, grand_total = calculate_boq_totals(boq.get("rooms", []))
+    
+    # Count items
+    item_count = sum(len(r.get("items", [])) for r in rooms)
+    
+    # Room subtotals summary
+    room_summary = [
+        {"name": r.get("name"), "subtotal": r.get("subtotal", 0), "item_count": len(r.get("items", []))}
+        for r in rooms
+    ]
+    
+    return {
+        "has_boq": True,
+        "boq_id": boq.get("boq_id"),
+        "status": boq.get("status"),
+        "grand_total": grand_total,
+        "room_count": len(rooms),
+        "item_count": item_count,
+        "version": boq.get("version", 1),
+        "room_summary": room_summary,
+        "created_at": boq.get("created_at"),
+        "updated_at": boq.get("updated_at"),
+        "updated_by_name": boq.get("updated_by_name"),
+        "locked_at": boq.get("locked_at"),
+        "locked_by_name": boq.get("locked_by_name")
+    }
+
+
 @api_router.put("/leads/{lead_id}/assign-designer")
 async def assign_designer(lead_id: str, assign_data: LeadAssignDesigner, request: Request):
     """Assign or remove a designer from a lead - requires leads.update permission"""

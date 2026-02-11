@@ -1013,7 +1013,7 @@ Lead Allocated → BC Call Done → BOQ Shared → Site Meeting → Revised BOQ 
 ## Test Credentials
 
 **Local Admin Login:**
-- **URL**: https://hr-class-audit.preview.emergentagent.com/login
+- **URL**: https://spatial-canvas.preview.emergentagent.com/login
 - **Email**: thaha.pakayil@gmail.com
 - **Password**: password123
 - **Access**: Full Admin permissions

@@ -521,7 +521,7 @@ export default function SpatialBOQCanvas() {
           <div>
             <h1 className="text-lg font-semibold flex items-center gap-2">
               <Grid className="h-5 w-5" />
-              Spatial Layout Canvas
+              Composer
             </h1>
             <p className="text-sm text-slate-500">
               {project?.project_name} • {roomName}

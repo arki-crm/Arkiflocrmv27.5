@@ -9,7 +9,25 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Cash Lock Booking Advance Reclassification VERIFIED ✅
+## Current Status: Cash Lock UI Fix VERIFIED ✅
+**As of February 11, 2026**
+
+### Latest Fix: Cash Lock UI Rendering
+
+| Issue | Description | Fix | Status |
+|-------|-------------|-----|--------|
+| **UI Disappeared** | Cash Lock section disappeared after financial baseline patch | Added backward compatibility aliases (`outflow_count`, `outflow_commitment`) in backend response to match frontend field expectations | ✅ VERIFIED |
+
+**Root Cause:** Field name mismatch - frontend expected `outflow_count` but backend returned `execution_invoice_count`
+
+**Verification (iteration_57.json):** All tests passed
+- API returns `outflow_count` field ✅
+- UI renders Cash Lock section for signed-off projects ✅
+- All metrics display correctly (Total Received, Locked, Commitments, Safe to Use) ✅
+
+---
+
+## Previous Status: Cash Lock Booking Advance Reclassification VERIFIED ✅
 **As of February 11, 2026**
 
 ### Latest Fix: Advance Cash Lock - Booking Advance Handling

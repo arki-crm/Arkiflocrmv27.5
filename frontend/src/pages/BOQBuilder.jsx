@@ -780,8 +780,10 @@ export default function BOQBuilder() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Update BOQ Status</DialogTitle>
-            <DialogDescription>
-              Current status: <StatusBadge status={boq?.status} />
+            <DialogDescription asChild>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                Current status: <StatusBadge status={boq?.status} />
+              </div>
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">

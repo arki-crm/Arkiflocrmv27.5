@@ -107,6 +107,46 @@ export default function Salaries() {
   });
 
   const [ladderData, setLadderData] = useState([]);
+  
+  // Deduction form state
+  const [deductionData, setDeductionData] = useState({
+    employee_id: '',
+    month_year: getCurrentMonth(),
+    gross_salary: '',
+    deductions: []
+  });
+  
+  // Incentive form state
+  const [incentiveData, setIncentiveData] = useState({
+    employee_id: '',
+    incentive_type: 'booking',
+    project_id: '',
+    amount: '',
+    calculation_type: 'fixed',
+    percentage_of: '',
+    trigger_event: '',
+    notes: ''
+  });
+  
+  // Commission form state
+  const [commissionData, setCommissionData] = useState({
+    recipient_type: 'referral',
+    recipient_name: '',
+    recipient_contact: '',
+    commission_type: 'referral',
+    project_id: '',
+    amount: '',
+    calculation_type: 'fixed',
+    percentage_of: '',
+    notes: ''
+  });
+  
+  // Payout form state
+  const [payoutData, setPayoutData] = useState({
+    account_id: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
 
   const fetchData = useCallback(async () => {
     try {

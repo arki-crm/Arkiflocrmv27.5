@@ -4,7 +4,7 @@ import axios from 'axios';
 import { 
   Users, Plus, DollarSign, Calendar, AlertTriangle, CheckCircle, 
   Clock, ArrowRight, XCircle, Wallet, Edit, History, LogOut,
-  TrendingUp, PiggyBank, Settings, Star, Award, Target
+  TrendingUp, PiggyBank, Settings, Star, Award, Target, Gift, Percent, Minus, UserCheck, Briefcase
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
@@ -15,6 +15,7 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Textarea } from '../components/ui/textarea';
+import { Checkbox } from '../components/ui/checkbox';
 import { toast } from 'sonner';
 
 const API = process.env.REACT_APP_BACKEND_URL;

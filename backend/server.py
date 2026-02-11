@@ -25554,6 +25554,10 @@ async def get_project_lock_status(project_id: str, request: Request):
         "expense_request_count": len(approved_expense_requests),
         "total_commitments": total_commitments,
         
+        # Backward compatibility aliases for UI
+        "outflow_commitment": execution_invoice_commitment,
+        "outflow_count": len(execution_liabilities),
+        
         # Lock calculations (based on execution phase only)
         "gross_locked": round(gross_locked, 2),
         "net_locked": round(net_locked, 2),

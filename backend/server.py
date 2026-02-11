@@ -7833,6 +7833,570 @@ async def get_boq_summary(project_id: str, request: Request):
     }
 
 
+# ============ SPATIAL BOQ CANVAS (2D MODULAR LAYOUT) ============
+
+# Module Types for Spatial Canvas
+MODULE_TYPES = {
+    "base_cabinet": {
+        "name": "Base Cabinet",
+        "category": "cabinet",
+        "default_width": 600,
+        "default_height": 850,
+        "default_depth": 550,
+        "unit": "nos",
+        "icon": "cabinet-base"
+    },
+    "wall_cabinet": {
+        "name": "Wall Cabinet",
+        "category": "cabinet",
+        "default_width": 600,
+        "default_height": 720,
+        "default_depth": 350,
+        "unit": "nos",
+        "icon": "cabinet-wall"
+    },
+    "tall_unit": {
+        "name": "Tall Unit",
+        "category": "cabinet",
+        "default_width": 600,
+        "default_height": 2100,
+        "default_depth": 550,
+        "unit": "nos",
+        "icon": "cabinet-tall"
+    },
+    "loft_unit": {
+        "name": "Loft Unit",
+        "category": "cabinet",
+        "default_width": 600,
+        "default_height": 450,
+        "default_depth": 350,
+        "unit": "nos",
+        "icon": "cabinet-loft"
+    },
+    "appliance_hob": {
+        "name": "Hob",
+        "category": "appliance",
+        "default_width": 600,
+        "default_height": 50,
+        "default_depth": 520,
+        "unit": "nos",
+        "icon": "appliance-hob"
+    },
+    "appliance_chimney": {
+        "name": "Chimney",
+        "category": "appliance",
+        "default_width": 600,
+        "default_height": 600,
+        "default_depth": 450,
+        "unit": "nos",
+        "icon": "appliance-chimney"
+    },
+    "appliance_microwave": {
+        "name": "Microwave Unit",
+        "category": "appliance",
+        "default_width": 600,
+        "default_height": 450,
+        "default_depth": 550,
+        "unit": "nos",
+        "icon": "appliance-microwave"
+    },
+    "appliance_oven": {
+        "name": "Oven Unit",
+        "category": "appliance",
+        "default_width": 600,
+        "default_height": 600,
+        "default_depth": 550,
+        "unit": "nos",
+        "icon": "appliance-oven"
+    },
+    "appliance_dishwasher": {
+        "name": "Dishwasher",
+        "category": "appliance",
+        "default_width": 600,
+        "default_height": 820,
+        "default_depth": 550,
+        "unit": "nos",
+        "icon": "appliance-dishwasher"
+    },
+    "appliance_sink": {
+        "name": "Sink Unit",
+        "category": "appliance",
+        "default_width": 800,
+        "default_height": 200,
+        "default_depth": 500,
+        "unit": "nos",
+        "icon": "appliance-sink"
+    }
+}
+
+# Finish Types with pricing tiers
+FINISH_TYPES = {
+    "laminate": {"name": "Laminate", "rate_per_sqft": 450, "tier": 1},
+    "acrylic": {"name": "Acrylic", "rate_per_sqft": 850, "tier": 2},
+    "pu_paint": {"name": "PU Paint", "rate_per_sqft": 1200, "tier": 3},
+    "veneer": {"name": "Veneer", "rate_per_sqft": 950, "tier": 2},
+    "membrane": {"name": "Membrane", "rate_per_sqft": 550, "tier": 1},
+    "glass": {"name": "Glass", "rate_per_sqft": 750, "tier": 2}
+}
+
+# Shutter Types
+SHUTTER_TYPES = {
+    "flat": {"name": "Flat/Plain", "multiplier": 1.0},
+    "profile": {"name": "Profile/Grooved", "multiplier": 1.15},
+    "glass": {"name": "Glass Shutter", "multiplier": 1.25},
+    "handleless": {"name": "Handleless/J-Profile", "multiplier": 1.20},
+    "shaker": {"name": "Shaker Style", "multiplier": 1.10}
+}
+
+
+class SpatialWall(BaseModel):
+    """Wall definition in spatial layout"""
+    wall_id: Optional[str] = None
+    start_x: float
+    start_y: float
+    end_x: float
+    end_y: float
+    length: float  # in mm
+    thickness: float = 150  # wall thickness in mm
+    has_door: bool = False
+    has_window: bool = False
+    door_width: Optional[float] = None
+    door_position: Optional[float] = None  # distance from start
+    window_width: Optional[float] = None
+    window_position: Optional[float] = None
+
+
+class SpatialModule(BaseModel):
+    """Module placed in spatial layout"""
+    module_id: Optional[str] = None
+    module_type: str
+    wall_id: Optional[str] = None  # which wall it's attached to
+    position_on_wall: float = 0  # distance from wall start in mm
+    x: float  # canvas position
+    y: float
+    width: float  # in mm
+    height: float  # in mm
+    depth: float  # in mm
+    rotation: float = 0  # degrees
+    finish_type: str = "laminate"
+    shutter_type: str = "flat"
+    custom_name: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class SpatialLayoutCreate(BaseModel):
+    """Request model for creating/updating spatial layout"""
+    room_name: str
+    walls: List[SpatialWall]
+    modules: List[SpatialModule]
+    canvas_width: float = 4000  # default canvas size in mm
+    canvas_height: float = 3000
+    scale: float = 0.1  # pixels per mm
+    notes: Optional[str] = None
+
+
+def calculate_module_metrics(module: dict) -> dict:
+    """Calculate sqft, area, and material consumption for a module"""
+    width_mm = module.get("width", 0)
+    height_mm = module.get("height", 0)
+    depth_mm = module.get("depth", 0)
+    
+    # Convert to feet
+    width_ft = width_mm / 304.8
+    height_ft = height_mm / 304.8
+    depth_ft = depth_mm / 304.8
+    
+    # Calculate areas
+    front_area_sqft = width_ft * height_ft
+    side_area_sqft = depth_ft * height_ft * 2  # both sides
+    top_bottom_area_sqft = width_ft * depth_ft * 2
+    total_material_sqft = front_area_sqft + side_area_sqft + top_bottom_area_sqft
+    
+    # Running feet (linear)
+    running_ft = width_ft
+    
+    # Get finish rate
+    finish_type = module.get("finish_type", "laminate")
+    shutter_type = module.get("shutter_type", "flat")
+    
+    finish_info = FINISH_TYPES.get(finish_type, FINISH_TYPES["laminate"])
+    shutter_info = SHUTTER_TYPES.get(shutter_type, SHUTTER_TYPES["flat"])
+    
+    rate_per_sqft = finish_info["rate_per_sqft"] * shutter_info["multiplier"]
+    estimated_cost = round(total_material_sqft * rate_per_sqft, 2)
+    
+    return {
+        "width_mm": width_mm,
+        "height_mm": height_mm,
+        "depth_mm": depth_mm,
+        "width_ft": round(width_ft, 2),
+        "height_ft": round(height_ft, 2),
+        "depth_ft": round(depth_ft, 2),
+        "front_area_sqft": round(front_area_sqft, 2),
+        "total_material_sqft": round(total_material_sqft, 2),
+        "running_ft": round(running_ft, 2),
+        "rate_per_sqft": round(rate_per_sqft, 2),
+        "estimated_cost": estimated_cost
+    }
+
+
+def calculate_layout_summary(layout: dict) -> dict:
+    """Calculate overall layout metrics"""
+    modules = layout.get("modules", [])
+    walls = layout.get("walls", [])
+    
+    # Wall metrics
+    total_wall_length_mm = sum(w.get("length", 0) for w in walls)
+    total_wall_length_ft = total_wall_length_mm / 304.8
+    
+    # Module metrics
+    module_count = len(modules)
+    total_cabinet_length_mm = sum(m.get("width", 0) for m in modules if MODULE_TYPES.get(m.get("module_type", ""), {}).get("category") == "cabinet")
+    total_cabinet_length_ft = total_cabinet_length_mm / 304.8
+    
+    # Calculate total material and cost
+    total_material_sqft = 0
+    total_estimated_cost = 0
+    module_breakdown = []
+    
+    for module in modules:
+        metrics = calculate_module_metrics(module)
+        total_material_sqft += metrics["total_material_sqft"]
+        total_estimated_cost += metrics["estimated_cost"]
+        
+        module_type_info = MODULE_TYPES.get(module.get("module_type"), {})
+        module_breakdown.append({
+            "module_id": module.get("module_id"),
+            "module_type": module.get("module_type"),
+            "name": module.get("custom_name") or module_type_info.get("name", "Unknown"),
+            "dimensions": f"{module.get('width', 0)}×{module.get('height', 0)}×{module.get('depth', 0)} mm",
+            "finish": FINISH_TYPES.get(module.get("finish_type", ""), {}).get("name", "Unknown"),
+            "shutter": SHUTTER_TYPES.get(module.get("shutter_type", ""), {}).get("name", "Unknown"),
+            "area_sqft": metrics["total_material_sqft"],
+            "estimated_cost": metrics["estimated_cost"]
+        })
+    
+    # Count by category
+    cabinet_count = len([m for m in modules if MODULE_TYPES.get(m.get("module_type", ""), {}).get("category") == "cabinet"])
+    appliance_count = len([m for m in modules if MODULE_TYPES.get(m.get("module_type", ""), {}).get("category") == "appliance"])
+    
+    return {
+        "total_wall_length_mm": round(total_wall_length_mm, 0),
+        "total_wall_length_ft": round(total_wall_length_ft, 2),
+        "total_cabinet_length_mm": round(total_cabinet_length_mm, 0),
+        "total_cabinet_length_ft": round(total_cabinet_length_ft, 2),
+        "module_count": module_count,
+        "cabinet_count": cabinet_count,
+        "appliance_count": appliance_count,
+        "total_material_sqft": round(total_material_sqft, 2),
+        "total_estimated_cost": round(total_estimated_cost, 2),
+        "module_breakdown": module_breakdown
+    }
+
+
+@api_router.get("/spatial/module-library")
+async def get_module_library(request: Request):
+    """Get available module types for spatial canvas"""
+    user = await get_current_user(request)
+    
+    return {
+        "module_types": MODULE_TYPES,
+        "finish_types": FINISH_TYPES,
+        "shutter_types": SHUTTER_TYPES
+    }
+
+
+@api_router.get("/projects/{project_id}/spatial-layout")
+async def get_spatial_layout(project_id: str, room_name: Optional[str] = None, request: Request = None):
+    """Get spatial layout for a project room"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Check project exists
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    query = {"project_id": project_id}
+    if room_name:
+        query["room_name"] = room_name
+    
+    # Get layouts for this project
+    layouts = await db.spatial_layouts.find(
+        query,
+        {"_id": 0}
+    ).sort("updated_at", -1).to_list(50)
+    
+    # Calculate metrics for each layout
+    for layout in layouts:
+        layout["summary"] = calculate_layout_summary(layout)
+    
+    return {
+        "project_id": project_id,
+        "layouts": layouts,
+        "count": len(layouts)
+    }
+
+
+@api_router.get("/projects/{project_id}/spatial-layout/{layout_id}")
+async def get_spatial_layout_detail(project_id: str, layout_id: str, request: Request):
+    """Get specific spatial layout with full details"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    layout = await db.spatial_layouts.find_one(
+        {"project_id": project_id, "layout_id": layout_id},
+        {"_id": 0}
+    )
+    
+    if not layout:
+        raise HTTPException(status_code=404, detail="Layout not found")
+    
+    # Calculate metrics
+    layout["summary"] = calculate_layout_summary(layout)
+    
+    # Calculate individual module metrics
+    for module in layout.get("modules", []):
+        module["metrics"] = calculate_module_metrics(module)
+    
+    return layout
+
+
+@api_router.post("/projects/{project_id}/spatial-layout")
+async def create_spatial_layout(project_id: str, data: SpatialLayoutCreate, request: Request):
+    """Create new spatial layout for a room"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Check project exists
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    now = datetime.now(timezone.utc)
+    layout_id = f"layout_{uuid.uuid4().hex[:12]}"
+    
+    # Process walls
+    walls_data = []
+    for wall in data.walls:
+        wall_dict = wall.model_dump()
+        if not wall_dict.get("wall_id"):
+            wall_dict["wall_id"] = f"wall_{uuid.uuid4().hex[:8]}"
+        walls_data.append(wall_dict)
+    
+    # Process modules
+    modules_data = []
+    for module in data.modules:
+        module_dict = module.model_dump()
+        if not module_dict.get("module_id"):
+            module_dict["module_id"] = f"mod_{uuid.uuid4().hex[:8]}"
+        modules_data.append(module_dict)
+    
+    new_layout = {
+        "layout_id": layout_id,
+        "project_id": project_id,
+        "room_name": data.room_name,
+        "walls": walls_data,
+        "modules": modules_data,
+        "canvas_width": data.canvas_width,
+        "canvas_height": data.canvas_height,
+        "scale": data.scale,
+        "notes": data.notes,
+        "version": 1,
+        "status": "draft",
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "updated_by": user.user_id,
+        "updated_by_name": user.name
+    }
+    
+    await db.spatial_layouts.insert_one(new_layout)
+    new_layout.pop("_id", None)
+    
+    # Calculate summary
+    new_layout["summary"] = calculate_layout_summary(new_layout)
+    
+    return new_layout
+
+
+@api_router.put("/projects/{project_id}/spatial-layout/{layout_id}")
+async def update_spatial_layout(project_id: str, layout_id: str, data: SpatialLayoutCreate, request: Request):
+    """Update existing spatial layout"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get existing layout
+    existing = await db.spatial_layouts.find_one(
+        {"project_id": project_id, "layout_id": layout_id}
+    )
+    
+    if not existing:
+        raise HTTPException(status_code=404, detail="Layout not found")
+    
+    if existing.get("status") == "locked":
+        raise HTTPException(status_code=400, detail="Cannot edit locked layout")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Process walls
+    walls_data = []
+    for wall in data.walls:
+        wall_dict = wall.model_dump()
+        if not wall_dict.get("wall_id"):
+            wall_dict["wall_id"] = f"wall_{uuid.uuid4().hex[:8]}"
+        walls_data.append(wall_dict)
+    
+    # Process modules
+    modules_data = []
+    for module in data.modules:
+        module_dict = module.model_dump()
+        if not module_dict.get("module_id"):
+            module_dict["module_id"] = f"mod_{uuid.uuid4().hex[:8]}"
+        modules_data.append(module_dict)
+    
+    # Update
+    await db.spatial_layouts.update_one(
+        {"_id": existing["_id"]},
+        {
+            "$set": {
+                "room_name": data.room_name,
+                "walls": walls_data,
+                "modules": modules_data,
+                "canvas_width": data.canvas_width,
+                "canvas_height": data.canvas_height,
+                "scale": data.scale,
+                "notes": data.notes,
+                "updated_at": now.isoformat(),
+                "updated_by": user.user_id,
+                "updated_by_name": user.name
+            },
+            "$inc": {"version": 1}
+        }
+    )
+    
+    # Return updated layout
+    updated = await db.spatial_layouts.find_one(
+        {"layout_id": layout_id},
+        {"_id": 0}
+    )
+    updated["summary"] = calculate_layout_summary(updated)
+    
+    return updated
+
+
+@api_router.post("/projects/{project_id}/spatial-layout/{layout_id}/generate-boq")
+async def generate_boq_from_layout(project_id: str, layout_id: str, request: Request):
+    """Generate BOQ line items from spatial layout modules"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get layout
+    layout = await db.spatial_layouts.find_one(
+        {"project_id": project_id, "layout_id": layout_id},
+        {"_id": 0}
+    )
+    
+    if not layout:
+        raise HTTPException(status_code=404, detail="Layout not found")
+    
+    # Generate BOQ items from modules
+    boq_items = []
+    for module in layout.get("modules", []):
+        module_type_info = MODULE_TYPES.get(module.get("module_type"), {})
+        metrics = calculate_module_metrics(module)
+        
+        boq_item = {
+            "item_id": f"item_{uuid.uuid4().hex[:8]}",
+            "source": "spatial_layout",
+            "source_id": layout_id,
+            "module_id": module.get("module_id"),
+            "name": module.get("custom_name") or module_type_info.get("name", "Unknown Module"),
+            "description": f"{module_type_info.get('name')} - {FINISH_TYPES.get(module.get('finish_type'), {}).get('name', '')} {SHUTTER_TYPES.get(module.get('shutter_type'), {}).get('name', '')}",
+            "width": module.get("width"),
+            "height": module.get("height"),
+            "depth": module.get("depth"),
+            "quantity": 1,
+            "unit": module_type_info.get("unit", "nos"),
+            "unit_price": metrics["estimated_cost"],
+            "total_price": metrics["estimated_cost"],
+            "finish_type": module.get("finish_type"),
+            "shutter_type": module.get("shutter_type"),
+            "area_sqft": metrics["total_material_sqft"]
+        }
+        boq_items.append(boq_item)
+    
+    # Store as modular BOQ (separate from table BOQ)
+    now = datetime.now(timezone.utc)
+    modular_boq = {
+        "modular_boq_id": f"mboq_{uuid.uuid4().hex[:12]}",
+        "project_id": project_id,
+        "layout_id": layout_id,
+        "room_name": layout.get("room_name"),
+        "items": boq_items,
+        "summary": calculate_layout_summary(layout),
+        "generated_at": now.isoformat(),
+        "generated_by": user.user_id,
+        "generated_by_name": user.name
+    }
+    
+    # Upsert - replace if exists for same layout
+    await db.modular_boqs.update_one(
+        {"project_id": project_id, "layout_id": layout_id},
+        {"$set": modular_boq},
+        upsert=True
+    )
+    
+    return {
+        "success": True,
+        "modular_boq_id": modular_boq["modular_boq_id"],
+        "room_name": layout.get("room_name"),
+        "item_count": len(boq_items),
+        "total_estimated_cost": sum(item["total_price"] for item in boq_items),
+        "items": boq_items
+    }
+
+
+@api_router.get("/projects/{project_id}/modular-boq")
+async def get_modular_boqs(project_id: str, request: Request):
+    """Get all modular BOQs for a project (generated from spatial layouts)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "projects.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    boqs = await db.modular_boqs.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).to_list(50)
+    
+    total_cost = sum(boq.get("summary", {}).get("total_estimated_cost", 0) for boq in boqs)
+    
+    return {
+        "project_id": project_id,
+        "modular_boqs": boqs,
+        "count": len(boqs),
+        "total_estimated_cost": round(total_cost, 2)
+    }
+
+
 @api_router.put("/leads/{lead_id}/assign-designer")
 async def assign_designer(lead_id: str, assign_data: LeadAssignDesigner, request: Request):
     """Assign or remove a designer from a lead - requires leads.update permission"""

@@ -5,14 +5,55 @@ Build a full-stack CRM application for an interior design company, managing the 
 
 ## Architecture
 - **Frontend**: React 19 + TailwindCSS + Shadcn UI
-- **Backend**: FastAPI (Python) - Currently monolithic server.py (~18,000+ lines)
+- **Backend**: FastAPI (Python) - Currently monolithic server.py (~19,000+ lines)
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Employee Classification Feature COMPLETE ✅
+## Current Status: BOQ Builder (Phase-1) COMPLETE ✅
 **As of February 11, 2026**
 
-### New Feature: Functional Employee Classification
+### New Feature: Bill of Quantities (BOQ) Builder - Canvas Model
+
+A room-wise BOQ workspace accessible from Project → Commercial section.
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Entry Point** | Project Details → BOQ Section → "Create BOQ" / "Open BOQ" button | ✅ |
+| **Default Rooms** | 10 pre-populated rooms: Kitchen, Living Room, Dining Room, Master Bedroom, Bedroom 2, Bedroom 3, Wardrobes, TV Unit, Wall Paneling, Misc/Custom | ✅ |
+| **Room Operations** | Add Room, Rename Room, Delete Room | ✅ |
+| **Item Table** | Item Name, Description, Dimensions (W×H×D), Qty, Unit, Unit Price, Total | ✅ |
+| **Item Operations** | Add Item, Duplicate Item, Delete Item with inline editing | ✅ |
+| **Units Supported** | sqft, rft, nos, set, lump sum | ✅ |
+| **Auto-Calculation** | quantity × unit_price = total, room subtotals, grand total | ✅ |
+| **Status Control** | Draft → Under Review → Locked (with permission checks) | ✅ |
+| **Version History** | Track versions with editor name, timestamp, change notes | ✅ |
+| **Financial Integration** | BOQ summary exposed to Project Details (read-only) | ✅ |
+| **Canvas UI** | Room cards, sticky grand total footer, clean enterprise style | ✅ |
+
+**Route:** `/projects/{project_id}/boq`
+
+**API Endpoints:**
+- `GET /api/projects/{project_id}/boq` - Get or create BOQ with default rooms
+- `PUT /api/projects/{project_id}/boq` - Save BOQ with auto-calculated totals
+- `POST /api/projects/{project_id}/boq/rooms` - Add new room
+- `DELETE /api/projects/{project_id}/boq/rooms/{room_id}` - Delete room
+- `PUT /api/projects/{project_id}/boq/status` - Status transitions
+- `GET /api/projects/{project_id}/boq/versions` - Version history
+- `GET /api/projects/{project_id}/boq/summary` - Summary for project details
+
+**Permissions:**
+- Designers → Create & Edit Draft
+- Design Manager → Review & Move to Under Review
+- Admin / Founder → Lock BOQ
+
+**Verification (iteration_60.json):** 100% pass rate (22/22 backend tests + all frontend UI verified)
+
+---
+
+## Previous Status: Employee Classification Feature COMPLETE ✅
+**As of February 11, 2026**
+
+### Functional Employee Classification
 
 The Employee Classification system is now **fully functional** with enforced business logic:
 

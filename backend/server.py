@@ -3838,7 +3838,11 @@ async def list_projects(
             "collaborators": collaborator_details,
             "summary": p.get("summary", ""),
             "updated_at": updated_at,
-            "created_at": created_at
+            "created_at": created_at,
+            # GST Settings - CRITICAL for Tax Invoice filtering
+            "is_gst_applicable": p.get("is_gst_applicable") or p.get("gst_applicable", False),
+            "gst_applicable": p.get("is_gst_applicable") or p.get("gst_applicable", False),
+            "gst_number": p.get("gst_number")
         })
     
     # Sorting logic

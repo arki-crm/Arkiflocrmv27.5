@@ -118,6 +118,15 @@ export default function SpatialBOQCanvas() {
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(true);
 
+  // Pan state (Item #1 - Canvas pan)
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState(null);
+  const [spacePressed, setSpacePressed] = useState(false);
+
+  // Elevation view drag state (Item #3 - Editable elevation)
+  const [elevationDragModule, setElevationDragModule] = useState(null);
+  const [elevationDragStart, setElevationDragStart] = useState(null);
+
   // Wall drawing state
   const [wallDrawMode, setWallDrawMode] = useState('free'); // rectangle, square, free
   const [showWallModePanel, setShowWallModePanel] = useState(false);

@@ -25459,8 +25459,12 @@ async def get_project_lock_status(project_id: str, request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Get project
-    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    # Get project with signoff lock info
+    project = await db.projects.find_one(
+        {"project_id": project_id}, 
+        {"_id": 0, "project_id": 1, "project_name": 1, "name": 1, "total_value": 1,
+         "signoff_locked": 1, "signoff_locked_at": 1, "signoff_value": 1}
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
@@ -25473,45 +25477,57 @@ async def get_project_lock_status(project_id: str, request: Request):
     effective_lock_pct = lock_override.get("lock_percentage", default_lock_pct) if lock_override else default_lock_pct
     is_overridden = lock_override is not None
     
-    # Calculate total received from receipts
-    receipts = await db.finance_receipts.find(
-        {"project_id": project_id},
-        {"_id": 0, "amount": 1, "receipt_id": 1, "created_at": 1}
+    # EXECUTION-PHASE ONLY: Calculate total received from execution-phase receipts
+    # Execution phases are: Production, Delivery, Installation, Handover
+    # These are receipts collected AFTER design sign-off OR linked to execution stages
+    execution_stages = ["production", "production payment", "delivery", "installation", "handover", 
+                       "final payment", "final", "post-production", "completion"]
+    
+    signoff_locked_at = project.get("signoff_locked_at")
+    
+    # Build receipt query for execution phase only
+    receipt_query = {"project_id": project_id, "status": {"$ne": "cancelled"}}
+    
+    if signoff_locked_at:
+        # Get receipts created after signoff OR linked to execution stages
+        receipt_query["$or"] = [
+            {"created_at": {"$gte": signoff_locked_at}},  # After signoff
+            {"stage_name": {"$regex": "|".join(execution_stages), "$options": "i"}}  # Execution stage
+        ]
+    else:
+        # If not signed off, only get receipts explicitly linked to execution stages
+        receipt_query["stage_name"] = {"$regex": "|".join(execution_stages), "$options": "i"}
+    
+    execution_receipts = await db.finance_receipts.find(
+        receipt_query,
+        {"_id": 0, "amount": 1, "receipt_id": 1, "stage_name": 1, "created_at": 1}
     ).to_list(1000)
-    total_received = sum(r.get("amount", 0) for r in receipts)
+    total_execution_received = sum(r.get("amount", 0) for r in execution_receipts)
     
-    # Also include project-linked inflows from cashbook
-    project_inflows = await db.accounting_transactions.find({
+    # EXECUTION COMMITMENTS:
+    # 1. Execution ledger purchase invoices (unpaid liabilities)
+    execution_liabilities = await db.finance_liabilities.find({
         "project_id": project_id,
-        "transaction_type": "inflow"
-    }, {"_id": 0, "amount": 1}).to_list(1000)
-    total_received += sum(t.get("amount", 0) for t in project_inflows)
+        "source": "execution_ledger",
+        "status": {"$in": ["open", "partially_settled"]}
+    }, {"_id": 0, "amount_remaining": 1, "liability_id": 1}).to_list(1000)
+    execution_invoice_commitment = sum(l.get("amount_remaining", 0) for l in execution_liabilities)
     
-    # Calculate commitments (actual money out + approved expense requests)
-    # 1. Cashbook outflows linked to project
-    project_outflows = await db.accounting_transactions.find({
-        "project_id": project_id,
-        "transaction_type": "outflow"
-    }, {"_id": 0, "amount": 1, "transaction_id": 1, "remarks": 1, "created_at": 1}).to_list(1000)
-    outflow_commitment = sum(t.get("amount", 0) for t in project_outflows)
-    
-    # 2. Approved expense requests for project (even if not yet paid)
+    # 2. Approved execution expense requests (not yet paid)
     approved_expense_requests = await db.finance_expense_requests.find({
         "project_id": project_id,
         "status": "approved"
     }, {"_id": 0, "amount": 1, "request_id": 1, "title": 1}).to_list(1000)
     expense_request_commitment = sum(er.get("amount", 0) for er in approved_expense_requests)
     
-    # Avoid double counting - if expense request was already paid (has linked transaction)
-    # For simplicity, we assume approved expense requests represent additional commitment
-    # In reality, you might want to track which expense requests have been paid
+    # Total execution commitments
+    total_commitments = execution_invoice_commitment + expense_request_commitment
     
-    total_commitments = outflow_commitment + expense_request_commitment
-    
-    # Calculate lock amounts
-    gross_locked = total_received * (effective_lock_pct / 100)
+    # Calculate lock amounts based on EXECUTION received only
+    gross_locked = total_execution_received * (effective_lock_pct / 100)
     net_locked = max(gross_locked - total_commitments, 0)
-    safe_to_use = total_received - net_locked
+    safe_to_use = total_execution_received - net_locked - total_commitments
+    safe_to_use = max(0, safe_to_use)  # Ensure non-negative
     
     # Get lock history
     lock_history = await db.project_lock_history.find(
@@ -25522,7 +25538,9 @@ async def get_project_lock_status(project_id: str, request: Request):
     return {
         "project_id": project_id,
         "project_name": project.get("name") or project.get("project_name"),
-        "project_value": project.get("total_value", 0),
+        "project_value": project.get("signoff_value") or project.get("total_value", 0),
+        "signoff_locked": project.get("signoff_locked", False),
+        "signoff_locked_at": signoff_locked_at,
         
         # Lock configuration
         "default_lock_percentage": default_lock_pct,
@@ -25530,18 +25548,18 @@ async def get_project_lock_status(project_id: str, request: Request):
         "is_overridden": is_overridden,
         "override_reason": lock_override.get("reason") if lock_override else None,
         
-        # Financial summary
-        "total_received": total_received,
-        "receipt_count": len(receipts),
+        # EXECUTION-PHASE financial summary (not total project inflow)
+        "total_received": total_execution_received,  # Execution receipts only
+        "receipt_count": len(execution_receipts),
         
-        # Commitments breakdown
-        "outflow_commitment": outflow_commitment,
-        "outflow_count": len(project_outflows),
+        # Execution commitments breakdown
+        "execution_invoice_commitment": execution_invoice_commitment,
+        "execution_invoice_count": len(execution_liabilities),
         "expense_request_commitment": expense_request_commitment,
         "expense_request_count": len(approved_expense_requests),
         "total_commitments": total_commitments,
         
-        # Lock calculations
+        # Lock calculations (based on execution phase only)
         "gross_locked": round(gross_locked, 2),
         "net_locked": round(net_locked, 2),
         "safe_to_use": round(safe_to_use, 2),

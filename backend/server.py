@@ -25605,8 +25605,9 @@ async def get_all_projects_lock_status(request: Request):
         {"_id": 0, "project_id": 1, "amount": 1, "stage_name": 1, "created_at": 1}
     ).to_list(10000)
     
-    # Filter to execution-phase receipts per project
-    from datetime import datetime as dt
+    # EXECUTION-PHASE LIQUIDITY LOGIC:
+    # - Before Sign-off: Booking advances are EXCLUDED (not execution phase)
+    # - After Sign-off: ALL receipts become execution liquidity (auto-reclassify booking advances)
     execution_receipts_by_project = {}
     for r in all_receipts:
         pid = r.get("project_id")
@@ -25614,44 +25615,11 @@ async def get_all_projects_lock_status(request: Request):
             continue
             
         signoff_info = signoff_map.get(pid, {})
-        signoff_locked_at = signoff_info.get("signoff_locked_at")
-        stage_name = (r.get("stage_name") or "").lower()
-        created_at = r.get("created_at")
+        is_signed_off = signoff_info.get("signoff_locked", False)
         
-        # Check if receipt is execution-phase:
-        # 1. Created after signoff lock, OR
-        # 2. Linked to execution stage name
-        is_execution_receipt = False
-        
-        # Check date comparison (handle string vs datetime)
-        if signoff_locked_at and created_at:
-            try:
-                # Normalize both to datetime for comparison
-                if isinstance(signoff_locked_at, str):
-                    signoff_dt = dt.fromisoformat(signoff_locked_at.replace('Z', '+00:00'))
-                else:
-                    signoff_dt = signoff_locked_at
-                
-                if isinstance(created_at, str):
-                    created_dt = dt.fromisoformat(created_at.replace('Z', '+00:00'))
-                else:
-                    created_dt = created_at
-                
-                # Make both timezone-aware or naive for comparison
-                if signoff_dt.tzinfo is None and created_dt.tzinfo is not None:
-                    signoff_dt = signoff_dt.replace(tzinfo=created_dt.tzinfo)
-                elif signoff_dt.tzinfo is not None and created_dt.tzinfo is None:
-                    created_dt = created_dt.replace(tzinfo=signoff_dt.tzinfo)
-                
-                is_execution_receipt = created_dt >= signoff_dt
-            except Exception:
-                pass
-        
-        # Also check stage name
-        if any(exec_stage in stage_name for exec_stage in execution_stages):
-            is_execution_receipt = True
-        
-        if is_execution_receipt:
+        # Only include receipts if project is signed off
+        # This automatically reclassifies booking advances into execution liquidity upon sign-off
+        if is_signed_off:
             execution_receipts_by_project[pid] = execution_receipts_by_project.get(pid, 0) + r.get("amount", 0)
     
     # Get execution-phase liabilities (commitments from execution ledger)

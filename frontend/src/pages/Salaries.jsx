@@ -1768,6 +1768,432 @@ export default function Salaries() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Create Incentive Modal */}
+      <Dialog open={showIncentiveModal} onOpenChange={setShowIncentiveModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gift className="w-5 h-5 text-purple-500" />
+              Create Incentive
+            </DialogTitle>
+            <DialogDescription>Create a new incentive for an employee</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateIncentive} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label>Employee</Label>
+                <Select value={incentiveData.employee_id} onValueChange={v => setIncentiveData(prev => ({ ...prev, employee_id: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                  <SelectContent>
+                    {salaries.map(s => (
+                      <SelectItem key={s.employee_id} value={s.employee_id}>{s.employee_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Incentive Type</Label>
+                <Select value={incentiveData.incentive_type} onValueChange={v => setIncentiveData(prev => ({ ...prev, incentive_type: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="booking">Booking Incentive</SelectItem>
+                    <SelectItem value="execution_50_percent">50% Collection Incentive</SelectItem>
+                    <SelectItem value="project_completion">Project Completion</SelectItem>
+                    <SelectItem value="customer_review">Customer Review</SelectItem>
+                    <SelectItem value="performance">Performance Incentive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Project (Optional)</Label>
+                <Select value={incentiveData.project_id} onValueChange={v => setIncentiveData(prev => ({ ...prev, project_id: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None</SelectItem>
+                    {projects.map(p => (
+                      <SelectItem key={p.project_id} value={p.project_id}>{p.project_name || p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Calculation Type</Label>
+                <Select value={incentiveData.calculation_type} onValueChange={v => setIncentiveData(prev => ({ ...prev, calculation_type: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">Fixed Amount</SelectItem>
+                    <SelectItem value="percentage">Percentage</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{incentiveData.calculation_type === 'percentage' ? 'Percentage (%)' : 'Amount (₹)'}</Label>
+                <Input 
+                  type="number" 
+                  value={incentiveData.amount} 
+                  onChange={e => setIncentiveData(prev => ({ ...prev, amount: e.target.value }))}
+                  placeholder={incentiveData.calculation_type === 'percentage' ? 'e.g., 2' : 'e.g., 5000'}
+                  required
+                />
+              </div>
+              {incentiveData.calculation_type === 'percentage' && (
+                <div className="col-span-2">
+                  <Label>Percentage of (Base Amount ₹)</Label>
+                  <Input 
+                    type="number" 
+                    value={incentiveData.percentage_of} 
+                    onChange={e => setIncentiveData(prev => ({ ...prev, percentage_of: e.target.value }))}
+                    placeholder="e.g., 500000 (booking amount)"
+                  />
+                </div>
+              )}
+              <div className="col-span-2">
+                <Label>Notes</Label>
+                <Textarea 
+                  value={incentiveData.notes} 
+                  onChange={e => setIncentiveData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Optional notes..."
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowIncentiveModal(false)}>Cancel</Button>
+              <Button type="submit">Create Incentive</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Create Commission Modal */}
+      <Dialog open={showCommissionModal} onOpenChange={setShowCommissionModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Briefcase className="w-5 h-5 text-indigo-500" />
+              Create Commission
+            </DialogTitle>
+            <DialogDescription>Create a commission for external parties</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateCommission} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Recipient Type</Label>
+                <Select value={commissionData.recipient_type} onValueChange={v => setCommissionData(prev => ({ ...prev, recipient_type: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="referral">Referral Partner</SelectItem>
+                    <SelectItem value="channel_partner">Channel Partner</SelectItem>
+                    <SelectItem value="associate">Associate Company</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Commission Type</Label>
+                <Select value={commissionData.commission_type} onValueChange={v => setCommissionData(prev => ({ ...prev, commission_type: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="referral">Referral Commission</SelectItem>
+                    <SelectItem value="channel_partner">Channel Partner</SelectItem>
+                    <SelectItem value="project_linked">Project Commission</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Recipient Name</Label>
+                <Input 
+                  value={commissionData.recipient_name} 
+                  onChange={e => setCommissionData(prev => ({ ...prev, recipient_name: e.target.value }))}
+                  placeholder="Name"
+                  required
+                />
+              </div>
+              <div>
+                <Label>Contact (Optional)</Label>
+                <Input 
+                  value={commissionData.recipient_contact} 
+                  onChange={e => setCommissionData(prev => ({ ...prev, recipient_contact: e.target.value }))}
+                  placeholder="Phone/Email"
+                />
+              </div>
+              <div className="col-span-2">
+                <Label>Project (Optional)</Label>
+                <Select value={commissionData.project_id} onValueChange={v => setCommissionData(prev => ({ ...prev, project_id: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None</SelectItem>
+                    {projects.map(p => (
+                      <SelectItem key={p.project_id} value={p.project_id}>{p.project_name || p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Calculation Type</Label>
+                <Select value={commissionData.calculation_type} onValueChange={v => setCommissionData(prev => ({ ...prev, calculation_type: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">Fixed Amount</SelectItem>
+                    <SelectItem value="percentage">Percentage</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{commissionData.calculation_type === 'percentage' ? 'Percentage (%)' : 'Amount (₹)'}</Label>
+                <Input 
+                  type="number" 
+                  value={commissionData.amount} 
+                  onChange={e => setCommissionData(prev => ({ ...prev, amount: e.target.value }))}
+                  required
+                />
+              </div>
+              {commissionData.calculation_type === 'percentage' && (
+                <div className="col-span-2">
+                  <Label>Percentage of (Base Amount ₹)</Label>
+                  <Input 
+                    type="number" 
+                    value={commissionData.percentage_of} 
+                    onChange={e => setCommissionData(prev => ({ ...prev, percentage_of: e.target.value }))}
+                  />
+                </div>
+              )}
+              <div className="col-span-2">
+                <Label>Notes</Label>
+                <Textarea 
+                  value={commissionData.notes} 
+                  onChange={e => setCommissionData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Optional notes..."
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowCommissionModal(false)}>Cancel</Button>
+              <Button type="submit">Create Commission</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Payout Modal (for both incentives and commissions) */}
+      <Dialog open={showPayoutModal} onOpenChange={(open) => {
+        setShowPayoutModal(open);
+        if (!open) {
+          setSelectedIncentive(null);
+          setSelectedCommission(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-green-500" />
+              Process Payout
+            </DialogTitle>
+            <DialogDescription>
+              {selectedIncentive ? `Pay incentive to ${selectedIncentive.employee_name}` : 
+               selectedCommission ? `Pay commission to ${selectedCommission.recipient_name}` : 'Process payout'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={selectedIncentive ? handlePayoutIncentive : handlePayoutCommission} className="space-y-4">
+            <div className="bg-slate-50 p-4 rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Amount to Pay</span>
+                <span className="text-2xl font-bold text-green-600">
+                  {formatCurrency((selectedIncentive || selectedCommission)?.amount || 0)}
+                </span>
+              </div>
+            </div>
+            <div>
+              <Label>Bank Account</Label>
+              <Select value={payoutData.account_id} onValueChange={v => setPayoutData(prev => ({ ...prev, account_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                <SelectContent>
+                  {accounts.filter(a => a.account_type === 'bank' && !a.is_archived).map(a => (
+                    <SelectItem key={a.account_id} value={a.account_id}>
+                      {a.account_name || a.name} ({formatCurrency(a.current_balance)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Payment Date</Label>
+              <Input 
+                type="date" 
+                value={payoutData.payment_date} 
+                onChange={e => setPayoutData(prev => ({ ...prev, payment_date: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Textarea 
+                value={payoutData.notes} 
+                onChange={e => setPayoutData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Optional payment notes..."
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowPayoutModal(false)}>Cancel</Button>
+              <Button type="submit">Process Payment</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Salary Deduction Modal */}
+      <Dialog open={showDeductionModal} onOpenChange={setShowDeductionModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Minus className="w-5 h-5 text-red-500" />
+              Process Salary with Deductions
+            </DialogTitle>
+            <DialogDescription>Add structured deductions to salary processing</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAddDeduction} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Employee</Label>
+                <Select value={deductionData.employee_id} onValueChange={v => {
+                  const emp = salaries.find(s => s.employee_id === v);
+                  setDeductionData(prev => ({ 
+                    ...prev, 
+                    employee_id: v,
+                    gross_salary: emp?.monthly_salary || ''
+                  }));
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                  <SelectContent>
+                    {salaries.map(s => (
+                      <SelectItem key={s.employee_id} value={s.employee_id}>{s.employee_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Month</Label>
+                <Input 
+                  type="month" 
+                  value={deductionData.month_year} 
+                  onChange={e => setDeductionData(prev => ({ ...prev, month_year: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="col-span-2">
+                <Label>Gross Salary (₹)</Label>
+                <Input 
+                  type="number" 
+                  value={deductionData.gross_salary} 
+                  onChange={e => setDeductionData(prev => ({ ...prev, gross_salary: e.target.value }))}
+                  required
+                />
+              </div>
+            </div>
+            
+            {/* Deductions Section */}
+            <div className="border rounded-lg p-4">
+              <div className="flex justify-between items-center mb-4">
+                <h4 className="font-medium">Deductions</h4>
+                <Button type="button" size="sm" variant="outline" onClick={addDeductionRow}>
+                  <Plus className="w-4 h-4 mr-1" /> Add Deduction
+                </Button>
+              </div>
+              
+              {deductionData.deductions.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-4">No deductions added</p>
+              ) : (
+                <div className="space-y-3">
+                  {deductionData.deductions.map((ded, idx) => (
+                    <div key={idx} className="grid grid-cols-12 gap-2 items-end bg-slate-50 p-3 rounded">
+                      <div className="col-span-3">
+                        <Label className="text-xs">Type</Label>
+                        <Select value={ded.type} onValueChange={v => updateDeductionRow(idx, 'type', v)}>
+                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="leave">Leave Deduction</SelectItem>
+                            <SelectItem value="late_attendance">Late Attendance</SelectItem>
+                            <SelectItem value="loss_recovery">Loss/Damage Recovery</SelectItem>
+                            <SelectItem value="advance_recovery">Advance Recovery</SelectItem>
+                            <SelectItem value="penalty">Penalty/Disciplinary</SelectItem>
+                            <SelectItem value="tds">TDS</SelectItem>
+                            <SelectItem value="pf">Provident Fund</SelectItem>
+                            <SelectItem value="esi">ESI</SelectItem>
+                            <SelectItem value="professional_tax">Professional Tax</SelectItem>
+                            <SelectItem value="custom">Custom</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-2">
+                        <Label className="text-xs">Amount</Label>
+                        <Input 
+                          type="number" 
+                          className="h-9"
+                          value={ded.amount} 
+                          onChange={e => updateDeductionRow(idx, 'amount', e.target.value)}
+                          placeholder="₹"
+                        />
+                      </div>
+                      <div className="col-span-4">
+                        <Label className="text-xs">Reason</Label>
+                        <Input 
+                          className="h-9"
+                          value={ded.reason} 
+                          onChange={e => updateDeductionRow(idx, 'reason', e.target.value)}
+                          placeholder="Reason..."
+                        />
+                      </div>
+                      {ded.type === 'custom' && (
+                        <div className="col-span-2">
+                          <Label className="text-xs">Label</Label>
+                          <Input 
+                            className="h-9"
+                            value={ded.custom_label} 
+                            onChange={e => updateDeductionRow(idx, 'custom_label', e.target.value)}
+                            placeholder="Label"
+                          />
+                        </div>
+                      )}
+                      <div className={ded.type === 'custom' ? 'col-span-1' : 'col-span-3'}>
+                        <Button type="button" size="sm" variant="ghost" className="h-9 text-red-500" onClick={() => removeDeductionRow(idx)}>
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Summary */}
+              {deductionData.deductions.length > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <div className="flex justify-between text-sm">
+                    <span>Gross Salary:</span>
+                    <span>{formatCurrency(parseFloat(deductionData.gross_salary) || 0)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-red-600">
+                    <span>Total Deductions:</span>
+                    <span>- {formatCurrency(deductionData.deductions.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0))}</span>
+                  </div>
+                  <div className="flex justify-between font-bold mt-2 pt-2 border-t">
+                    <span>Net Payable:</span>
+                    <span className="text-green-600">
+                      {formatCurrency(
+                        (parseFloat(deductionData.gross_salary) || 0) - 
+                        deductionData.deductions.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0)
+                      )}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowDeductionModal(false)}>Cancel</Button>
+              <Button type="submit">Process Salary</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

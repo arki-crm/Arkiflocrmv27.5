@@ -30204,6 +30204,7 @@ async def create_stipend_payment(data: StipendPaymentRequest, request: Request):
     - No statutory deductions (PF/TDS/ESI)
     - Classified under Training/HR Development Expense
     - Not included in payroll compliance reports
+    - ENFORCED: Only trainee-classified employees can receive stipends
     """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
@@ -30211,14 +30212,24 @@ async def create_stipend_payment(data: StipendPaymentRequest, request: Request):
     if not has_permission(user_doc, "finance.salaries.pay"):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Verify employee is a trainee
+    # Verify employee exists
     employee = await db.users.find_one({"user_id": data.employee_id})
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
-    if employee.get("employee_classification") not in ["trainee", None]:
-        # Allow for backward compatibility if classification not set
-        pass
+    # ENFORCED: Stipend payments are only for trainee-classified employees
+    emp_classification = employee.get("employee_classification", "permanent")
+    if emp_classification not in STIPEND_ELIGIBLE_CLASSIFICATIONS:
+        if emp_classification in SALARY_ELIGIBLE_CLASSIFICATIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Employee '{employee.get('name')}' is classified as '{emp_classification}'. Use Salary Payment workflow instead of Stipend."
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Employee '{employee.get('name')}' is classified as '{emp_classification}'. Stipends are only for trainee/intern employees."
+            )
     
     # Verify account
     account = await db.accounting_accounts.find_one({"account_id": data.account_id})

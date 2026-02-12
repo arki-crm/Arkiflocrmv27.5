@@ -1995,7 +1995,8 @@ export default function SpatialBOQCanvas() {
                   patternUnits="userSpaceOnUse"
                   patternTransform={`translate(${panOffset.x}, ${panOffset.y})`}
                 >
-                  <path d={`M ${100 * scale} 0 L 0 0 0 ${100 * scale}`} fill="none" stroke="#cbd5e1" strokeWidth="0.5" />
+                  {/* Item #6 - Lighter grid for eye-friendly palette */}
+                  <path d={`M ${100 * scale} 0 L 0 0 0 ${100 * scale}`} fill="none" stroke="#e2e8f0" strokeWidth="0.5" />
                 </pattern>
                 <pattern 
                   id="grid" 
@@ -2005,19 +2006,20 @@ export default function SpatialBOQCanvas() {
                   patternTransform={`translate(${panOffset.x}, ${panOffset.y})`}
                 >
                   <rect width={500 * scale} height={500 * scale} fill="url(#smallGrid)" />
-                  <path d={`M ${500 * scale} 0 L 0 0 0 ${500 * scale}`} fill="none" stroke="#94a3b8" strokeWidth="1" />
+                  {/* Item #6 - Subtle major grid lines */}
+                  <path d={`M ${500 * scale} 0 L 0 0 0 ${500 * scale}`} fill="none" stroke="#cbd5e1" strokeWidth="1" />
                 </pattern>
               </defs>
               <rect width="100%" height="100%" fill="url(#grid)" />
 
               <g transform={`translate(${panOffset.x}, ${panOffset.y})`}>
-                {/* Floor polygon detection (Item #2 - Auto Floor) */}
+                {/* Floor polygon detection (Item #5 - Visual Fill) */}
                 {detectedFloor && detectedFloor.length >= 3 && (
                   <polygon
                     points={detectedFloor.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
-                    fill="#bae6fd"
-                    fillOpacity="0.5"
-                    stroke="#0284c7"
+                    fill="#dbeafe"
+                    fillOpacity="0.6"
+                    stroke="#3b82f6"
                     strokeWidth="2"
                   />
                 )}

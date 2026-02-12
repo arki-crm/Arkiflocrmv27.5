@@ -1821,12 +1821,24 @@ export default function SpatialBOQCanvas() {
                         isDragging ? 'grabbing' : 'default' 
               }}
             >
-              {/* Grid */}
+              {/* Grid - now moves with pan offset for true viewport pan (Item #1) */}
               <defs>
-                <pattern id="smallGrid" width={100 * scale} height={100 * scale} patternUnits="userSpaceOnUse">
+                <pattern 
+                  id="smallGrid" 
+                  width={100 * scale} 
+                  height={100 * scale} 
+                  patternUnits="userSpaceOnUse"
+                  patternTransform={`translate(${panOffset.x}, ${panOffset.y})`}
+                >
                   <path d={`M ${100 * scale} 0 L 0 0 0 ${100 * scale}`} fill="none" stroke="#cbd5e1" strokeWidth="0.5" />
                 </pattern>
-                <pattern id="grid" width={500 * scale} height={500 * scale} patternUnits="userSpaceOnUse">
+                <pattern 
+                  id="grid" 
+                  width={500 * scale} 
+                  height={500 * scale} 
+                  patternUnits="userSpaceOnUse"
+                  patternTransform={`translate(${panOffset.x}, ${panOffset.y})`}
+                >
                   <rect width={500 * scale} height={500 * scale} fill="url(#smallGrid)" />
                   <path d={`M ${500 * scale} 0 L 0 0 0 ${500 * scale}`} fill="none" stroke="#94a3b8" strokeWidth="1" />
                 </pattern>
@@ -1834,15 +1846,14 @@ export default function SpatialBOQCanvas() {
               <rect width="100%" height="100%" fill="url(#grid)" />
 
               <g transform={`translate(${panOffset.x}, ${panOffset.y})`}>
-                {/* Floor polygon detection (Item #3 - Auto Floor) */}
+                {/* Floor polygon detection (Item #2 - Auto Floor) */}
                 {detectedFloor && detectedFloor.length >= 3 && (
                   <polygon
                     points={detectedFloor.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
-                    fill="#e0f2fe"
-                    fillOpacity="0.3"
-                    stroke="#0ea5e9"
-                    strokeWidth="1"
-                    strokeDasharray="4,2"
+                    fill="#bae6fd"
+                    fillOpacity="0.5"
+                    stroke="#0284c7"
+                    strokeWidth="2"
                   />
                 )}
 

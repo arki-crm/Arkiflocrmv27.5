@@ -513,64 +513,76 @@ export default function SpatialBOQCanvas() {
   }, [layout?.walls]);
 
   // Offset polygon with proper miter joins at vertices
+  // Uses correct miter join math: offset / cos(half_angle)
   const offsetPolygon = (vertices, offset, direction) => {
     if (vertices.length < 3) return vertices;
     
     const n = vertices.length;
     const result = [];
-    const sign = direction === 'outward' ? 1 : -1;
+    // For outward offset, we move in the direction of the inward normal of the polygon
+    // Assuming polygon vertices are in counter-clockwise order for a closed room
+    const sign = direction === 'outward' ? -1 : 1;
 
     for (let i = 0; i < n; i++) {
       const prev = vertices[(i - 1 + n) % n];
       const curr = vertices[i];
       const next = vertices[(i + 1) % n];
 
-      // Edge vectors
-      const edge1 = { x: curr.x - prev.x, y: curr.y - prev.y };
-      const edge2 = { x: next.x - curr.x, y: next.y - curr.y };
+      // Edge vectors (incoming and outgoing)
+      const e1x = curr.x - prev.x;
+      const e1y = curr.y - prev.y;
+      const e2x = next.x - curr.x;
+      const e2y = next.y - curr.y;
 
       // Normalize edge vectors
-      const len1 = Math.sqrt(edge1.x * edge1.x + edge1.y * edge1.y);
-      const len2 = Math.sqrt(edge2.x * edge2.x + edge2.y * edge2.y);
+      const len1 = Math.sqrt(e1x * e1x + e1y * e1y);
+      const len2 = Math.sqrt(e2x * e2x + e2y * e2y);
       
       if (len1 === 0 || len2 === 0) {
         result.push({ x: curr.x, y: curr.y });
         continue;
       }
 
-      const dir1 = { x: edge1.x / len1, y: edge1.y / len1 };
-      const dir2 = { x: edge2.x / len2, y: edge2.y / len2 };
+      const d1x = e1x / len1;
+      const d1y = e1y / len1;
+      const d2x = e2x / len2;
+      const d2y = e2y / len2;
 
-      // Perpendicular normals (pointing outward - left side of direction)
-      const norm1 = { x: -dir1.y * sign, y: dir1.x * sign };
-      const norm2 = { x: -dir2.y * sign, y: dir2.x * sign };
+      // Perpendicular normals (rotate 90° CCW: (-y, x))
+      const n1x = -d1y;
+      const n1y = d1x;
+      const n2x = -d2y;
+      const n2y = d2x;
 
-      // Miter vector = average of the two normals, scaled by miter factor
-      const miterX = norm1.x + norm2.x;
-      const miterY = norm1.y + norm2.y;
-      const miterLen = Math.sqrt(miterX * miterX + miterY * miterY);
+      // Bisector direction (sum of normals, normalized)
+      const bisectX = n1x + n2x;
+      const bisectY = n1y + n2y;
+      const bisectLen = Math.sqrt(bisectX * bisectX + bisectY * bisectY);
 
-      if (miterLen < 0.001) {
-        // Parallel edges - just offset by normal
+      if (bisectLen < 0.0001) {
+        // Edges are parallel (180° turn) - shouldn't happen in closed polygon
         result.push({
-          x: curr.x + norm1.x * offset,
-          y: curr.y + norm1.y * offset
+          x: curr.x + n1x * offset * sign,
+          y: curr.y + n1y * offset * sign
         });
         continue;
       }
 
-      // Calculate miter scale factor
-      // The miter length = offset / sin(half_angle)
-      const dot = norm1.x * norm2.x + norm1.y * norm2.y;
-      const miterScale = offset / (1 + dot) * 2;
+      // Normalized bisector
+      const bx = bisectX / bisectLen;
+      const by = bisectY / bisectLen;
 
-      // Limit miter to prevent spikes at sharp angles
-      const maxMiter = offset * 3;
-      const actualMiter = Math.min(miterScale, maxMiter);
+      // The miter length is offset / cos(half_angle)
+      // cos(half_angle) = dot(normal1, bisector) = n1x*bx + n1y*by
+      const cosHalfAngle = n1x * bx + n1y * by;
+      
+      // Clamp to avoid extreme miter lengths at sharp angles
+      const clampedCos = Math.max(cosHalfAngle, 0.25); // Limit miter to 4x offset
+      const miterLength = offset / clampedCos;
 
       result.push({
-        x: curr.x + (miterX / miterLen) * actualMiter,
-        y: curr.y + (miterY / miterLen) * actualMiter
+        x: curr.x + bx * miterLength * sign,
+        y: curr.y + by * miterLength * sign
       });
     }
 

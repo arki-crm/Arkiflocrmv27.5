@@ -955,13 +955,15 @@ export default function SpatialBOQCanvas() {
 
   // Add door or window with type selection (Item #5)
   const addOpening = (x, y, type, typeInfo) => {
+    saveToHistory();
     const nearestWall = findNearestWall(x, y);
     if (!nearestWall) {
       toast.error('Place openings near a wall');
       return;
     }
 
-    const snappedPos = snapOpeningToWall(x, y, typeInfo.width, WALL_THICKNESS, nearestWall);
+    const wallThickness = nearestWall.thickness || DEFAULT_WALL_THICKNESS;
+    const snappedPos = snapOpeningToWall(x, y, typeInfo.width, wallThickness, nearestWall);
 
     const opening = {
       [`${type}_id`]: `${type}_${Date.now().toString(36)}`,
@@ -972,7 +974,9 @@ export default function SpatialBOQCanvas() {
       y: Math.round(snappedPos.y),
       width: typeInfo.width,
       height: typeInfo.height,
-      depth: WALL_THICKNESS
+      depth: wallThickness,
+      rotation: 0,
+      flipped: false
     };
 
     const key = type === 'door' ? 'doors' : 'windows';

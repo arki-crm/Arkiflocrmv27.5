@@ -2024,7 +2024,7 @@ export default function SpatialBOQCanvas() {
                   />
                 )}
 
-                {/* Walls - CAD-style with dual edge strokes for depth effect */}
+                {/* Walls - CAD-style with thin edge outlines (Coohom style) */}
                 {layout?.walls?.map(wall => {
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
                   const thickness = wall.thickness || DEFAULT_WALL_THICKNESS;
@@ -2048,17 +2048,14 @@ export default function SpatialBOQCanvas() {
                   ];
                   const pointsStr = corners.map(c => `${c.x},${c.y}`).join(' ');
                   
-                  // Edge stroke width - stays visible at all zoom levels
-                  const edgeStrokeWidth = Math.max(1, 1.5 / Math.sqrt(scale));
-                  
                   return (
                     <g key={wall.wall_id} style={{ cursor: 'move' }}>
-                      {/* Wall fill with black edge strokes - CAD style */}
+                      {/* Wall fill with thin precise black outline - Coohom style */}
                       <polygon
                         points={pointsStr}
                         fill={isSelected ? '#93c5fd' : '#B0B0B0'}
                         stroke="#000000"
-                        strokeWidth={edgeStrokeWidth}
+                        strokeWidth="0.5"
                         strokeLinejoin="miter"
                         strokeLinecap="square"
                       />

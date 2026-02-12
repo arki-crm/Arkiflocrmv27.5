@@ -613,6 +613,220 @@ export default function SpatialBOQCanvas() {
   // Get unified boundary (memoized)
   const unifiedBoundary = useMemo(() => computeUnifiedWallBoundary(), [computeUnifiedWallBoundary]);
 
+  // ============================================
+  // RECTANGULAR LOOP PARAMETRIC EDITING
+  // Detects if a wall is part of a rectangular loop
+  // and provides parametric deformation
+  // ============================================
+
+  // Check if a wall is part of a rectangular (4-wall orthogonal) loop
+  const detectRectangularLoop = useCallback((wallId) => {
+    if (!layout?.walls || layout.walls.length < 4) return null;
+    
+    const tolerance = CLOSURE_TOLERANCE;
+    const coordKey = (x, y) => `${Math.round(x / tolerance) * tolerance},${Math.round(y / tolerance) * tolerance}`;
+    
+    // Build adjacency for current wall
+    const targetWall = layout.walls.find(w => w.wall_id === wallId);
+    if (!targetWall) return null;
+    
+    // Check if wall is orthogonal (horizontal or vertical)
+    const isHorizontal = Math.abs(targetWall.end_y - targetWall.start_y) < tolerance;
+    const isVertical = Math.abs(targetWall.end_x - targetWall.start_x) < tolerance;
+    if (!isHorizontal && !isVertical) return null; // Not orthogonal
+    
+    // Build vertex map for all walls
+    const vertices = new Map();
+    for (const wall of layout.walls) {
+      const startKey = coordKey(wall.start_x, wall.start_y);
+      const endKey = coordKey(wall.end_x, wall.end_y);
+      
+      if (!vertices.has(startKey)) vertices.set(startKey, { x: wall.start_x, y: wall.start_y, walls: [] });
+      if (!vertices.has(endKey)) vertices.set(endKey, { x: wall.end_x, y: wall.end_y, walls: [] });
+      
+      vertices.get(startKey).walls.push({ wall, isStart: true, otherKey: endKey });
+      vertices.get(endKey).walls.push({ wall, isStart: false, otherKey: startKey });
+    }
+    
+    // Try to trace a 4-wall rectangular loop containing this wall
+    const startKey = coordKey(targetWall.start_x, targetWall.start_y);
+    const endKey = coordKey(targetWall.end_x, targetWall.end_y);
+    
+    // From each endpoint, try to find a path back that forms a rectangle
+    const traceRectLoop = (fromKey, initialWallId) => {
+      const path = [{ wallId: initialWallId, key: fromKey }];
+      let currentKey = fromKey;
+      let prevWallId = initialWallId;
+      
+      for (let i = 0; i < 3; i++) { // Need 3 more walls to complete rectangle
+        const vertex = vertices.get(currentKey);
+        if (!vertex || vertex.walls.length !== 2) return null;
+        
+        // Find the other wall at this vertex
+        const nextConn = vertex.walls.find(c => c.wall.wall_id !== prevWallId);
+        if (!nextConn) return null;
+        
+        const nextWall = nextConn.wall;
+        
+        // Check orthogonality - each wall should be perpendicular to previous
+        const prevWall = layout.walls.find(w => w.wall_id === prevWallId);
+        const prevIsHoriz = Math.abs(prevWall.end_y - prevWall.start_y) < tolerance;
+        const nextIsHoriz = Math.abs(nextWall.end_y - nextWall.start_y) < tolerance;
+        
+        // Adjacent walls must be perpendicular
+        if (prevIsHoriz === nextIsHoriz) return null;
+        
+        path.push({ wallId: nextWall.wall_id, key: nextConn.otherKey });
+        prevWallId = nextWall.wall_id;
+        currentKey = nextConn.otherKey;
+      }
+      
+      // Check if we've closed the loop back to the start of target wall
+      const targetStartKey = coordKey(targetWall.start_x, targetWall.start_y);
+      const targetEndKey = coordKey(targetWall.end_x, targetWall.end_y);
+      
+      if (currentKey === targetStartKey || currentKey === targetEndKey) {
+        return path.map(p => p.wallId);
+      }
+      return null;
+    };
+    
+    // Try from end of target wall
+    const loop = traceRectLoop(endKey, targetWall.wall_id);
+    if (loop && loop.length === 4) {
+      // Identify wall positions in the rectangle
+      const walls = loop.map(wid => layout.walls.find(w => w.wall_id === wid));
+      
+      // Classify walls as horizontal/vertical
+      const classified = walls.map(w => ({
+        wall: w,
+        isHorizontal: Math.abs(w.end_y - w.start_y) < tolerance,
+        isVertical: Math.abs(w.end_x - w.start_x) < tolerance
+      }));
+      
+      return {
+        wallIds: loop,
+        walls: classified,
+        targetWall: targetWall,
+        targetIsHorizontal: isHorizontal
+      };
+    }
+    
+    return null;
+  }, [layout?.walls]);
+
+  // Parametric update for rectangular loop - maintains rectangle shape
+  const updateRectangularLoopWall = useCallback((wallId, movement) => {
+    const rectLoop = detectRectangularLoop(wallId);
+    if (!rectLoop) return false; // Not a rectangular loop, use normal editing
+    
+    const { walls, targetWall, targetIsHorizontal } = rectLoop;
+    const tolerance = CLOSURE_TOLERANCE;
+    
+    // Calculate movement perpendicular to wall
+    let perpMovement;
+    if (targetIsHorizontal) {
+      perpMovement = movement.dy; // Horizontal wall moves in Y
+    } else {
+      perpMovement = movement.dx; // Vertical wall moves in X
+    }
+    
+    if (Math.abs(perpMovement) < 1) return false;
+    
+    // Find adjacent and opposite walls
+    const coordKey = (x, y) => `${Math.round(x / tolerance) * tolerance},${Math.round(y / tolerance) * tolerance}`;
+    
+    // Get all corner coordinates
+    const targetStartKey = coordKey(targetWall.start_x, targetWall.start_y);
+    const targetEndKey = coordKey(targetWall.end_x, targetWall.end_y);
+    
+    const updates = [];
+    
+    for (const { wall, isHorizontal } of walls) {
+      if (wall.wall_id === wallId) {
+        // Move the target wall perpendicularly
+        if (targetIsHorizontal) {
+          updates.push({
+            wallId: wall.wall_id,
+            changes: {
+              start_y: wall.start_y + perpMovement,
+              end_y: wall.end_y + perpMovement
+            }
+          });
+        } else {
+          updates.push({
+            wallId: wall.wall_id,
+            changes: {
+              start_x: wall.start_x + perpMovement,
+              end_x: wall.end_x + perpMovement
+            }
+          });
+        }
+      } else if (isHorizontal !== targetIsHorizontal) {
+        // Adjacent perpendicular walls - extend/shrink one endpoint
+        const wallStartKey = coordKey(wall.start_x, wall.start_y);
+        const wallEndKey = coordKey(wall.end_x, wall.end_y);
+        
+        // Check which endpoint connects to target wall
+        const startConnectsToTarget = wallStartKey === targetStartKey || wallStartKey === targetEndKey;
+        const endConnectsToTarget = wallEndKey === targetStartKey || wallEndKey === targetEndKey;
+        
+        if (startConnectsToTarget) {
+          if (targetIsHorizontal) {
+            updates.push({ wallId: wall.wall_id, changes: { start_y: wall.start_y + perpMovement } });
+          } else {
+            updates.push({ wallId: wall.wall_id, changes: { start_x: wall.start_x + perpMovement } });
+          }
+        } else if (endConnectsToTarget) {
+          if (targetIsHorizontal) {
+            updates.push({ wallId: wall.wall_id, changes: { end_y: wall.end_y + perpMovement } });
+          } else {
+            updates.push({ wallId: wall.wall_id, changes: { end_x: wall.end_x + perpMovement } });
+          }
+        }
+      }
+      // Opposite parallel wall stays unchanged
+    }
+    
+    // Apply all updates atomically
+    if (updates.length > 0) {
+      setLayout(prev => ({
+        ...prev,
+        walls: prev.walls.map(w => {
+          const update = updates.find(u => u.wallId === w.wall_id);
+          if (!update) return w;
+          const updated = { ...w, ...update.changes };
+          // Recalculate length
+          updated.length = Math.round(Math.sqrt(
+            Math.pow(updated.end_x - updated.start_x, 2) +
+            Math.pow(updated.end_y - updated.start_y, 2)
+          ));
+          return updated;
+        })
+      }));
+      setHasChanges(true);
+      
+      // Update selected item if it's the target wall
+      if (selectedItem?.item?.wall_id === wallId) {
+        const targetUpdate = updates.find(u => u.wallId === wallId);
+        if (targetUpdate) {
+          setSelectedItem(prev => {
+            const updated = { ...prev.item, ...targetUpdate.changes };
+            updated.length = Math.round(Math.sqrt(
+              Math.pow(updated.end_x - updated.start_x, 2) +
+              Math.pow(updated.end_y - updated.start_y, 2)
+            ));
+            return { ...prev, item: updated };
+          });
+        }
+      }
+      
+      return true;
+    }
+    
+    return false;
+  }, [detectRectangularLoop, selectedItem]);
+
   // Manual floor fill function - click inside room to fill
   const handleFillFloor = useCallback((clickX, clickY) => {
     if (!layout?.walls || layout.walls.length < 3) {

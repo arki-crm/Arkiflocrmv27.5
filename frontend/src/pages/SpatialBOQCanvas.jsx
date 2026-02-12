@@ -2280,122 +2280,122 @@ export default function SpatialBOQCanvas() {
                   );
                 })()}
 
-                {/* Unified Room Boundary - For rectangle/closed rooms with mitered corners */}
+                {/* Unified Room Boundary - For closed rooms with mitered corners */}
                 {(() => {
-                  // Check if walls form a closed rectangle (4 walls)
-                  if (layout?.walls?.length >= 3) {
-                    const walls = layout.walls;
-                    const allPoints = [];
-                    for (const wall of walls) {
-                      allPoints.push({ x: wall.start_x, y: wall.start_y });
-                      allPoints.push({ x: wall.end_x, y: wall.end_y });
-                    }
+                  if (!layout?.walls || layout.walls.length < 3) return null;
+                  
+                  const walls = layout.walls;
+                  const allPoints = [];
+                  for (const wall of walls) {
+                    allPoints.push({ x: wall.start_x, y: wall.start_y });
+                    allPoints.push({ x: wall.end_x, y: wall.end_y });
+                  }
+                  
+                  const minX = Math.min(...allPoints.map(p => p.x));
+                  const maxX = Math.max(...allPoints.map(p => p.x));
+                  const minY = Math.min(...allPoints.map(p => p.y));
+                  const maxY = Math.max(...allPoints.map(p => p.y));
+                  
+                  // Check if walls form a closed rectangle (4 walls with corners at bounding box)
+                  const isRectangle = layout.walls.length === 4 && allPoints.every(p => 
+                    (Math.abs(p.x - minX) < CLOSURE_TOLERANCE || Math.abs(p.x - maxX) < CLOSURE_TOLERANCE) &&
+                    (Math.abs(p.y - minY) < CLOSURE_TOLERANCE || Math.abs(p.y - maxY) < CLOSURE_TOLERANCE)
+                  );
+                  
+                  if (isRectangle) {
+                    const thickness = walls[0]?.thickness || DEFAULT_WALL_THICKNESS;
+                    const halfThickness = thickness / 2;
                     
-                    const minX = Math.min(...allPoints.map(p => p.x));
-                    const maxX = Math.max(...allPoints.map(p => p.x));
-                    const minY = Math.min(...allPoints.map(p => p.y));
-                    const maxY = Math.max(...allPoints.map(p => p.y));
+                    // Create unified wall boundary with proper mitered corners
+                    // Outer rectangle (expanded by half wall thickness)
+                    const ox1 = (minX - halfThickness) * scale;
+                    const oy1 = (minY - halfThickness) * scale;
+                    const ox2 = (maxX + halfThickness) * scale;
+                    const oy2 = (maxY + halfThickness) * scale;
                     
-                    // Check if 4 walls form a rectangle
-                    const isRectangle = layout.walls.length === 4 && allPoints.every(p => 
-                      (Math.abs(p.x - minX) < CLOSURE_TOLERANCE || Math.abs(p.x - maxX) < CLOSURE_TOLERANCE) &&
-                      (Math.abs(p.y - minY) < CLOSURE_TOLERANCE || Math.abs(p.y - maxY) < CLOSURE_TOLERANCE)
+                    // Inner rectangle (contracted by half wall thickness) 
+                    const ix1 = (minX + halfThickness) * scale;
+                    const iy1 = (minY + halfThickness) * scale;
+                    const ix2 = (maxX - halfThickness) * scale;
+                    const iy2 = (maxY - halfThickness) * scale;
+                    
+                    // SVG path: outer clockwise, inner counter-clockwise for proper hole
+                    const pathD = `
+                      M ${ox1} ${oy1}
+                      L ${ox2} ${oy1}
+                      L ${ox2} ${oy2}
+                      L ${ox1} ${oy2}
+                      Z
+                      M ${ix1} ${iy1}
+                      L ${ix1} ${iy2}
+                      L ${ix2} ${iy2}
+                      L ${ix2} ${iy1}
+                      Z
+                    `;
+                    
+                    const isAnyWallSelected = walls.some(w => 
+                      selectedItem?.type === 'wall' && selectedItem.item.wall_id === w.wall_id
                     );
                     
-                    if (isRectangle) {
-                      const thickness = walls[0]?.thickness || DEFAULT_WALL_THICKNESS;
-                      const halfThickness = thickness / 2;
-                      
-                      // Calculate the wall centerline rectangle (from wall endpoints)
-                      // Then expand outward for outer boundary and inward for inner boundary
-                      
-                      // Outer boundary - expand by half thickness (clean mitered corners)
-                      const outerPoints = [
-                        { x: (minX - halfThickness) * scale, y: (minY - halfThickness) * scale },
-                        { x: (maxX + halfThickness) * scale, y: (minY - halfThickness) * scale },
-                        { x: (maxX + halfThickness) * scale, y: (maxY + halfThickness) * scale },
-                        { x: (minX - halfThickness) * scale, y: (maxY + halfThickness) * scale }
-                      ];
-                      
-                      // Inner boundary - contract by half thickness
-                      const innerPoints = [
-                        { x: (minX + halfThickness) * scale, y: (minY + halfThickness) * scale },
-                        { x: (maxX - halfThickness) * scale, y: (minY + halfThickness) * scale },
-                        { x: (maxX - halfThickness) * scale, y: (maxY - halfThickness) * scale },
-                        { x: (minX + halfThickness) * scale, y: (maxY - halfThickness) * scale }
-                      ];
-                      
-                      const outerPathStr = outerPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z';
-                      // Inner path goes counter-clockwise for proper hole
-                      const innerPathStr = `M ${innerPoints[0].x} ${innerPoints[0].y} L ${innerPoints[3].x} ${innerPoints[3].y} L ${innerPoints[2].x} ${innerPoints[2].y} L ${innerPoints[1].x} ${innerPoints[1].y} Z`;
-                      
-                      const isAnyWallSelected = walls.some(w => 
-                        selectedItem?.type === 'wall' && selectedItem.item.wall_id === w.wall_id
-                      );
-                      
-                      return (
-                        <g>
-                          {/* Unified wall boundary with proper mitered corners */}
-                          <path
-                            d={outerPathStr + ' ' + innerPathStr}
-                            fill={isAnyWallSelected ? '#93c5fd' : '#B0B0B0'}
-                            fillRule="evenodd"
-                            stroke="#000000"
-                            strokeWidth="0.5"
-                            strokeLinejoin="miter"
-                            style={{ cursor: 'move' }}
-                          />
-                          {/* Wall dimension labels - positioned outside walls */}
-                          {walls.map(wall => {
-                            const midX = (wall.start_x + wall.end_x) / 2;
-                            const midY = (wall.start_y + wall.end_y) / 2;
-                            const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
-                            
-                            // Position label outside the wall
-                            let labelX = midX * scale;
-                            let labelY = midY * scale;
-                            
-                            if (isHorizontal) {
-                              // Top or bottom wall
-                              const isTopWall = midY < (minY + maxY) / 2;
-                              labelY = isTopWall ? (midY - halfThickness - 15) * scale / scale * scale : (midY + halfThickness + 8) * scale;
-                              labelY = isTopWall ? midY * scale - 20 : midY * scale + 20;
-                            } else {
-                              // Left or right wall
-                              const isLeftWall = midX < (minX + maxX) / 2;
-                              labelX = isLeftWall ? midX * scale - 25 : midX * scale + 25;
-                            }
-                            
-                            return (
-                              <text
-                                key={`dim-${wall.wall_id}`}
-                                x={labelX}
-                                y={labelY}
-                                fontSize="10"
-                                fill="#4A5568"
-                                textAnchor="middle"
-                                dominantBaseline="middle"
-                                fontWeight="500"
-                                style={{ cursor: 'pointer' }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  startDimensionEdit(wall.wall_id, wall.length);
-                                }}
-                              >
-                                {wall.length}mm
-                              </text>
-                            );
-                          })}
-                        </g>
-                      );
-                    }
+                    return (
+                      <g>
+                        {/* Unified wall shape - clean mitered corners, no overlaps */}
+                        <path
+                          d={pathD}
+                          fill={isAnyWallSelected ? '#93c5fd' : '#B0B0B0'}
+                          fillRule="evenodd"
+                          stroke="#000000"
+                          strokeWidth="0.5"
+                          strokeLinejoin="miter"
+                          style={{ cursor: 'move' }}
+                        />
+                        {/* Dimension labels on each wall segment */}
+                        {walls.map(wall => {
+                          const midX = (wall.start_x + wall.end_x) / 2;
+                          const midY = (wall.start_y + wall.end_y) / 2;
+                          const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+                          
+                          // Position label outside the wall
+                          let labelX = midX * scale;
+                          let labelY = midY * scale;
+                          
+                          if (isHorizontal) {
+                            const isTopWall = Math.abs(midY - minY) < Math.abs(midY - maxY);
+                            labelY = isTopWall ? (minY - halfThickness - 12) * scale : (maxY + halfThickness + 12) * scale;
+                          } else {
+                            const isLeftWall = Math.abs(midX - minX) < Math.abs(midX - maxX);
+                            labelX = isLeftWall ? (minX - halfThickness - 20) * scale : (maxX + halfThickness + 20) * scale;
+                          }
+                          
+                          return (
+                            <text
+                              key={`dim-${wall.wall_id}`}
+                              x={labelX}
+                              y={labelY}
+                              fontSize="10"
+                              fill="#4A5568"
+                              textAnchor="middle"
+                              dominantBaseline="middle"
+                              fontWeight="500"
+                              style={{ cursor: 'pointer' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startDimensionEdit(wall.wall_id, wall.length);
+                              }}
+                            >
+                              {wall.length}mm
+                            </text>
+                          );
+                        })}
+                      </g>
+                    );
                   }
                   return null;
                 })()}
 
-                {/* Individual Walls - Only for non-rectangle configurations */}
+                {/* Individual Walls - For non-rectangle or open configurations */}
                 {layout?.walls?.map(wall => {
-                  // Skip if walls form a rectangle (already rendered above)
+                  // Skip if walls form a closed rectangle (rendered as unified shape above)
                   if (layout.walls.length === 4) {
                     const allPoints = [];
                     for (const w of layout.walls) {

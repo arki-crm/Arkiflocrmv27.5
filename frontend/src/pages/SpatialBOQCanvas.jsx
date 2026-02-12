@@ -1741,9 +1741,22 @@ export default function SpatialBOQCanvas() {
               <rect width="100%" height="100%" fill="url(#grid)" />
 
               <g transform={`translate(${panOffset.x}, ${panOffset.y})`}>
+                {/* Floor polygon detection (Item #3 - Auto Floor) */}
+                {detectedFloor && detectedFloor.length >= 3 && (
+                  <polygon
+                    points={detectedFloor.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
+                    fill="#e0f2fe"
+                    fillOpacity="0.3"
+                    stroke="#0ea5e9"
+                    strokeWidth="1"
+                    strokeDasharray="4,2"
+                  />
+                )}
+
                 {/* Walls - Sharp corners (Item #10) */}
                 {layout?.walls?.map(wall => {
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
+                  const thickness = wall.thickness || DEFAULT_WALL_THICKNESS;
                   return (
                     <g key={wall.wall_id}>
                       <line
@@ -1752,22 +1765,50 @@ export default function SpatialBOQCanvas() {
                         x2={wall.end_x * scale}
                         y2={wall.end_y * scale}
                         stroke={isSelected ? '#3b82f6' : '#374151'}
-                        strokeWidth={wall.thickness * scale}
+                        strokeWidth={thickness * scale}
                         strokeLinecap="square"
                         style={{ cursor: 'move' }}
                       />
-                      {/* Dimension label */}
-                      <text
-                        x={(wall.start_x + wall.end_x) / 2 * scale}
-                        y={(wall.start_y + wall.end_y) / 2 * scale - 12}
-                        fontSize="10"
-                        fill="#374151"
-                        textAnchor="middle"
-                        fontWeight="500"
-                      >
-                        {wall.length}mm
-                      </text>
-                      {/* Endpoint handles (Item #1) */}
+                      {/* Inline dimension label - clickable (Item #6) */}
+                      {editingDimension === wall.wall_id ? (
+                        <foreignObject
+                          x={(wall.start_x + wall.end_x) / 2 * scale - 35}
+                          y={(wall.start_y + wall.end_y) / 2 * scale - 25}
+                          width="70"
+                          height="24"
+                        >
+                          <input
+                            ref={dimensionInputRef}
+                            type="number"
+                            value={dimensionInputValue}
+                            onChange={(e) => setDimensionInputValue(e.target.value)}
+                            onBlur={applyDimensionEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') applyDimensionEdit();
+                              if (e.key === 'Escape') setEditingDimension(null);
+                            }}
+                            className="w-full h-full text-center text-xs border rounded bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            style={{ fontSize: '11px' }}
+                          />
+                        </foreignObject>
+                      ) : (
+                        <text
+                          x={(wall.start_x + wall.end_x) / 2 * scale}
+                          y={(wall.start_y + wall.end_y) / 2 * scale - 12}
+                          fontSize="10"
+                          fill={isSelected ? '#2563eb' : '#374151'}
+                          textAnchor="middle"
+                          fontWeight="500"
+                          style={{ cursor: 'pointer' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startDimensionEdit(wall.wall_id, wall.length);
+                          }}
+                        >
+                          {wall.length}mm
+                        </text>
+                      )}
+                      {/* Endpoint handles (Item #2 - Wall edge extension) */}
                       {isSelected && (
                         <>
                           <circle

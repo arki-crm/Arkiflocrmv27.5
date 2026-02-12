@@ -2551,7 +2551,7 @@ export default function SpatialBOQCanvas() {
                   <>
                     <div>
                       <Label className="text-xs text-slate-500">Wall</Label>
-                      <p className="font-medium text-sm">{selectedItem.item.length}mm</p>
+                      <p className="font-medium text-sm">{selectedItem.item.length}mm × {selectedItem.item.height || DEFAULT_WALL_HEIGHT}mm (H)</p>
                     </div>
 
                     <div>
@@ -2564,7 +2564,31 @@ export default function SpatialBOQCanvas() {
                       />
                     </div>
 
-                    {/* Wall Thickness Control (Item #5) */}
+                    {/* Wall Height Control (Item #1) */}
+                    <div>
+                      <Label className="text-[10px]">Height (mm)</Label>
+                      <Input
+                        type="number"
+                        value={selectedItem.item.height || DEFAULT_WALL_HEIGHT}
+                        onChange={(e) => {
+                          saveToHistory();
+                          const newHeight = parseInt(e.target.value) || DEFAULT_WALL_HEIGHT;
+                          setLayout(prev => ({
+                            ...prev,
+                            walls: prev.walls.map(w => w.wall_id === selectedItem.item.wall_id ? { ...w, height: newHeight } : w)
+                          }));
+                          setSelectedItem(prev => ({ ...prev, item: { ...prev.item, height: newHeight } }));
+                          setHasChanges(true);
+                        }}
+                        className="h-7 text-xs"
+                        min="1800"
+                        max="6000"
+                        step="100"
+                      />
+                      <p className="text-[9px] text-slate-400 mt-0.5">Default: 3000mm</p>
+                    </div>
+
+                    {/* Wall Thickness Control */}
                     <div>
                       <Label className="text-[10px]">Thickness (mm)</Label>
                       <Input

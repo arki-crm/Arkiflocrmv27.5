@@ -2089,6 +2089,37 @@ export default function SpatialBOQCanvas() {
             </div>
           )}
 
+          {/* Floor Material Panel - Shows when fill tool is active or floor is detected */}
+          {(tool === 'fill' || detectedFloor || manualFloorFill) && (
+            <div className="w-48 bg-white border-r p-2 shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-medium">Floor Material</h4>
+              </div>
+              <div className="space-y-1">
+                {Object.entries(FLOOR_MATERIALS).map(([key, mat]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFloorMaterial(key)}
+                    className={`w-full text-left p-2 rounded text-xs transition-colors flex items-center gap-2 ${
+                      floorMaterial === key ? 'bg-blue-100 border-blue-300 border' : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    <div 
+                      className="w-6 h-6 rounded border border-slate-300 shrink-0"
+                      style={{ backgroundColor: mat.color }}
+                    />
+                    <span className="font-medium truncate">{mat.name}</span>
+                  </button>
+                ))}
+              </div>
+              {!detectedFloor && !manualFloorFill && (
+                <p className="text-[10px] text-slate-500 mt-2 px-1">
+                  Click inside a closed room to apply floor fill
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Collapsible Module Library Panel */}
           <div className={`bg-white border-r shrink-0 flex flex-col transition-all duration-200 ${leftPanelCollapsed ? 'w-0 overflow-hidden' : 'w-52'}`}>
             <div className="p-2 border-b flex items-center justify-between">

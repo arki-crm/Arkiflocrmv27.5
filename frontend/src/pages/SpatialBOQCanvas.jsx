@@ -2485,8 +2485,8 @@ export default function SpatialBOQCanvas() {
                     Renders closed wall loops as unified polygons
                     with proper miter joins at all corners
                    ============================================ */}
-                {unifiedBoundary && (() => {
-                  const { outer, inner, wallIds } = unifiedBoundary;
+                {unifiedBoundary && unifiedBoundary.loops && unifiedBoundary.loops.map((boundary, loopIndex) => {
+                  const { outer, inner, wallIds } = boundary;
                   
                   const isAnyWallSelected = wallIds.some(wid => 
                     selectedItem?.type === 'wall' && selectedItem.item.wall_id === wid
@@ -2497,18 +2497,17 @@ export default function SpatialBOQCanvas() {
                     `${i === 0 ? 'M' : 'L'} ${p.x * scale} ${p.y * scale}`
                   ).join(' ') + ' Z';
                   
-                  const innerPath = inner.map((p, i) => 
-                    `${i === 0 ? 'M' : 'L'} ${p.x * scale} ${p.y * scale}`
-                  ).join(' ') + ' Z';
-                  
                   // Reverse inner path for proper hole (counter-clockwise)
                   const innerReversed = [...inner].reverse();
                   const innerPathReversed = innerReversed.map((p, i) => 
                     `${i === 0 ? 'M' : 'L'} ${p.x * scale} ${p.y * scale}`
                   ).join(' ') + ' Z';
                   
+                  // Get walls in this loop for dimension labels
+                  const loopWalls = layout?.walls?.filter(w => wallIds.includes(w.wall_id)) || [];
+                  
                   return (
-                    <g>
+                    <g key={`unified-loop-${loopIndex}`}>
                       {/* Unified wall fill */}
                       <path
                         d={outerPath + ' ' + innerPathReversed}
@@ -2532,8 +2531,8 @@ export default function SpatialBOQCanvas() {
                         strokeWidth="0.5"
                         strokeLinejoin="miter"
                       />
-                      {/* Dimension labels for each wall */}
-                      {layout?.walls?.map(wall => {
+                      {/* Dimension labels for walls in this loop */}
+                      {loopWalls.map(wall => {
                         const midX = (wall.start_x + wall.end_x) / 2;
                         const midY = (wall.start_y + wall.end_y) / 2;
                         const dx = wall.end_x - wall.start_x;
@@ -2543,6 +2542,31 @@ export default function SpatialBOQCanvas() {
                         // Perpendicular offset for label placement (outside wall)
                         const perpX = len > 0 ? -dy / len : 0;
                         const perpY = len > 0 ? dx / len : 0;
+                        const labelOffset = (wall.thickness || DEFAULT_WALL_THICKNESS) / 2 + 15;
+                        
+                        return (
+                          <text
+                            key={`dim-${wall.wall_id}`}
+                            x={(midX + perpX * labelOffset) * scale}
+                            y={(midY + perpY * labelOffset) * scale}
+                            fontSize="10"
+                            fill="#4A5568"
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            fontWeight="500"
+                            style={{ cursor: 'pointer' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startDimensionEdit(wall.wall_id, wall.length);
+                            }}
+                          >
+                            {wall.length}mm
+                          </text>
+                        );
+                      })}
+                    </g>
+                  );
+                })}
                         const labelOffset = (wall.thickness || DEFAULT_WALL_THICKNESS) / 2 + 15;
                         
                         return (

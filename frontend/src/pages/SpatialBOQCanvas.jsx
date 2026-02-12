@@ -894,7 +894,7 @@ export default function SpatialBOQCanvas() {
   // Find wall endpoint at position (for resizing)
   const findWallEndpointAt = (x, y) => {
     if (!layout?.walls) return null;
-    const threshold = ENDPOINT_HANDLE_SIZE / scale;
+    const threshold = (ENDPOINT_HANDLE_SIZE * 2) / scale; // Larger threshold for easier selection
     
     for (const wall of layout.walls) {
       const distStart = Math.sqrt(Math.pow(x - wall.start_x, 2) + Math.pow(y - wall.start_y, 2));
@@ -905,6 +905,21 @@ export default function SpatialBOQCanvas() {
       if (distEnd < threshold) {
         return { wall, endpoint: 'end' };
       }
+    }
+    return null;
+  };
+
+  // Find endpoint on a specific wall (for length extension in select mode)
+  const findSpecificWallEndpoint = (x, y, wall) => {
+    const threshold = (ENDPOINT_HANDLE_SIZE * 2.5) / scale; // Slightly larger for wall edges
+    
+    const distStart = Math.sqrt(Math.pow(x - wall.start_x, 2) + Math.pow(y - wall.start_y, 2));
+    if (distStart < threshold) {
+      return 'start';
+    }
+    const distEnd = Math.sqrt(Math.pow(x - wall.end_x, 2) + Math.pow(y - wall.end_y, 2));
+    if (distEnd < threshold) {
+      return 'end';
     }
     return null;
   };

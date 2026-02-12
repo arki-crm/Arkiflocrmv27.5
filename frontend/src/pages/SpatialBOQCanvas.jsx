@@ -2850,7 +2850,7 @@ export default function SpatialBOQCanvas() {
                 <span className="text-xs font-normal text-slate-500 ml-2">(Drag modules to adjust position)</span>
               </DialogTitle>
               <DialogDescription>
-                Wall: {selectedItem?.item?.length || 0}mm • {roomName} • Ceiling Height: 2400mm
+                Wall: {selectedItem?.item?.length || 0}mm × {selectedItem?.item?.height || DEFAULT_WALL_HEIGHT}mm (H) • {roomName}
               </DialogDescription>
             </DialogHeader>
             <div className="flex-1 bg-slate-100 rounded-lg overflow-hidden relative" style={{ minHeight: '450px' }}>

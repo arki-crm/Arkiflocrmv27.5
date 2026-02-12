@@ -357,9 +357,10 @@ export default function SpatialBOQCanvas() {
       // Escape key - universal cancel (Item #4)
       if (e.key === 'Escape') {
         e.preventDefault();
-        // Cancel wall drawing
-        if (isDrawing) {
+        // Cancel wall drawing (including click-release mode)
+        if (isDrawing || wallClickMode) {
           setIsDrawing(false);
+          setWallClickMode(null);
           setTempWall(null);
           setTempRectWalls(null);
           setDrawStart(null);
@@ -368,6 +369,11 @@ export default function SpatialBOQCanvas() {
         if (editingDimension) {
           setEditingDimension(null);
           setDimensionInputValue('');
+        }
+        // Cancel module distance editing
+        if (editingModuleDistance) {
+          setEditingModuleDistance(null);
+          setModuleDistanceValue('');
         }
         // Cancel any drag operation
         if (isDragging) {

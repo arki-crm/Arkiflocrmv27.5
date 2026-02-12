@@ -417,6 +417,7 @@ export default function SpatialBOQCanvas() {
   // UNIFIED WALL BOUNDARY ENGINE
   // Detects closed wall loops and generates unified boundary polygons
   // with proper miter joins at all corners
+  // Handles multiple separate closed loops in the same layout
   // ============================================
   
   const computeUnifiedWallBoundary = useCallback(() => {
@@ -430,7 +431,7 @@ export default function SpatialBOQCanvas() {
     // Build adjacency graph from wall endpoints
     const coordKey = (x, y) => `${Math.round(x / tolerance) * tolerance},${Math.round(y / tolerance) * tolerance}`;
     
-    const vertices = new Map(); // key -> { x, y, walls: [{wall, isStart}] }
+    const vertices = new Map(); // key -> { x, y, walls: [{wall, isStart, otherKey}] }
     
     for (const wall of walls) {
       const startKey = coordKey(wall.start_x, wall.start_y);
@@ -447,73 +448,88 @@ export default function SpatialBOQCanvas() {
       vertices.get(endKey).walls.push({ wall, isStart: false, otherKey: startKey });
     }
 
-    // Check if all vertices have exactly 2 connections (closed loop requirement)
-    let isClosedLoop = true;
-    let connectionCounts = [];
-    for (const [key, vertex] of vertices) {
-      connectionCounts.push(vertex.walls.length);
-      if (vertex.walls.length !== 2) {
-        isClosedLoop = false;
+    // Find all closed loops by looking for cycles in the graph
+    // A closed loop requires vertices with exactly 2 connections
+    const closedLoops = [];
+    const processedWalls = new Set();
+
+    // Start from vertices that have exactly 2 connections (potential loop members)
+    for (const [startKey, startVertex] of vertices) {
+      if (startVertex.walls.length !== 2) continue;
+      
+      // Check if we've already processed all walls from this vertex
+      const unprocessedWall = startVertex.walls.find(conn => !processedWalls.has(conn.wall.wall_id));
+      if (!unprocessedWall) continue;
+
+      // Try to trace a closed loop from this vertex
+      const loopVertices = [];
+      const loopWallIds = [];
+      const localVisited = new Set();
+      
+      let currentKey = startKey;
+      let prevWallId = null;
+      let iterations = 0;
+      const maxIterations = walls.length + 2;
+
+      while (iterations < maxIterations) {
+        iterations++;
+        const vertex = vertices.get(currentKey);
+        if (!vertex || vertex.walls.length !== 2) break; // Not part of a closed loop
+        
+        loopVertices.push({ x: vertex.x, y: vertex.y });
+        
+        // Find the next wall (not the one we came from)
+        const nextConn = vertex.walls.find(conn => 
+          conn.wall.wall_id !== prevWallId && !localVisited.has(conn.wall.wall_id)
+        );
+        
+        if (!nextConn) break;
+        
+        localVisited.add(nextConn.wall.wall_id);
+        loopWallIds.push(nextConn.wall.wall_id);
+        prevWallId = nextConn.wall.wall_id;
+        currentKey = nextConn.otherKey;
+        
+        // Check if we've closed the loop
+        if (currentKey === startKey && loopVertices.length >= 3) {
+          // Found a closed loop!
+          loopWallIds.forEach(wid => processedWalls.add(wid));
+          closedLoops.push({
+            vertices: loopVertices,
+            wallIds: loopWallIds
+          });
+          break;
+        }
       }
     }
-    
-    // Debug: log detection status
-    console.log('[UnifiedBoundary] Walls:', walls.length, 'Vertices:', vertices.size, 'Connections:', connectionCounts, 'isClosedLoop:', isClosedLoop);
 
-    if (!isClosedLoop || vertices.size < 3) {
-      console.log('[UnifiedBoundary] Not a closed loop - using individual wall rendering');
+    console.log('[UnifiedBoundary] Found', closedLoops.length, 'closed loop(s) from', walls.length, 'walls');
+
+    if (closedLoops.length === 0) {
       return null;
     }
 
-    // Traverse the loop to get ordered vertices (centerline polygon)
-    const orderedVertices = [];
-    const visitedWalls = new Set();
-    
-    const firstEntry = vertices.entries().next().value;
-    if (!firstEntry) return null;
-    
-    let currentKey = firstEntry[0];
-    const startKey = currentKey;
-    let iterations = 0;
-    const maxIterations = walls.length + 2;
+    // Process each closed loop
+    const boundaries = closedLoops.map(loop => {
+      const thickness = walls.find(w => loop.wallIds.includes(w.wall_id))?.thickness || DEFAULT_WALL_THICKNESS;
+      const halfThickness = thickness / 2;
 
-    while (iterations < maxIterations) {
-      iterations++;
-      const vertex = vertices.get(currentKey);
-      if (!vertex) break;
-      
-      orderedVertices.push({ x: vertex.x, y: vertex.y });
-      
-      // Find next unvisited wall
-      const nextConnection = vertex.walls.find(conn => !visitedWalls.has(conn.wall.wall_id));
-      if (!nextConnection) break;
-      
-      visitedWalls.add(nextConnection.wall.wall_id);
-      currentKey = nextConnection.otherKey;
-      
-      if (currentKey === startKey && orderedVertices.length >= 3) {
-        break; // Completed the loop
-      }
-    }
+      // Generate outer and inner boundaries with proper miter joins
+      const outerBoundary = offsetPolygon(loop.vertices, halfThickness, 'outward');
+      const innerBoundary = offsetPolygon(loop.vertices, halfThickness, 'inward');
 
-    if (orderedVertices.length < 3) {
-      return null;
-    }
-
-    // Calculate wall thickness (use first wall's thickness)
-    const thickness = walls[0]?.thickness || DEFAULT_WALL_THICKNESS;
-    const halfThickness = thickness / 2;
-
-    // Generate outer and inner boundaries with proper miter joins
-    const outerBoundary = offsetPolygon(orderedVertices, halfThickness, 'outward');
-    const innerBoundary = offsetPolygon(orderedVertices, halfThickness, 'inward');
+      return {
+        centerline: loop.vertices,
+        outer: outerBoundary,
+        inner: innerBoundary,
+        thickness: thickness,
+        wallIds: loop.wallIds
+      };
+    });
 
     return {
-      centerline: orderedVertices,
-      outer: outerBoundary,
-      inner: innerBoundary,
-      thickness: thickness,
-      wallIds: walls.map(w => w.wall_id)
+      loops: boundaries,
+      allWallIds: boundaries.flatMap(b => b.wallIds)
     };
   }, [layout?.walls]);
 

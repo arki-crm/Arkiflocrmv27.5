@@ -2339,15 +2339,34 @@ export default function SpatialBOQCanvas() {
                     
                     return (
                       <g>
-                        {/* Unified wall shape - clean mitered corners, no overlaps */}
+                        {/* Unified wall fill - no stroke to avoid corner artifacts */}
                         <path
                           d={pathD}
                           fill={isAnyWallSelected ? '#93c5fd' : '#B0B0B0'}
                           fillRule="evenodd"
+                          style={{ cursor: 'move' }}
+                        />
+                        {/* Outer edge - clean rectangle stroke */}
+                        <rect
+                          x={ox1}
+                          y={oy1}
+                          width={ox2 - ox1}
+                          height={oy2 - oy1}
+                          fill="none"
                           stroke="#000000"
                           strokeWidth="0.5"
                           strokeLinejoin="miter"
-                          style={{ cursor: 'move' }}
+                        />
+                        {/* Inner edge - clean rectangle stroke */}
+                        <rect
+                          x={ix1}
+                          y={iy1}
+                          width={ix2 - ix1}
+                          height={iy2 - iy1}
+                          fill="none"
+                          stroke="#000000"
+                          strokeWidth="0.5"
+                          strokeLinejoin="miter"
                         />
                         {/* Dimension labels on each wall segment */}
                         {walls.map(wall => {

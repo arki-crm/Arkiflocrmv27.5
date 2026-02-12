@@ -1063,7 +1063,7 @@ export default function SpatialBOQCanvas() {
     setDragEndpoint(null);
   };
 
-  // Create wall helper
+  // Create wall helper - now includes height (Item #1)
   const createWall = (startX, startY, endX, endY) => {
     const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
     return {
@@ -1073,7 +1073,8 @@ export default function SpatialBOQCanvas() {
       end_x: endX,
       end_y: endY,
       length: Math.round(length),
-      thickness: DEFAULT_WALL_THICKNESS
+      thickness: DEFAULT_WALL_THICKNESS,
+      height: DEFAULT_WALL_HEIGHT  // Item #1 - Wall height
     };
   };
 

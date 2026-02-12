@@ -444,7 +444,7 @@ export default function SpatialBOQCanvas() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedItem, layout, scale, zoomAtCursor, resetZoomToFit, handleUndo, handleRedo]);
+  }, [selectedItem, layout, scale, zoomAtCursor, resetZoomToFit, handleUndo, handleRedo, isDrawing, isDragging, editingDimension]);
 
   // Fetch data
   const fetchData = useCallback(async () => {

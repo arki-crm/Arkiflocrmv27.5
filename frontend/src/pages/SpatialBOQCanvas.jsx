@@ -7,7 +7,8 @@ import {
   Square, ZoomIn, ZoomOut, MousePointer,
   Eye, Package, FileText, ChevronLeft, ChevronRight,
   DoorOpen, PanelTop, Layers, Move, Maximize2, X,
-  RectangleHorizontal, SquareIcon, Pencil, GripVertical
+  RectangleHorizontal, SquareIcon, Pencil, GripVertical,
+  Undo2, Redo2, RotateCw, FlipHorizontal, FlipVertical
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';

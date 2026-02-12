@@ -2024,21 +2024,43 @@ export default function SpatialBOQCanvas() {
                   />
                 )}
 
-                {/* Walls - Soft grey for CAD-style visibility */}
+                {/* Walls - CAD-style with dual edge strokes for depth effect */}
                 {layout?.walls?.map(wall => {
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
                   const thickness = wall.thickness || DEFAULT_WALL_THICKNESS;
+                  
+                  // Calculate wall rectangle corners for proper rendering
+                  const dx = wall.end_x - wall.start_x;
+                  const dy = wall.end_y - wall.start_y;
+                  const length = Math.sqrt(dx * dx + dy * dy);
+                  const halfThickness = thickness / 2;
+                  
+                  // Perpendicular unit vector for wall thickness
+                  const perpX = length > 0 ? (-dy / length) * halfThickness : 0;
+                  const perpY = length > 0 ? (dx / length) * halfThickness : 0;
+                  
+                  // Four corners of the wall rectangle
+                  const corners = [
+                    { x: (wall.start_x + perpX) * scale, y: (wall.start_y + perpY) * scale },
+                    { x: (wall.end_x + perpX) * scale, y: (wall.end_y + perpY) * scale },
+                    { x: (wall.end_x - perpX) * scale, y: (wall.end_y - perpY) * scale },
+                    { x: (wall.start_x - perpX) * scale, y: (wall.start_y - perpY) * scale }
+                  ];
+                  const pointsStr = corners.map(c => `${c.x},${c.y}`).join(' ');
+                  
+                  // Edge stroke width - stays visible at all zoom levels
+                  const edgeStrokeWidth = Math.max(1, 1.5 / Math.sqrt(scale));
+                  
                   return (
-                    <g key={wall.wall_id}>
-                      <line
-                        x1={wall.start_x * scale}
-                        y1={wall.start_y * scale}
-                        x2={wall.end_x * scale}
-                        y2={wall.end_y * scale}
-                        stroke={isSelected ? '#3b82f6' : '#B0B0B0'}
-                        strokeWidth={thickness * scale}
+                    <g key={wall.wall_id} style={{ cursor: 'move' }}>
+                      {/* Wall fill with black edge strokes - CAD style */}
+                      <polygon
+                        points={pointsStr}
+                        fill={isSelected ? '#93c5fd' : '#B0B0B0'}
+                        stroke="#000000"
+                        strokeWidth={edgeStrokeWidth}
+                        strokeLinejoin="miter"
                         strokeLinecap="square"
-                        style={{ cursor: 'move' }}
                       />
                       {/* Inline dimension label - clickable (Item #6) */}
                       {editingDimension === wall.wall_id ? (

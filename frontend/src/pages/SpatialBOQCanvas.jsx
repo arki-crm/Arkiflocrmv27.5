@@ -2283,7 +2283,7 @@ export default function SpatialBOQCanvas() {
                 {/* Unified Room Boundary - For rectangle/closed rooms with mitered corners */}
                 {(() => {
                   // Check if walls form a closed rectangle (4 walls)
-                  if (layout?.walls?.length === 4) {
+                  if (layout?.walls?.length >= 3) {
                     const walls = layout.walls;
                     const allPoints = [];
                     for (const wall of walls) {
@@ -2296,8 +2296,8 @@ export default function SpatialBOQCanvas() {
                     const minY = Math.min(...allPoints.map(p => p.y));
                     const maxY = Math.max(...allPoints.map(p => p.y));
                     
-                    // Check if it forms a rectangle
-                    const isRectangle = allPoints.every(p => 
+                    // Check if 4 walls form a rectangle
+                    const isRectangle = layout.walls.length === 4 && allPoints.every(p => 
                       (Math.abs(p.x - minX) < CLOSURE_TOLERANCE || Math.abs(p.x - maxX) < CLOSURE_TOLERANCE) &&
                       (Math.abs(p.y - minY) < CLOSURE_TOLERANCE || Math.abs(p.y - maxY) < CLOSURE_TOLERANCE)
                     );
@@ -2306,23 +2306,28 @@ export default function SpatialBOQCanvas() {
                       const thickness = walls[0]?.thickness || DEFAULT_WALL_THICKNESS;
                       const halfThickness = thickness / 2;
                       
-                      // Outer boundary (miter corners)
-                      const outerPath = `
-                        M ${(minX - halfThickness) * scale} ${(minY - halfThickness) * scale}
-                        L ${(maxX + halfThickness) * scale} ${(minY - halfThickness) * scale}
-                        L ${(maxX + halfThickness) * scale} ${(maxY + halfThickness) * scale}
-                        L ${(minX - halfThickness) * scale} ${(maxY + halfThickness) * scale}
-                        Z
-                      `;
+                      // Calculate the wall centerline rectangle (from wall endpoints)
+                      // Then expand outward for outer boundary and inward for inner boundary
                       
-                      // Inner boundary (floor cutout)
-                      const innerPath = `
-                        M ${(minX + halfThickness) * scale} ${(minY + halfThickness) * scale}
-                        L ${(minX + halfThickness) * scale} ${(maxY - halfThickness) * scale}
-                        L ${(maxX - halfThickness) * scale} ${(maxY - halfThickness) * scale}
-                        L ${(maxX - halfThickness) * scale} ${(minY + halfThickness) * scale}
-                        Z
-                      `;
+                      // Outer boundary - expand by half thickness (clean mitered corners)
+                      const outerPoints = [
+                        { x: (minX - halfThickness) * scale, y: (minY - halfThickness) * scale },
+                        { x: (maxX + halfThickness) * scale, y: (minY - halfThickness) * scale },
+                        { x: (maxX + halfThickness) * scale, y: (maxY + halfThickness) * scale },
+                        { x: (minX - halfThickness) * scale, y: (maxY + halfThickness) * scale }
+                      ];
+                      
+                      // Inner boundary - contract by half thickness
+                      const innerPoints = [
+                        { x: (minX + halfThickness) * scale, y: (minY + halfThickness) * scale },
+                        { x: (maxX - halfThickness) * scale, y: (minY + halfThickness) * scale },
+                        { x: (maxX - halfThickness) * scale, y: (maxY - halfThickness) * scale },
+                        { x: (minX + halfThickness) * scale, y: (maxY - halfThickness) * scale }
+                      ];
+                      
+                      const outerPathStr = outerPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z';
+                      // Inner path goes counter-clockwise for proper hole
+                      const innerPathStr = `M ${innerPoints[0].x} ${innerPoints[0].y} L ${innerPoints[3].x} ${innerPoints[3].y} L ${innerPoints[2].x} ${innerPoints[2].y} L ${innerPoints[1].x} ${innerPoints[1].y} Z`;
                       
                       const isAnyWallSelected = walls.some(w => 
                         selectedItem?.type === 'wall' && selectedItem.item.wall_id === w.wall_id
@@ -2330,9 +2335,9 @@ export default function SpatialBOQCanvas() {
                       
                       return (
                         <g>
-                          {/* Unified wall shape with hole for floor */}
+                          {/* Unified wall boundary with proper mitered corners */}
                           <path
-                            d={outerPath + ' ' + innerPath}
+                            d={outerPathStr + ' ' + innerPathStr}
                             fill={isAnyWallSelected ? '#93c5fd' : '#B0B0B0'}
                             fillRule="evenodd"
                             stroke="#000000"
@@ -2340,22 +2345,36 @@ export default function SpatialBOQCanvas() {
                             strokeLinejoin="miter"
                             style={{ cursor: 'move' }}
                           />
-                          {/* Wall dimension labels */}
+                          {/* Wall dimension labels - positioned outside walls */}
                           {walls.map(wall => {
                             const midX = (wall.start_x + wall.end_x) / 2;
                             const midY = (wall.start_y + wall.end_y) / 2;
                             const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
-                            const offsetY = isHorizontal ? -12 : 0;
-                            const offsetX = isHorizontal ? 0 : 15;
+                            
+                            // Position label outside the wall
+                            let labelX = midX * scale;
+                            let labelY = midY * scale;
+                            
+                            if (isHorizontal) {
+                              // Top or bottom wall
+                              const isTopWall = midY < (minY + maxY) / 2;
+                              labelY = isTopWall ? (midY - halfThickness - 15) * scale / scale * scale : (midY + halfThickness + 8) * scale;
+                              labelY = isTopWall ? midY * scale - 20 : midY * scale + 20;
+                            } else {
+                              // Left or right wall
+                              const isLeftWall = midX < (minX + maxX) / 2;
+                              labelX = isLeftWall ? midX * scale - 25 : midX * scale + 25;
+                            }
                             
                             return (
                               <text
                                 key={`dim-${wall.wall_id}`}
-                                x={midX * scale + offsetX}
-                                y={midY * scale + offsetY}
+                                x={labelX}
+                                y={labelY}
                                 fontSize="10"
                                 fill="#4A5568"
                                 textAnchor="middle"
+                                dominantBaseline="middle"
                                 fontWeight="500"
                                 style={{ cursor: 'pointer' }}
                                 onClick={(e) => {
@@ -2374,9 +2393,9 @@ export default function SpatialBOQCanvas() {
                   return null;
                 })()}
 
-                {/* Individual Walls - For non-rectangle configurations */}
+                {/* Individual Walls - Only for non-rectangle configurations */}
                 {layout?.walls?.map(wall => {
-                  // Skip individual wall rendering if it's part of a unified rectangle
+                  // Skip if walls form a rectangle (already rendered above)
                   if (layout.walls.length === 4) {
                     const allPoints = [];
                     for (const w of layout.walls) {
@@ -2393,7 +2412,7 @@ export default function SpatialBOQCanvas() {
                       (Math.abs(p.y - minY) < CLOSURE_TOLERANCE || Math.abs(p.y - maxY) < CLOSURE_TOLERANCE)
                     );
                     
-                    if (isRectangle) return null; // Skip - rendered as unified shape above
+                    if (isRectangle) return null;
                   }
                   
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;

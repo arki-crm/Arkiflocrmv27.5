@@ -214,65 +214,87 @@ export default function SpatialBOQCanvas() {
     setHasChanges(true);
   }, [redoHistory, layout]);
 
-  // Detect closed floor polygon (Item #3 - Auto Floor Detection)
+  // Detect closed floor polygon (Item #2 - Auto Floor Detection - IMPROVED)
   const detectFloorPolygon = useCallback(() => {
     if (!layout?.walls || layout.walls.length < 3) {
       setDetectedFloor(null);
       return;
     }
 
-    // Build adjacency map of wall endpoints
+    // Use a tolerance for coordinate matching
+    const COORD_TOLERANCE = 50; // mm
+
+    const coordKey = (x, y) => `${Math.round(x / COORD_TOLERANCE) * COORD_TOLERANCE},${Math.round(y / COORD_TOLERANCE) * COORD_TOLERANCE}`;
+
+    // Build adjacency map of wall endpoints with tolerance
     const endpoints = new Map();
     
     for (const wall of layout.walls) {
-      const startKey = `${Math.round(wall.start_x)},${Math.round(wall.start_y)}`;
-      const endKey = `${Math.round(wall.end_x)},${Math.round(wall.end_y)}`;
+      const startKey = coordKey(wall.start_x, wall.start_y);
+      const endKey = coordKey(wall.end_x, wall.end_y);
       
       if (!endpoints.has(startKey)) endpoints.set(startKey, []);
       if (!endpoints.has(endKey)) endpoints.set(endKey, []);
       
-      endpoints.get(startKey).push({ wall, isStart: true, other: endKey });
-      endpoints.get(endKey).push({ wall, isStart: false, other: startKey });
+      endpoints.get(startKey).push({ wall, isStart: true, other: endKey, x: wall.start_x, y: wall.start_y });
+      endpoints.get(endKey).push({ wall, isStart: false, other: startKey, x: wall.end_x, y: wall.end_y });
     }
 
-    // Find closed polygon by traversing connected walls
+    // Check if each endpoint has exactly 2 connections (closed polygon requirement)
+    let allConnected = true;
+    for (const [key, connections] of endpoints) {
+      if (connections.length !== 2) {
+        allConnected = false;
+        break;
+      }
+    }
+
+    if (!allConnected || endpoints.size < 3) {
+      setDetectedFloor(null);
+      return;
+    }
+
+    // Traverse to build polygon
     const visited = new Set();
-    const startPoint = layout.walls[0];
-    const startKey = `${Math.round(startPoint.start_x)},${Math.round(startPoint.start_y)}`;
-    
+    const firstEntry = endpoints.entries().next().value;
+    if (!firstEntry) {
+      setDetectedFloor(null);
+      return;
+    }
+
+    const [startKey, startConnections] = firstEntry;
     const polygon = [];
     let currentKey = startKey;
+    let prevWallId = null;
     let iterations = 0;
-    const maxIterations = layout.walls.length + 5;
+    const maxIterations = layout.walls.length * 2;
 
     while (iterations < maxIterations) {
       iterations++;
       const connections = endpoints.get(currentKey);
       if (!connections || connections.length === 0) break;
 
-      // Find unvisited connection
-      const next = connections.find(c => !visited.has(c.wall.wall_id));
-      if (!next) {
-        // Check if we're back at start (closed loop)
-        if (currentKey === startKey && polygon.length >= 3) {
-          setDetectedFloor(polygon);
-          return;
-        }
-        break;
-      }
+      // Add current point to polygon
+      const currentConn = connections[0];
+      polygon.push({ x: currentConn.x, y: currentConn.y });
 
+      // Find next unvisited connection (or different from previous)
+      const next = connections.find(c => c.wall.wall_id !== prevWallId);
+      if (!next) break;
+
+      prevWallId = next.wall.wall_id;
       visited.add(next.wall.wall_id);
-      const [x, y] = currentKey.split(',').map(Number);
-      polygon.push({ x, y });
       currentKey = next.other;
+
+      // Check if we're back at start
+      if (currentKey === startKey && polygon.length >= 3) {
+        setDetectedFloor(polygon);
+        return;
+      }
     }
 
-    // Check if polygon is closed
-    if (polygon.length >= 3 && currentKey === startKey) {
-      setDetectedFloor(polygon);
-    } else {
-      setDetectedFloor(null);
-    }
+    // Not a closed polygon
+    setDetectedFloor(null);
   }, [layout?.walls]);
 
   // Detect floor when walls change

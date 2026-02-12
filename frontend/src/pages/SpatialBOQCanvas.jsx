@@ -2909,17 +2909,18 @@ export default function SpatialBOQCanvas() {
                     const modInfo = moduleLibrary.module_types?.[m.module_type] || {};
                     const color = MODULE_COLORS[m.module_type] || '#888';
                     const wallLength = selectedItem?.item?.length || 3000;
+                    const wallHeight = selectedItem?.item?.height || DEFAULT_WALL_HEIGHT;
                     
                     // Calculate position relative to wall
                     const wall = selectedItem?.item;
                     const wallStartX = Math.min(wall?.start_x || 0, wall?.end_x || 0);
                     const moduleRelativeX = m.x - wallStartX;
                     
-                    // Scale to SVG coordinates
+                    // Scale to SVG coordinates using wall height (Item #1)
                     const svgX = 50 + (moduleRelativeX / wallLength) * 900;
                     const svgWidth = (m.width / wallLength) * 900;
-                    const svgHeight = (m.height / 2400) * 420;
-                    const svgY = 450 - svgHeight - (m.elevation_offset || 0) / 2400 * 420;
+                    const svgHeight = (m.height / wallHeight) * 420;
+                    const svgY = 450 - svgHeight - (m.elevation_offset || 0) / wallHeight * 420;
                     
                     const isBeingDragged = elevationDragModule === m.module_id;
 
@@ -2966,6 +2967,123 @@ export default function SpatialBOQCanvas() {
                           textAnchor="middle"
                         >
                           {m.width}×{m.height}mm
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Doors in Elevation View (Item #3) */}
+                  {layout?.doors?.filter(d => d.wall_id === selectedItem?.item?.wall_id).map(door => {
+                    const wallLength = selectedItem?.item?.length || 3000;
+                    const wallHeight = selectedItem?.item?.height || DEFAULT_WALL_HEIGHT;
+                    const wall = selectedItem?.item;
+                    const wallStartX = Math.min(wall?.start_x || 0, wall?.end_x || 0);
+                    const doorRelativeX = door.x - wallStartX;
+                    
+                    const svgX = 50 + (doorRelativeX / wallLength) * 900;
+                    const svgWidth = (door.width / wallLength) * 900;
+                    const svgHeight = (door.height / wallHeight) * 420;
+                    const svgY = 450 - svgHeight; // Door starts from floor
+                    
+                    return (
+                      <g key={door.door_id}>
+                        <rect
+                          x={Math.max(50, Math.min(950 - svgWidth, svgX))}
+                          y={svgY}
+                          width={svgWidth}
+                          height={svgHeight}
+                          fill={MODULE_COLORS.door}
+                          fillOpacity="0.7"
+                          stroke={MODULE_COLORS.door}
+                          strokeWidth="2"
+                        />
+                        <text
+                          x={Math.max(50, Math.min(950 - svgWidth, svgX)) + svgWidth / 2}
+                          y={svgY + svgHeight / 2}
+                          fontSize="10"
+                          fill="white"
+                          textAnchor="middle"
+                          fontWeight="500"
+                        >
+                          {door.type_name || 'Door'}
+                        </text>
+                        <text
+                          x={Math.max(50, Math.min(950 - svgWidth, svgX)) + svgWidth / 2}
+                          y={svgY + svgHeight / 2 + 14}
+                          fontSize="8"
+                          fill="white"
+                          fillOpacity="0.8"
+                          textAnchor="middle"
+                        >
+                          {door.width}×{door.height}mm
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Windows in Elevation View (Item #3) */}
+                  {layout?.windows?.filter(w => w.wall_id === selectedItem?.item?.wall_id).map(win => {
+                    const wallLength = selectedItem?.item?.length || 3000;
+                    const wallHeight = selectedItem?.item?.height || DEFAULT_WALL_HEIGHT;
+                    const wall = selectedItem?.item;
+                    const wallStartX = Math.min(wall?.start_x || 0, wall?.end_x || 0);
+                    const winRelativeX = win.x - wallStartX;
+                    
+                    const svgX = 50 + (winRelativeX / wallLength) * 900;
+                    const svgWidth = (win.width / wallLength) * 900;
+                    const svgHeight = (win.height / wallHeight) * 420;
+                    // Window typically at 900mm sill height from floor
+                    const windowSillHeight = 900;
+                    const svgY = 450 - svgHeight - (windowSillHeight / wallHeight) * 420;
+                    
+                    return (
+                      <g key={win.window_id}>
+                        <rect
+                          x={Math.max(50, Math.min(950 - svgWidth, svgX))}
+                          y={svgY}
+                          width={svgWidth}
+                          height={svgHeight}
+                          fill={MODULE_COLORS.window}
+                          fillOpacity="0.6"
+                          stroke={MODULE_COLORS.window}
+                          strokeWidth="2"
+                        />
+                        {/* Window panes */}
+                        <line
+                          x1={Math.max(50, Math.min(950 - svgWidth, svgX)) + svgWidth / 2}
+                          y1={svgY}
+                          x2={Math.max(50, Math.min(950 - svgWidth, svgX)) + svgWidth / 2}
+                          y2={svgY + svgHeight}
+                          stroke="white"
+                          strokeWidth="1"
+                        />
+                        <line
+                          x1={Math.max(50, Math.min(950 - svgWidth, svgX))}
+                          y1={svgY + svgHeight / 2}
+                          x2={Math.max(50, Math.min(950 - svgWidth, svgX)) + svgWidth}
+                          y2={svgY + svgHeight / 2}
+                          stroke="white"
+                          strokeWidth="1"
+                        />
+                        <text
+                          x={Math.max(50, Math.min(950 - svgWidth, svgX)) + svgWidth / 2}
+                          y={svgY + svgHeight / 2 - 6}
+                          fontSize="9"
+                          fill="white"
+                          textAnchor="middle"
+                          fontWeight="500"
+                        >
+                          {win.type_name || 'Window'}
+                        </text>
+                        <text
+                          x={Math.max(50, Math.min(950 - svgWidth, svgX)) + svgWidth / 2}
+                          y={svgY + svgHeight / 2 + 8}
+                          fontSize="8"
+                          fill="white"
+                          fillOpacity="0.8"
+                          textAnchor="middle"
+                        >
+                          {win.width}×{win.height}mm
                         </text>
                       </g>
                     );

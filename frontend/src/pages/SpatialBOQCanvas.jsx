@@ -171,6 +171,115 @@ export default function SpatialBOQCanvas() {
   // Room name
   const [roomName, setRoomName] = useState('Kitchen');
 
+  // Save layout to undo history (Item #6-add)
+  const saveToHistory = useCallback(() => {
+    if (!layout) return;
+    const snapshot = JSON.stringify(layout);
+    if (snapshot !== lastLayoutRef.current) {
+      setUndoHistory(prev => {
+        const newHistory = [...prev, lastLayoutRef.current].filter(Boolean);
+        if (newHistory.length > MAX_HISTORY_SIZE) {
+          return newHistory.slice(-MAX_HISTORY_SIZE);
+        }
+        return newHistory;
+      });
+      setRedoHistory([]);
+      lastLayoutRef.current = snapshot;
+    }
+  }, [layout]);
+
+  // Undo function (Item #6-add)
+  const handleUndo = useCallback(() => {
+    if (undoHistory.length === 0) return;
+    const currentSnapshot = JSON.stringify(layout);
+    const previousSnapshot = undoHistory[undoHistory.length - 1];
+    
+    setRedoHistory(prev => [...prev, currentSnapshot]);
+    setUndoHistory(prev => prev.slice(0, -1));
+    setLayout(JSON.parse(previousSnapshot));
+    lastLayoutRef.current = previousSnapshot;
+    setHasChanges(true);
+  }, [undoHistory, layout]);
+
+  // Redo function (Item #6-add)
+  const handleRedo = useCallback(() => {
+    if (redoHistory.length === 0) return;
+    const currentSnapshot = JSON.stringify(layout);
+    const nextSnapshot = redoHistory[redoHistory.length - 1];
+    
+    setUndoHistory(prev => [...prev, currentSnapshot]);
+    setRedoHistory(prev => prev.slice(0, -1));
+    setLayout(JSON.parse(nextSnapshot));
+    lastLayoutRef.current = nextSnapshot;
+    setHasChanges(true);
+  }, [redoHistory, layout]);
+
+  // Detect closed floor polygon (Item #3 - Auto Floor Detection)
+  const detectFloorPolygon = useCallback(() => {
+    if (!layout?.walls || layout.walls.length < 3) {
+      setDetectedFloor(null);
+      return;
+    }
+
+    // Build adjacency map of wall endpoints
+    const endpoints = new Map();
+    
+    for (const wall of layout.walls) {
+      const startKey = `${Math.round(wall.start_x)},${Math.round(wall.start_y)}`;
+      const endKey = `${Math.round(wall.end_x)},${Math.round(wall.end_y)}`;
+      
+      if (!endpoints.has(startKey)) endpoints.set(startKey, []);
+      if (!endpoints.has(endKey)) endpoints.set(endKey, []);
+      
+      endpoints.get(startKey).push({ wall, isStart: true, other: endKey });
+      endpoints.get(endKey).push({ wall, isStart: false, other: startKey });
+    }
+
+    // Find closed polygon by traversing connected walls
+    const visited = new Set();
+    const startPoint = layout.walls[0];
+    const startKey = `${Math.round(startPoint.start_x)},${Math.round(startPoint.start_y)}`;
+    
+    const polygon = [];
+    let currentKey = startKey;
+    let iterations = 0;
+    const maxIterations = layout.walls.length + 5;
+
+    while (iterations < maxIterations) {
+      iterations++;
+      const connections = endpoints.get(currentKey);
+      if (!connections || connections.length === 0) break;
+
+      // Find unvisited connection
+      const next = connections.find(c => !visited.has(c.wall.wall_id));
+      if (!next) {
+        // Check if we're back at start (closed loop)
+        if (currentKey === startKey && polygon.length >= 3) {
+          setDetectedFloor(polygon);
+          return;
+        }
+        break;
+      }
+
+      visited.add(next.wall.wall_id);
+      const [x, y] = currentKey.split(',').map(Number);
+      polygon.push({ x, y });
+      currentKey = next.other;
+    }
+
+    // Check if polygon is closed
+    if (polygon.length >= 3 && currentKey === startKey) {
+      setDetectedFloor(polygon);
+    } else {
+      setDetectedFloor(null);
+    }
+  }, [layout?.walls]);
+
+  // Detect floor when walls change
+  useEffect(() => {
+    detectFloorPolygon();
+  }, [detectFloorPolygon]);
+
   // Auto-collapse right panel when nothing selected
   useEffect(() => {
     if (selectedItem) {

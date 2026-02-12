@@ -2870,9 +2870,9 @@ export default function SpatialBOQCanvas() {
                   </defs>
                   <rect width="100%" height="100%" fill="url(#elevationGrid)" />
 
-                  {/* Ceiling line */}
+                  {/* Ceiling line - uses wall height (Item #1) */}
                   <line x1="50" y1="30" x2="950" y2="30" stroke="#94a3b8" strokeWidth="2" strokeDasharray="8,4" />
-                  <text x="55" y="22" fontSize="11" fill="#64748b">Ceiling (2400mm)</text>
+                  <text x="55" y="22" fontSize="11" fill="#64748b">Ceiling ({selectedItem?.item?.height || DEFAULT_WALL_HEIGHT}mm)</text>
 
                   {/* Floor line */}
                   <line x1="50" y1="450" x2="950" y2="450" stroke="#374151" strokeWidth="4" />
@@ -2881,16 +2881,20 @@ export default function SpatialBOQCanvas() {
                   {/* Wall background */}
                   <rect x="50" y="30" width="900" height="420" fill="#fafafa" stroke="#cbd5e1" strokeWidth="1" />
 
-                  {/* Height markers */}
-                  {[0, 600, 1200, 1800, 2400].map((h, i) => {
-                    const yPos = 450 - (h / 2400) * 420;
-                    return (
-                      <g key={i}>
-                        <line x1="45" y1={yPos} x2="50" y2={yPos} stroke="#94a3b8" strokeWidth="1" />
-                        <text x="10" y={yPos + 4} fontSize="9" fill="#64748b">{h}mm</text>
-                      </g>
-                    );
-                  })}
+                  {/* Height markers - uses wall height (Item #1) */}
+                  {(() => {
+                    const wallH = selectedItem?.item?.height || DEFAULT_WALL_HEIGHT;
+                    const markers = [0, wallH * 0.25, wallH * 0.5, wallH * 0.75, wallH];
+                    return markers.map((h, i) => {
+                      const yPos = 450 - (h / wallH) * 420;
+                      return (
+                        <g key={i}>
+                          <line x1="45" y1={yPos} x2="50" y2={yPos} stroke="#94a3b8" strokeWidth="1" />
+                          <text x="10" y={yPos + 4} fontSize="9" fill="#64748b">{Math.round(h)}mm</text>
+                        </g>
+                      );
+                    });
+                  })()}
 
                   {/* Width markers */}
                   {selectedItem?.item?.length && [0, 0.25, 0.5, 0.75, 1].map((pct, i) => {

@@ -1960,7 +1960,7 @@ export default function SpatialBOQCanvas() {
           <div
             ref={containerRef}
             className="flex-1 overflow-hidden relative"
-            style={{ backgroundColor: '#e2e8f0' }}
+            style={{ backgroundColor: '#F9FAFB' }}
           >
             <svg
               ref={svgRef}
@@ -1995,8 +1995,8 @@ export default function SpatialBOQCanvas() {
                   patternUnits="userSpaceOnUse"
                   patternTransform={`translate(${panOffset.x}, ${panOffset.y})`}
                 >
-                  {/* Item #6 - Lighter grid for eye-friendly palette */}
-                  <path d={`M ${100 * scale} 0 L 0 0 0 ${100 * scale}`} fill="none" stroke="#e2e8f0" strokeWidth="0.5" />
+                  {/* Item #6 - Very light grid for background guidance only */}
+                  <path d={`M ${100 * scale} 0 L 0 0 0 ${100 * scale}`} fill="none" stroke="#E5E7EB" strokeWidth="0.5" />
                 </pattern>
                 <pattern 
                   id="grid" 
@@ -2006,25 +2006,25 @@ export default function SpatialBOQCanvas() {
                   patternTransform={`translate(${panOffset.x}, ${panOffset.y})`}
                 >
                   <rect width={500 * scale} height={500 * scale} fill="url(#smallGrid)" />
-                  {/* Item #6 - Subtle major grid lines */}
-                  <path d={`M ${500 * scale} 0 L 0 0 0 ${500 * scale}`} fill="none" stroke="#cbd5e1" strokeWidth="1" />
+                  {/* Item #6 - Very subtle major grid lines */}
+                  <path d={`M ${500 * scale} 0 L 0 0 0 ${500 * scale}`} fill="none" stroke="#E5E7EB" strokeWidth="0.75" />
                 </pattern>
               </defs>
               <rect width="100%" height="100%" fill="url(#grid)" />
 
               <g transform={`translate(${panOffset.x}, ${panOffset.y})`}>
-                {/* Floor polygon detection (Item #5 - Visual Fill) */}
+                {/* Floor polygon detection - soft fill to visually confirm room closure */}
                 {detectedFloor && detectedFloor.length >= 3 && (
                   <polygon
                     points={detectedFloor.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
-                    fill="#dbeafe"
-                    fillOpacity="0.6"
-                    stroke="#3b82f6"
-                    strokeWidth="2"
+                    fill="#F3F4F6"
+                    fillOpacity="0.8"
+                    stroke="#D1D5DB"
+                    strokeWidth="1"
                   />
                 )}
 
-                {/* Walls - Medium grey color (Item #6) */}
+                {/* Walls - Medium neutral grey for visibility without overpowering modules */}
                 {layout?.walls?.map(wall => {
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
                   const thickness = wall.thickness || DEFAULT_WALL_THICKNESS;
@@ -2035,7 +2035,7 @@ export default function SpatialBOQCanvas() {
                         y1={wall.start_y * scale}
                         x2={wall.end_x * scale}
                         y2={wall.end_y * scale}
-                        stroke={isSelected ? '#3b82f6' : '#64748b'}
+                        stroke={isSelected ? '#3b82f6' : '#6B7280'}
                         strokeWidth={thickness * scale}
                         strokeLinecap="square"
                         style={{ cursor: 'move' }}

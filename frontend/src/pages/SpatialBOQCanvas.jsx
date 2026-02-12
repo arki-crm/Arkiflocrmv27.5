@@ -1844,7 +1844,7 @@ export default function SpatialBOQCanvas() {
                       x2={tempWall.end.x * scale}
                       y2={tempWall.end.y * scale}
                       stroke="#3b82f6"
-                      strokeWidth={WALL_THICKNESS * scale}
+                      strokeWidth={DEFAULT_WALL_THICKNESS * scale}
                       strokeLinecap="square"
                       strokeDasharray="5,5"
                     />
@@ -1870,7 +1870,7 @@ export default function SpatialBOQCanvas() {
                     height={Math.abs(tempRectWalls.end.y - tempRectWalls.start.y) * scale}
                     fill="none"
                     stroke="#3b82f6"
-                    strokeWidth={WALL_THICKNESS * scale}
+                    strokeWidth={DEFAULT_WALL_THICKNESS * scale}
                     strokeDasharray="5,5"
                   />
                 )}

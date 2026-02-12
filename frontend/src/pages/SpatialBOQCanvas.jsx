@@ -2543,6 +2543,54 @@ export default function SpatialBOQCanvas() {
                         )}
                       </p>
                     </div>
+
+                    {/* Module-to-Wall Distance (Item #8) */}
+                    {(() => {
+                      const distInfo = calculateModuleToWallDistance(selectedItem.item);
+                      if (!distInfo) return null;
+                      return (
+                        <div className="bg-blue-50 rounded p-2">
+                          <Label className="text-[10px] text-blue-600">Distance to Wall</Label>
+                          {editingModuleDistance === selectedItem.item.module_id ? (
+                            <div className="flex items-center gap-1 mt-1">
+                              <Input
+                                ref={moduleDistanceInputRef}
+                                type="number"
+                                value={moduleDistanceValue}
+                                onChange={(e) => setModuleDistanceValue(e.target.value)}
+                                onBlur={() => {
+                                  const val = parseInt(moduleDistanceValue, 10);
+                                  if (!isNaN(val)) applyModuleDistanceToWall(selectedItem.item.module_id, val, distInfo.direction);
+                                  else setEditingModuleDistance(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const val = parseInt(moduleDistanceValue, 10);
+                                    if (!isNaN(val)) applyModuleDistanceToWall(selectedItem.item.module_id, val, distInfo.direction);
+                                  }
+                                  if (e.key === 'Escape') setEditingModuleDistance(null);
+                                }}
+                                className="h-6 text-xs w-20"
+                                min="0"
+                              />
+                              <span className="text-xs text-blue-600">mm</span>
+                            </div>
+                          ) : (
+                            <p 
+                              className="text-xs font-medium text-blue-700 cursor-pointer hover:underline"
+                              onClick={() => {
+                                setEditingModuleDistance(selectedItem.item.module_id);
+                                setModuleDistanceValue(String(distInfo.distance));
+                                setTimeout(() => moduleDistanceInputRef.current?.focus(), 50);
+                              }}
+                            >
+                              {distInfo.distance}mm ({distInfo.direction})
+                              <span className="text-[9px] text-blue-500 ml-1">← click to edit</span>
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
 

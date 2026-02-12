@@ -413,6 +413,173 @@ export default function SpatialBOQCanvas() {
     });
   };
 
+  // ============================================
+  // UNIFIED WALL BOUNDARY ENGINE
+  // Detects closed wall loops and generates unified boundary polygons
+  // with proper miter joins at all corners
+  // ============================================
+  
+  const computeUnifiedWallBoundary = useCallback(() => {
+    if (!layout?.walls || layout.walls.length < 3) {
+      return null;
+    }
+
+    const walls = layout.walls;
+    const tolerance = CLOSURE_TOLERANCE;
+
+    // Build adjacency graph from wall endpoints
+    const coordKey = (x, y) => `${Math.round(x / tolerance) * tolerance},${Math.round(y / tolerance) * tolerance}`;
+    
+    const vertices = new Map(); // key -> { x, y, walls: [{wall, isStart}] }
+    
+    for (const wall of walls) {
+      const startKey = coordKey(wall.start_x, wall.start_y);
+      const endKey = coordKey(wall.end_x, wall.end_y);
+      
+      if (!vertices.has(startKey)) {
+        vertices.set(startKey, { x: wall.start_x, y: wall.start_y, walls: [] });
+      }
+      if (!vertices.has(endKey)) {
+        vertices.set(endKey, { x: wall.end_x, y: wall.end_y, walls: [] });
+      }
+      
+      vertices.get(startKey).walls.push({ wall, isStart: true, otherKey: endKey });
+      vertices.get(endKey).walls.push({ wall, isStart: false, otherKey: startKey });
+    }
+
+    // Check if all vertices have exactly 2 connections (closed loop requirement)
+    let isClosedLoop = true;
+    for (const [key, vertex] of vertices) {
+      if (vertex.walls.length !== 2) {
+        isClosedLoop = false;
+        break;
+      }
+    }
+
+    if (!isClosedLoop || vertices.size < 3) {
+      return null;
+    }
+
+    // Traverse the loop to get ordered vertices (centerline polygon)
+    const orderedVertices = [];
+    const visitedWalls = new Set();
+    
+    const firstEntry = vertices.entries().next().value;
+    if (!firstEntry) return null;
+    
+    let currentKey = firstEntry[0];
+    const startKey = currentKey;
+    let iterations = 0;
+    const maxIterations = walls.length + 2;
+
+    while (iterations < maxIterations) {
+      iterations++;
+      const vertex = vertices.get(currentKey);
+      if (!vertex) break;
+      
+      orderedVertices.push({ x: vertex.x, y: vertex.y });
+      
+      // Find next unvisited wall
+      const nextConnection = vertex.walls.find(conn => !visitedWalls.has(conn.wall.wall_id));
+      if (!nextConnection) break;
+      
+      visitedWalls.add(nextConnection.wall.wall_id);
+      currentKey = nextConnection.otherKey;
+      
+      if (currentKey === startKey && orderedVertices.length >= 3) {
+        break; // Completed the loop
+      }
+    }
+
+    if (orderedVertices.length < 3) {
+      return null;
+    }
+
+    // Calculate wall thickness (use first wall's thickness)
+    const thickness = walls[0]?.thickness || DEFAULT_WALL_THICKNESS;
+    const halfThickness = thickness / 2;
+
+    // Generate outer and inner boundaries with proper miter joins
+    const outerBoundary = offsetPolygon(orderedVertices, halfThickness, 'outward');
+    const innerBoundary = offsetPolygon(orderedVertices, halfThickness, 'inward');
+
+    return {
+      centerline: orderedVertices,
+      outer: outerBoundary,
+      inner: innerBoundary,
+      thickness: thickness,
+      wallIds: walls.map(w => w.wall_id)
+    };
+  }, [layout?.walls]);
+
+  // Offset polygon with proper miter joins at vertices
+  const offsetPolygon = (vertices, offset, direction) => {
+    if (vertices.length < 3) return vertices;
+    
+    const n = vertices.length;
+    const result = [];
+    const sign = direction === 'outward' ? 1 : -1;
+
+    for (let i = 0; i < n; i++) {
+      const prev = vertices[(i - 1 + n) % n];
+      const curr = vertices[i];
+      const next = vertices[(i + 1) % n];
+
+      // Edge vectors
+      const edge1 = { x: curr.x - prev.x, y: curr.y - prev.y };
+      const edge2 = { x: next.x - curr.x, y: next.y - curr.y };
+
+      // Normalize edge vectors
+      const len1 = Math.sqrt(edge1.x * edge1.x + edge1.y * edge1.y);
+      const len2 = Math.sqrt(edge2.x * edge2.x + edge2.y * edge2.y);
+      
+      if (len1 === 0 || len2 === 0) {
+        result.push({ x: curr.x, y: curr.y });
+        continue;
+      }
+
+      const dir1 = { x: edge1.x / len1, y: edge1.y / len1 };
+      const dir2 = { x: edge2.x / len2, y: edge2.y / len2 };
+
+      // Perpendicular normals (pointing outward - left side of direction)
+      const norm1 = { x: -dir1.y * sign, y: dir1.x * sign };
+      const norm2 = { x: -dir2.y * sign, y: dir2.x * sign };
+
+      // Miter vector = average of the two normals, scaled by miter factor
+      const miterX = norm1.x + norm2.x;
+      const miterY = norm1.y + norm2.y;
+      const miterLen = Math.sqrt(miterX * miterX + miterY * miterY);
+
+      if (miterLen < 0.001) {
+        // Parallel edges - just offset by normal
+        result.push({
+          x: curr.x + norm1.x * offset,
+          y: curr.y + norm1.y * offset
+        });
+        continue;
+      }
+
+      // Calculate miter scale factor
+      // The miter length = offset / sin(half_angle)
+      const dot = norm1.x * norm2.x + norm1.y * norm2.y;
+      const miterScale = offset / (1 + dot) * 2;
+
+      // Limit miter to prevent spikes at sharp angles
+      const maxMiter = offset * 3;
+      const actualMiter = Math.min(miterScale, maxMiter);
+
+      result.push({
+        x: curr.x + (miterX / miterLen) * actualMiter,
+        y: curr.y + (miterY / miterLen) * actualMiter
+      });
+    }
+
+    return result;
+  };
+
+  // Get unified boundary (memoized)
+  const unifiedBoundary = useMemo(() => computeUnifiedWallBoundary(), [computeUnifiedWallBoundary]);
+
   // Manual floor fill function - click inside room to fill
   const handleFillFloor = useCallback((clickX, clickY) => {
     if (!layout?.walls || layout.walls.length < 3) {

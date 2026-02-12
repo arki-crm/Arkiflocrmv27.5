@@ -1450,6 +1450,11 @@ export default function SpatialBOQCanvas() {
           setIsDragging(true);
           setDragType('wall');
           setDragStart({ x: canvas.x, y: canvas.y, wall_start_x: clickedWall.start_x, wall_start_y: clickedWall.start_y, wall_end_x: clickedWall.end_x, wall_end_y: clickedWall.end_y });
+          
+          // Detect rectangular loop at drag start - store for parametric editing
+          const detectedLoop = detectRectangularLoop(clickedWall.wall_id);
+          setActiveRectLoop(detectedLoop);
+          console.log('[DragStart] Detected rect loop:', detectedLoop ? 'YES' : 'NO');
         }
       } else {
         setSelectedItem(null);

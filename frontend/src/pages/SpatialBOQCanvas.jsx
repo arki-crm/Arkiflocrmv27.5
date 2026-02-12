@@ -178,6 +178,7 @@ export default function SpatialBOQCanvas() {
   const [dragStart, setDragStart] = useState(null);
   const [dragType, setDragType] = useState(null); // 'module', 'wall', 'wall_endpoint', 'door', 'window'
   const [dragEndpoint, setDragEndpoint] = useState(null); // 'start' or 'end' for wall endpoints
+  const [activeRectLoop, setActiveRectLoop] = useState(null); // Stores detected rectangular loop at drag start
 
   // Elevation view - full screen mode (Item #9)
   const [showElevationModal, setShowElevationModal] = useState(false);

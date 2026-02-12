@@ -788,6 +788,7 @@ export default function SpatialBOQCanvas() {
     }
 
     if (isDrawing && tool === 'wall') {
+      saveToHistory();
       if (wallDrawMode === 'rectangle' || wallDrawMode === 'square') {
         // Create 4 walls for rectangle/square
         if (tempRectWalls) {

@@ -622,6 +622,17 @@ export default function SpatialBOQCanvas() {
     } else if (tool === 'module' && selectedModuleType) {
       addModule(canvas.x, canvas.y);
     } else if (tool === 'select') {
+      // First check for wall endpoint click (for length extension - Item #3)
+      const endpoint = findWallEndpointAt(canvas.x, canvas.y);
+      if (endpoint) {
+        saveToHistory();
+        setSelectedItem({ type: 'wall', item: endpoint.wall });
+        setIsDragging(true);
+        setDragType('wall_endpoint');
+        setDragEndpoint(endpoint.endpoint);
+        return;
+      }
+
       // Check for wall click first (for dragging)
       const clickedWall = findWallAt(canvas.x, canvas.y);
       const clickedModule = findModuleAt(canvas.x, canvas.y);
@@ -644,10 +655,21 @@ export default function SpatialBOQCanvas() {
         setDragType('window');
         setDragStart({ x: canvas.x - clickedWindow.x, y: canvas.y - clickedWindow.y });
       } else if (clickedWall) {
-        setSelectedItem({ type: 'wall', item: clickedWall });
-        setIsDragging(true);
-        setDragType('wall');
-        setDragStart({ x: canvas.x, y: canvas.y, wall_start_x: clickedWall.start_x, wall_start_y: clickedWall.start_y, wall_end_x: clickedWall.end_x, wall_end_y: clickedWall.end_y });
+        // Check if we're clicking near an endpoint of this wall for length editing
+        const wallEndpoint = findSpecificWallEndpoint(canvas.x, canvas.y, clickedWall);
+        if (wallEndpoint) {
+          saveToHistory();
+          setSelectedItem({ type: 'wall', item: clickedWall });
+          setIsDragging(true);
+          setDragType('wall_endpoint');
+          setDragEndpoint(wallEndpoint);
+        } else {
+          saveToHistory();
+          setSelectedItem({ type: 'wall', item: clickedWall });
+          setIsDragging(true);
+          setDragType('wall');
+          setDragStart({ x: canvas.x, y: canvas.y, wall_start_x: clickedWall.start_x, wall_start_y: clickedWall.start_y, wall_end_x: clickedWall.end_x, wall_end_y: clickedWall.end_y });
+        }
       } else {
         setSelectedItem(null);
         setShowElevationModal(false);

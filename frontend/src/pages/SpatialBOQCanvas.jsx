@@ -145,6 +145,19 @@ export default function SpatialBOQCanvas() {
   // Floor polygon detection (Item #5)
   const [detectedFloor, setDetectedFloor] = useState(null);
   const [manualFloorFill, setManualFloorFill] = useState(null); // Manual floor fill backup
+  const [floorMaterial, setFloorMaterial] = useState('tiles-white'); // Floor material selection
+
+  // Floor material options
+  const FLOOR_MATERIALS = {
+    'tiles-white': { name: 'Tiles – White', color: '#F5F5F5', pattern: 'tiles' },
+    'tiles-grey': { name: 'Tiles – Grey', color: '#D1D5DB', pattern: 'tiles' },
+    'tiles-beige': { name: 'Tiles – Beige', color: '#E8DCC8', pattern: 'tiles' },
+    'wood-light': { name: 'Wood – Light Oak', color: '#DEB887', pattern: 'wood' },
+    'wood-walnut': { name: 'Wood – Walnut', color: '#8B5A2B', pattern: 'wood' },
+    'marble-white': { name: 'Marble – White', color: '#FAFAFA', pattern: 'marble' },
+    'granite-black': { name: 'Granite – Black', color: '#2D2D2D', pattern: 'granite' },
+    'concrete': { name: 'Concrete', color: '#9CA3AF', pattern: 'solid' }
+  };
 
   // Wall drawing state - Click-Release mode (Item #4)
   const [wallDrawMode, setWallDrawMode] = useState('free'); // rectangle, square, free

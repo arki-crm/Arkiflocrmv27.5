@@ -29,11 +29,12 @@ const API = process.env.REACT_APP_BACKEND_URL;
 
 // Scale: pixels per mm
 const DEFAULT_SCALE = 0.15;
-const WALL_THICKNESS = 150;
+const DEFAULT_WALL_THICKNESS = 150;
 const SNAP_THRESHOLD = 100; // mm - magnetic snap distance
 const CORNER_SNAP_THRESHOLD = 150; // mm - for corner joining
 const MOVE_STEP = 10; // mm per arrow key press
 const ENDPOINT_HANDLE_SIZE = 12; // pixels
+const MAX_HISTORY_SIZE = 50; // Undo/Redo history limit
 
 // Module colors
 const MODULE_COLORS = {

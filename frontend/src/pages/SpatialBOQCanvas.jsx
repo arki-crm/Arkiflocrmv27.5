@@ -2280,8 +2280,122 @@ export default function SpatialBOQCanvas() {
                   );
                 })()}
 
-                {/* Walls - CAD-style with thin edge outlines (Coohom style) */}
+                {/* Unified Room Boundary - For rectangle/closed rooms with mitered corners */}
+                {(() => {
+                  // Check if walls form a closed rectangle (4 walls)
+                  if (layout?.walls?.length === 4) {
+                    const walls = layout.walls;
+                    const allPoints = [];
+                    for (const wall of walls) {
+                      allPoints.push({ x: wall.start_x, y: wall.start_y });
+                      allPoints.push({ x: wall.end_x, y: wall.end_y });
+                    }
+                    
+                    const minX = Math.min(...allPoints.map(p => p.x));
+                    const maxX = Math.max(...allPoints.map(p => p.x));
+                    const minY = Math.min(...allPoints.map(p => p.y));
+                    const maxY = Math.max(...allPoints.map(p => p.y));
+                    
+                    // Check if it forms a rectangle
+                    const isRectangle = allPoints.every(p => 
+                      (Math.abs(p.x - minX) < CLOSURE_TOLERANCE || Math.abs(p.x - maxX) < CLOSURE_TOLERANCE) &&
+                      (Math.abs(p.y - minY) < CLOSURE_TOLERANCE || Math.abs(p.y - maxY) < CLOSURE_TOLERANCE)
+                    );
+                    
+                    if (isRectangle) {
+                      const thickness = walls[0]?.thickness || DEFAULT_WALL_THICKNESS;
+                      const halfThickness = thickness / 2;
+                      
+                      // Outer boundary (miter corners)
+                      const outerPath = `
+                        M ${(minX - halfThickness) * scale} ${(minY - halfThickness) * scale}
+                        L ${(maxX + halfThickness) * scale} ${(minY - halfThickness) * scale}
+                        L ${(maxX + halfThickness) * scale} ${(maxY + halfThickness) * scale}
+                        L ${(minX - halfThickness) * scale} ${(maxY + halfThickness) * scale}
+                        Z
+                      `;
+                      
+                      // Inner boundary (floor cutout)
+                      const innerPath = `
+                        M ${(minX + halfThickness) * scale} ${(minY + halfThickness) * scale}
+                        L ${(minX + halfThickness) * scale} ${(maxY - halfThickness) * scale}
+                        L ${(maxX - halfThickness) * scale} ${(maxY - halfThickness) * scale}
+                        L ${(maxX - halfThickness) * scale} ${(minY + halfThickness) * scale}
+                        Z
+                      `;
+                      
+                      const isAnyWallSelected = walls.some(w => 
+                        selectedItem?.type === 'wall' && selectedItem.item.wall_id === w.wall_id
+                      );
+                      
+                      return (
+                        <g>
+                          {/* Unified wall shape with hole for floor */}
+                          <path
+                            d={outerPath + ' ' + innerPath}
+                            fill={isAnyWallSelected ? '#93c5fd' : '#B0B0B0'}
+                            fillRule="evenodd"
+                            stroke="#000000"
+                            strokeWidth="0.5"
+                            strokeLinejoin="miter"
+                            style={{ cursor: 'move' }}
+                          />
+                          {/* Wall dimension labels */}
+                          {walls.map(wall => {
+                            const midX = (wall.start_x + wall.end_x) / 2;
+                            const midY = (wall.start_y + wall.end_y) / 2;
+                            const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+                            const offsetY = isHorizontal ? -12 : 0;
+                            const offsetX = isHorizontal ? 0 : 15;
+                            
+                            return (
+                              <text
+                                key={`dim-${wall.wall_id}`}
+                                x={midX * scale + offsetX}
+                                y={midY * scale + offsetY}
+                                fontSize="10"
+                                fill="#4A5568"
+                                textAnchor="middle"
+                                fontWeight="500"
+                                style={{ cursor: 'pointer' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startDimensionEdit(wall.wall_id, wall.length);
+                                }}
+                              >
+                                {wall.length}mm
+                              </text>
+                            );
+                          })}
+                        </g>
+                      );
+                    }
+                  }
+                  return null;
+                })()}
+
+                {/* Individual Walls - For non-rectangle configurations */}
                 {layout?.walls?.map(wall => {
+                  // Skip individual wall rendering if it's part of a unified rectangle
+                  if (layout.walls.length === 4) {
+                    const allPoints = [];
+                    for (const w of layout.walls) {
+                      allPoints.push({ x: w.start_x, y: w.start_y });
+                      allPoints.push({ x: w.end_x, y: w.end_y });
+                    }
+                    const minX = Math.min(...allPoints.map(p => p.x));
+                    const maxX = Math.max(...allPoints.map(p => p.x));
+                    const minY = Math.min(...allPoints.map(p => p.y));
+                    const maxY = Math.max(...allPoints.map(p => p.y));
+                    
+                    const isRectangle = allPoints.every(p => 
+                      (Math.abs(p.x - minX) < CLOSURE_TOLERANCE || Math.abs(p.x - maxX) < CLOSURE_TOLERANCE) &&
+                      (Math.abs(p.y - minY) < CLOSURE_TOLERANCE || Math.abs(p.y - maxY) < CLOSURE_TOLERANCE)
+                    );
+                    
+                    if (isRectangle) return null; // Skip - rendered as unified shape above
+                  }
+                  
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
                   const thickness = wall.thickness || DEFAULT_WALL_THICKNESS;
                   

@@ -1492,17 +1492,35 @@ export default function SpatialBOQCanvas() {
       }
     }
 
-    // Dragging entire wall (Item #1)
+    // Dragging entire wall (Item #1) - with parametric editing for rectangular loops
     if (isDragging && dragType === 'wall' && selectedItem?.type === 'wall') {
       const wall = selectedItem.item;
       const dx = canvas.x - dragStart.x;
       const dy = canvas.y - dragStart.y;
-      updateWallPosition(wall.wall_id, {
-        start_x: dragStart.wall_start_x + dx,
-        start_y: dragStart.wall_start_y + dy,
-        end_x: dragStart.wall_end_x + dx,
-        end_y: dragStart.wall_end_y + dy
-      });
+      
+      // Try parametric editing for rectangular loops first
+      const usedParametric = updateRectangularLoopWall(wall.wall_id, { dx, dy });
+      
+      if (!usedParametric) {
+        // Fallback to normal wall movement for non-rectangular walls
+        updateWallPosition(wall.wall_id, {
+          start_x: dragStart.wall_start_x + dx,
+          start_y: dragStart.wall_start_y + dy,
+          end_x: dragStart.wall_end_x + dx,
+          end_y: dragStart.wall_end_y + dy
+        });
+      } else {
+        // Update drag start for continuous parametric editing
+        setDragStart(prev => ({
+          ...prev,
+          x: canvas.x,
+          y: canvas.y,
+          wall_start_x: prev.wall_start_x + dx,
+          wall_start_y: prev.wall_start_y + dy,
+          wall_end_x: prev.wall_end_x + dx,
+          wall_end_y: prev.wall_end_y + dy
+        }));
+      }
     }
 
     // Dragging module with magnetic snap (Item #2)

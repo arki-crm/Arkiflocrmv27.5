@@ -410,7 +410,7 @@ export default function SpatialBOQCanvas() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedItem, layout, scale, zoomAtCursor, resetZoomToFit]);
+  }, [selectedItem, layout, scale, zoomAtCursor, resetZoomToFit, handleUndo, handleRedo]);
 
   // Fetch data
   const fetchData = useCallback(async () => {

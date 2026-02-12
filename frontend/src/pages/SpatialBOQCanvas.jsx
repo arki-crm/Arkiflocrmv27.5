@@ -2024,7 +2024,7 @@ export default function SpatialBOQCanvas() {
                   />
                 )}
 
-                {/* Walls - Sharp corners (Item #10) */}
+                {/* Walls - Medium grey color (Item #6) */}
                 {layout?.walls?.map(wall => {
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
                   const thickness = wall.thickness || DEFAULT_WALL_THICKNESS;
@@ -2035,7 +2035,7 @@ export default function SpatialBOQCanvas() {
                         y1={wall.start_y * scale}
                         x2={wall.end_x * scale}
                         y2={wall.end_y * scale}
-                        stroke={isSelected ? '#3b82f6' : '#374151'}
+                        stroke={isSelected ? '#3b82f6' : '#64748b'}
                         strokeWidth={thickness * scale}
                         strokeLinecap="square"
                         style={{ cursor: 'move' }}

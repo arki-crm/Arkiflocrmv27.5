@@ -1870,6 +1870,22 @@ export default function SpatialBOQCanvas() {
               <TooltipContent side="right">Add Module (M)</TooltipContent>
             </Tooltip>
 
+            {/* Fill Floor Tool */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={tool === 'fill' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-9 h-9 p-0"
+                  onClick={() => setTool('fill')}
+                  disabled={!layout?.walls || layout.walls.length < 3}
+                >
+                  <Layers className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Fill Floor (F) - Click inside room</TooltipContent>
+            </Tooltip>
+
             <Separator className="my-2 w-6" />
 
             <Tooltip>

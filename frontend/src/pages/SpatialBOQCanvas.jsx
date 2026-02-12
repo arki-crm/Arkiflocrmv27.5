@@ -1070,9 +1070,76 @@ export default function SpatialBOQCanvas() {
     }
   };
 
+  // Rotate door/window (Item #4)
+  const rotateOpening = (type, id, degrees = 90) => {
+    saveToHistory();
+    const key = type === 'door' ? 'doors' : 'windows';
+    const idKey = type === 'door' ? 'door_id' : 'window_id';
+    
+    setLayout(prev => ({
+      ...prev,
+      [key]: prev[key].map(item => {
+        if (item[idKey] !== id) return item;
+        const newRotation = ((item.rotation || 0) + degrees) % 360;
+        return { ...item, rotation: newRotation };
+      })
+    }));
+    setHasChanges(true);
+  };
+
+  // Flip door/window orientation (Item #4)
+  const flipOpening = (type, id) => {
+    saveToHistory();
+    const key = type === 'door' ? 'doors' : 'windows';
+    const idKey = type === 'door' ? 'door_id' : 'window_id';
+    
+    setLayout(prev => ({
+      ...prev,
+      [key]: prev[key].map(item => {
+        if (item[idKey] !== id) return item;
+        return { ...item, flipped: !item.flipped };
+      })
+    }));
+    setHasChanges(true);
+  };
+
+  // Update wall thickness (Item #5)
+  const updateWallThickness = (wallId, thickness) => {
+    saveToHistory();
+    setLayout(prev => ({
+      ...prev,
+      walls: prev.walls.map(w => w.wall_id === wallId ? { ...w, thickness } : w)
+    }));
+    setHasChanges(true);
+    if (selectedItem?.item?.wall_id === wallId) {
+      setSelectedItem(prev => ({ ...prev, item: { ...prev.item, thickness } }));
+    }
+  };
+
+  // Inline dimension edit - start editing (Item #6)
+  const startDimensionEdit = (wallId, currentLength) => {
+    setEditingDimension(wallId);
+    setDimensionInputValue(String(currentLength));
+    setTimeout(() => dimensionInputRef.current?.focus(), 50);
+  };
+
+  // Inline dimension edit - apply change (Item #6)
+  const applyDimensionEdit = () => {
+    if (!editingDimension) return;
+    const newLength = parseInt(dimensionInputValue, 10);
+    if (isNaN(newLength) || newLength < 100) {
+      setEditingDimension(null);
+      return;
+    }
+    saveToHistory();
+    updateWall(editingDimension, { length: newLength });
+    setEditingDimension(null);
+  };
+
   // Delete selected
   const deleteSelected = () => {
     if (!selectedItem) return;
+    saveToHistory();
 
     if (selectedItem.type === 'module') {
       setLayout(prev => ({

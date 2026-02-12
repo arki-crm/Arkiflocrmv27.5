@@ -565,6 +565,17 @@ export default function SpatialBOQCanvas() {
         }
       }
 
+      // Tool shortcuts (when not in input field)
+      if (document.activeElement.tagName !== 'INPUT') {
+        if (e.key === 'f' || e.key === 'F') {
+          e.preventDefault();
+          if (layout?.walls?.length >= 3) {
+            setTool('fill');
+          }
+          return;
+        }
+      }
+
       if (!selectedItem) return;
 
       // Delete key

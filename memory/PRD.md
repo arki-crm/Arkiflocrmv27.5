@@ -9,7 +9,36 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Composer Pan/Zoom/Elevation UX COMPLETE ✅
+## Current Status: Composer CAD-Level Drafting Enhancements COMPLETE ✅
+**As of February 12, 2026**
+
+### Composer (SpatialBOQCanvas) - 7 CAD-Level Drafting Enhancements
+
+All 7 CAD-level drafting corrections have been implemented and verified for production-grade drafting.
+
+| # | Enhancement | Description | Status |
+|---|-------------|-------------|--------|
+| 1 | **True Canvas Pan** | Grid + plan move together. Middle mouse drag OR Spacebar+drag | ✅ |
+| 2 | **Wall Edge Extension + Snap** | Drag wall endpoints to resize, auto-snap at 90° corners (150mm threshold) | ✅ |
+| 3 | **Auto Floor Detection** | Closed wall loops auto-detect polygon, show blue floor fill | ✅ |
+| 4 | **Door & Window Rotation** | Rotate (90° steps) and Flip buttons in properties panel, SVG transform applied | ✅ |
+| 5 | **Wall Thickness Control** | Editable per wall (50-500mm range, default 150mm), reflects in visual stroke | ✅ |
+| 6 | **Inline Dimension Editing** | Click dimension text on plan → inline input → Enter to apply, instant resize | ✅ |
+| 7 | **Undo/Redo** | Ctrl+Z/Ctrl+Y shortcuts + toolbar buttons, 50-step history | ✅ |
+
+**New CAD Features:**
+- **Endpoint Handles**: Blue circular handles on selected walls for resize
+- **Floor Polygon**: Light blue shaded area when walls form closed room
+- **Transform Controls**: Rotate 90°, Flip Horizontal buttons for doors/windows
+- **Thickness Input**: Min 50mm, Max 500mm, Step 10mm
+- **Inline Edit**: Click "3000mm" text → type new value → Enter
+- **History**: saveToHistory() called on wall draw, module add, delete, rotate, thickness change
+
+**Verification (iteration_65.json):** 100% pass rate - All 7 CAD enhancements verified working.
+
+---
+
+## Previous Status: Composer Pan/Zoom/Elevation UX COMPLETE ✅
 **As of February 11, 2026**
 
 ### Composer (SpatialBOQCanvas) - 3 Navigation & Editing Enhancements

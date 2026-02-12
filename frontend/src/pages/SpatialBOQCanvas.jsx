@@ -129,6 +129,19 @@ export default function SpatialBOQCanvas() {
   const [elevationDragModule, setElevationDragModule] = useState(null);
   const [elevationDragStart, setElevationDragStart] = useState(null);
 
+  // Undo/Redo history (Item #6-add)
+  const [undoHistory, setUndoHistory] = useState([]);
+  const [redoHistory, setRedoHistory] = useState([]);
+  const lastLayoutRef = useRef(null);
+
+  // Inline dimension editing (Item #6)
+  const [editingDimension, setEditingDimension] = useState(null);
+  const [dimensionInputValue, setDimensionInputValue] = useState('');
+  const dimensionInputRef = useRef(null);
+
+  // Floor polygon detection (Item #3)
+  const [detectedFloor, setDetectedFloor] = useState(null);
+
   // Wall drawing state
   const [wallDrawMode, setWallDrawMode] = useState('free'); // rectangle, square, free
   const [showWallModePanel, setShowWallModePanel] = useState(false);

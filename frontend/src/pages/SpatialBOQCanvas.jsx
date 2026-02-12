@@ -1912,27 +1912,43 @@ export default function SpatialBOQCanvas() {
                           {wall.length}mm
                         </text>
                       )}
-                      {/* Endpoint handles (Item #2 - Wall edge extension) */}
+                      {/* Endpoint handles for length extension (Item #3 - Wall Edge Drag) */}
                       {isSelected && (
                         <>
-                          <circle
-                            cx={wall.start_x * scale}
-                            cy={wall.start_y * scale}
-                            r={ENDPOINT_HANDLE_SIZE / 2}
-                            fill="#3b82f6"
-                            stroke="white"
-                            strokeWidth="2"
-                            style={{ cursor: 'nwse-resize' }}
-                          />
-                          <circle
-                            cx={wall.end_x * scale}
-                            cy={wall.end_y * scale}
-                            r={ENDPOINT_HANDLE_SIZE / 2}
-                            fill="#3b82f6"
-                            stroke="white"
-                            strokeWidth="2"
-                            style={{ cursor: 'nwse-resize' }}
-                          />
+                          {/* Start endpoint handle */}
+                          <g style={{ cursor: 'nwse-resize' }}>
+                            <circle
+                              cx={wall.start_x * scale}
+                              cy={wall.start_y * scale}
+                              r={ENDPOINT_HANDLE_SIZE}
+                              fill="#3b82f6"
+                              stroke="white"
+                              strokeWidth="3"
+                            />
+                            <circle
+                              cx={wall.start_x * scale}
+                              cy={wall.start_y * scale}
+                              r={ENDPOINT_HANDLE_SIZE / 3}
+                              fill="white"
+                            />
+                          </g>
+                          {/* End endpoint handle */}
+                          <g style={{ cursor: 'nwse-resize' }}>
+                            <circle
+                              cx={wall.end_x * scale}
+                              cy={wall.end_y * scale}
+                              r={ENDPOINT_HANDLE_SIZE}
+                              fill="#3b82f6"
+                              stroke="white"
+                              strokeWidth="3"
+                            />
+                            <circle
+                              cx={wall.end_x * scale}
+                              cy={wall.end_y * scale}
+                              r={ENDPOINT_HANDLE_SIZE / 3}
+                              fill="white"
+                            />
+                          </g>
                         </>
                       )}
                     </g>

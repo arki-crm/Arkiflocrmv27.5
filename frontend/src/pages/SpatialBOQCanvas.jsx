@@ -1515,32 +1515,37 @@ export default function SpatialBOQCanvas() {
     // Dragging entire wall (Item #1) - with parametric editing for rectangular loops
     if (isDragging && dragType === 'wall' && selectedItem?.type === 'wall') {
       const wall = selectedItem.item;
-      const dx = canvas.x - dragStart.x;
-      const dy = canvas.y - dragStart.y;
       
-      // Try parametric editing for rectangular loops first
-      const usedParametric = updateRectangularLoopWall(wall.wall_id, { dx, dy });
+      // Calculate incremental delta from last position (not from drag start)
+      // This is crucial for parametric editing where state updates async
+      const lastX = dragStart.lastX ?? dragStart.x;
+      const lastY = dragStart.lastY ?? dragStart.y;
+      const incrementalDx = canvas.x - lastX;
+      const incrementalDy = canvas.y - lastY;
+      
+      // Calculate total delta from drag start (for fallback non-parametric mode)
+      const totalDx = canvas.x - dragStart.x;
+      const totalDy = canvas.y - dragStart.y;
+      
+      // Try parametric editing for rectangular loops first (uses incremental delta)
+      const usedParametric = updateRectangularLoopWall(wall.wall_id, { dx: incrementalDx, dy: incrementalDy });
       
       if (!usedParametric) {
-        // Fallback to normal wall movement for non-rectangular walls
+        // Fallback to normal wall movement for non-rectangular walls (uses total delta)
         updateWallPosition(wall.wall_id, {
-          start_x: dragStart.wall_start_x + dx,
-          start_y: dragStart.wall_start_y + dy,
-          end_x: dragStart.wall_end_x + dx,
-          end_y: dragStart.wall_end_y + dy
+          start_x: dragStart.wall_start_x + totalDx,
+          start_y: dragStart.wall_start_y + totalDy,
+          end_x: dragStart.wall_end_x + totalDx,
+          end_y: dragStart.wall_end_y + totalDy
         });
-      } else {
-        // Update drag start for continuous parametric editing
-        setDragStart(prev => ({
-          ...prev,
-          x: canvas.x,
-          y: canvas.y,
-          wall_start_x: prev.wall_start_x + dx,
-          wall_start_y: prev.wall_start_y + dy,
-          wall_end_x: prev.wall_end_x + dx,
-          wall_end_y: prev.wall_end_y + dy
-        }));
       }
+      
+      // Always update last position for continuous dragging
+      setDragStart(prev => ({
+        ...prev,
+        lastX: canvas.x,
+        lastY: canvas.y
+      }));
     }
 
     // Dragging module with magnetic snap (Item #2)

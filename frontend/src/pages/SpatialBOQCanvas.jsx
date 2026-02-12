@@ -324,6 +324,40 @@ export default function SpatialBOQCanvas() {
         return;
       }
 
+      // Escape key - universal cancel (Item #4)
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        // Cancel wall drawing
+        if (isDrawing) {
+          setIsDrawing(false);
+          setTempWall(null);
+          setTempRectWalls(null);
+          setDrawStart(null);
+        }
+        // Cancel inline dimension editing
+        if (editingDimension) {
+          setEditingDimension(null);
+          setDimensionInputValue('');
+        }
+        // Cancel any drag operation
+        if (isDragging) {
+          setIsDragging(false);
+          setDragStart(null);
+          setDragType(null);
+          setDragEndpoint(null);
+        }
+        // Deselect everything and return to select tool
+        setSelectedItem(null);
+        setTool('select');
+        setSelectedModuleType(null);
+        setSelectedDoorType(null);
+        setSelectedWindowType(null);
+        setShowWallModePanel(false);
+        setShowDoorLibrary(false);
+        setShowWindowLibrary(false);
+        return;
+      }
+
       // Undo/Redo shortcuts (Item #6-add)
       if ((e.ctrlKey || e.metaKey) && document.activeElement.tagName !== 'INPUT') {
         if (e.key === 'z' && !e.shiftKey) {

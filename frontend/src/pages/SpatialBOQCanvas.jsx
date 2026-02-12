@@ -231,9 +231,16 @@ export default function SpatialBOQCanvas() {
       return;
     }
 
-    // Use a tolerance for coordinate matching
-    const COORD_TOLERANCE = 50; // mm
+    // Use generous tolerance for coordinate matching (auto-seal small gaps)
+    const COORD_TOLERANCE = CLOSURE_TOLERANCE;
 
+    // Helper to check if two points are close enough to be considered same
+    const pointsMatch = (x1, y1, x2, y2) => {
+      const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+      return dist <= COORD_TOLERANCE;
+    };
+
+    // Round coordinates to nearest tolerance bucket
     const coordKey = (x, y) => `${Math.round(x / COORD_TOLERANCE) * COORD_TOLERANCE},${Math.round(y / COORD_TOLERANCE) * COORD_TOLERANCE}`;
 
     // Build adjacency map of wall endpoints with tolerance
@@ -250,61 +257,184 @@ export default function SpatialBOQCanvas() {
       endpoints.get(endKey).push({ wall, isStart: false, other: startKey, x: wall.end_x, y: wall.end_y });
     }
 
-    // Check if each endpoint has exactly 2 connections (closed polygon requirement)
-    let allConnected = true;
+    // Try to find closed loops - allow some tolerance in connection counts
+    // A closed polygon should have each vertex connected to exactly 2 walls
+    let validVertices = 0;
+    let totalVertices = 0;
     for (const [key, connections] of endpoints) {
-      if (connections.length !== 2) {
-        allConnected = false;
-        break;
+      totalVertices++;
+      if (connections.length === 2) {
+        validVertices++;
       }
     }
 
-    if (!allConnected || endpoints.size < 3) {
+    // Need at least 3 vertices and most should have 2 connections
+    if (totalVertices < 3) {
       setDetectedFloor(null);
       return;
     }
 
-    // Traverse to build polygon
-    const visited = new Set();
-    const firstEntry = endpoints.entries().next().value;
-    if (!firstEntry) {
-      setDetectedFloor(null);
+    // Calculate the polygon by traversing connected walls
+    // Try starting from different vertices if needed
+    let bestPolygon = null;
+    
+    for (const [startKey, startConnections] of endpoints) {
+      if (startConnections.length < 2) continue;
+      
+      const polygon = [];
+      const visitedWalls = new Set();
+      let currentKey = startKey;
+      let prevWallId = null;
+      let iterations = 0;
+      const maxIterations = layout.walls.length * 3;
+
+      while (iterations < maxIterations) {
+        iterations++;
+        const connections = endpoints.get(currentKey);
+        if (!connections || connections.length === 0) break;
+
+        // Find the average position for this vertex (in case of slight misalignment)
+        const avgX = connections.reduce((sum, c) => sum + c.x, 0) / connections.length;
+        const avgY = connections.reduce((sum, c) => sum + c.y, 0) / connections.length;
+        polygon.push({ x: avgX, y: avgY });
+
+        // Find next unvisited wall connection
+        const next = connections.find(c => !visitedWalls.has(c.wall.wall_id) && c.wall.wall_id !== prevWallId);
+        if (!next) {
+          // Try to find any connection back to start
+          const backToStart = connections.find(c => c.other === startKey);
+          if (backToStart && polygon.length >= 3) {
+            // We've completed the loop
+            if (!bestPolygon || polygon.length > bestPolygon.length) {
+              bestPolygon = [...polygon];
+            }
+          }
+          break;
+        }
+
+        prevWallId = next.wall.wall_id;
+        visitedWalls.add(next.wall.wall_id);
+        currentKey = next.other;
+
+        // Check if we're back at start
+        if (currentKey === startKey && polygon.length >= 3) {
+          if (!bestPolygon || polygon.length > bestPolygon.length) {
+            bestPolygon = [...polygon];
+          }
+          break;
+        }
+      }
+    }
+
+    if (bestPolygon && bestPolygon.length >= 3) {
+      // Calculate interior polygon (account for wall thickness)
+      const interiorPolygon = calculateInteriorPolygon(bestPolygon, DEFAULT_WALL_THICKNESS / 2);
+      setDetectedFloor(interiorPolygon);
       return;
     }
 
-    const [startKey, startConnections] = firstEntry;
-    const polygon = [];
-    let currentKey = startKey;
-    let prevWallId = null;
-    let iterations = 0;
-    const maxIterations = layout.walls.length * 2;
-
-    while (iterations < maxIterations) {
-      iterations++;
-      const connections = endpoints.get(currentKey);
-      if (!connections || connections.length === 0) break;
-
-      // Add current point to polygon
-      const currentConn = connections[0];
-      polygon.push({ x: currentConn.x, y: currentConn.y });
-
-      // Find next unvisited connection (or different from previous)
-      const next = connections.find(c => c.wall.wall_id !== prevWallId);
-      if (!next) break;
-
-      prevWallId = next.wall.wall_id;
-      visited.add(next.wall.wall_id);
-      currentKey = next.other;
-
-      // Check if we're back at start
-      if (currentKey === startKey && polygon.length >= 3) {
-        setDetectedFloor(polygon);
+    // Fallback: try to detect rectangle from 4 walls even if not perfectly connected
+    if (layout.walls.length === 4) {
+      const allPoints = [];
+      for (const wall of layout.walls) {
+        allPoints.push({ x: wall.start_x, y: wall.start_y });
+        allPoints.push({ x: wall.end_x, y: wall.end_y });
+      }
+      
+      // Find bounding rectangle
+      const minX = Math.min(...allPoints.map(p => p.x));
+      const maxX = Math.max(...allPoints.map(p => p.x));
+      const minY = Math.min(...allPoints.map(p => p.y));
+      const maxY = Math.max(...allPoints.map(p => p.y));
+      
+      // Check if points roughly form a rectangle
+      const corners = [
+        { x: minX, y: minY },
+        { x: maxX, y: minY },
+        { x: maxX, y: maxY },
+        { x: minX, y: maxY }
+      ];
+      
+      let matchedCorners = 0;
+      for (const corner of corners) {
+        if (allPoints.some(p => pointsMatch(p.x, p.y, corner.x, corner.y))) {
+          matchedCorners++;
+        }
+      }
+      
+      // If at least 3 corners match, treat as rectangle
+      if (matchedCorners >= 3) {
+        const halfThickness = DEFAULT_WALL_THICKNESS / 2;
+        const interiorPolygon = [
+          { x: minX + halfThickness, y: minY + halfThickness },
+          { x: maxX - halfThickness, y: minY + halfThickness },
+          { x: maxX - halfThickness, y: maxY - halfThickness },
+          { x: minX + halfThickness, y: maxY - halfThickness }
+        ];
+        setDetectedFloor(interiorPolygon);
         return;
       }
     }
 
-    // Not a closed polygon
     setDetectedFloor(null);
+  }, [layout?.walls]);
+
+  // Helper function to calculate interior polygon offset by wall thickness
+  const calculateInteriorPolygon = (polygon, offset) => {
+    if (polygon.length < 3) return polygon;
+    
+    // Simple interior offset - move each vertex toward center
+    const centroidX = polygon.reduce((sum, p) => sum + p.x, 0) / polygon.length;
+    const centroidY = polygon.reduce((sum, p) => sum + p.y, 0) / polygon.length;
+    
+    return polygon.map(p => {
+      const dx = centroidX - p.x;
+      const dy = centroidY - p.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist === 0) return p;
+      
+      const moveX = (dx / dist) * offset;
+      const moveY = (dy / dist) * offset;
+      
+      return { x: p.x + moveX, y: p.y + moveY };
+    });
+  };
+
+  // Manual floor fill function - click inside room to fill
+  const handleFillFloor = useCallback((clickX, clickY) => {
+    if (!layout?.walls || layout.walls.length < 3) {
+      toast.error('Need at least 3 walls to create floor');
+      return;
+    }
+
+    // Get all wall endpoints
+    const allPoints = [];
+    for (const wall of layout.walls) {
+      allPoints.push({ x: wall.start_x, y: wall.start_y });
+      allPoints.push({ x: wall.end_x, y: wall.end_y });
+    }
+
+    // Find bounding box
+    const minX = Math.min(...allPoints.map(p => p.x));
+    const maxX = Math.max(...allPoints.map(p => p.x));
+    const minY = Math.min(...allPoints.map(p => p.y));
+    const maxY = Math.max(...allPoints.map(p => p.y));
+
+    // Check if click is inside bounding box
+    if (clickX >= minX && clickX <= maxX && clickY >= minY && clickY <= maxY) {
+      const halfThickness = DEFAULT_WALL_THICKNESS / 2;
+      const floorPolygon = [
+        { x: minX + halfThickness, y: minY + halfThickness },
+        { x: maxX - halfThickness, y: minY + halfThickness },
+        { x: maxX - halfThickness, y: maxY - halfThickness },
+        { x: minX + halfThickness, y: maxY - halfThickness }
+      ];
+      setManualFloorFill(floorPolygon);
+      setTool('select');
+      toast.success('Floor fill applied');
+    } else {
+      toast.error('Click inside the room to fill floor');
+    }
   }, [layout?.walls]);
 
   // Detect floor when walls change

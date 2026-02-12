@@ -2567,34 +2567,14 @@ export default function SpatialBOQCanvas() {
                     </g>
                   );
                 })}
-                        const labelOffset = (wall.thickness || DEFAULT_WALL_THICKNESS) / 2 + 15;
-                        
-                        return (
-                          <text
-                            key={`dim-${wall.wall_id}`}
-                            x={(midX + perpX * labelOffset) * scale}
-                            y={(midY + perpY * labelOffset) * scale}
-                            fontSize="10"
-                            fill="#4A5568"
-                            textAnchor="middle"
-                            dominantBaseline="middle"
-                            fontWeight="500"
-                            style={{ cursor: 'pointer' }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startDimensionEdit(wall.wall_id, wall.length);
-                            }}
-                          >
-                            {wall.length}mm
-                          </text>
-                        );
-                      })}
-                    </g>
-                  );
-                })()}
 
-                {/* Individual Walls - Only render when NOT part of unified boundary */}
-                {!unifiedBoundary && layout?.walls?.map(wall => {
+                {/* Individual Walls - Only render walls NOT part of any unified boundary loop */}
+                {layout?.walls?.map(wall => {
+                  // Skip if this wall is part of a unified boundary
+                  if (unifiedBoundary?.allWallIds?.includes(wall.wall_id)) {
+                    return null;
+                  }
+                  
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
                   const thickness = wall.thickness || DEFAULT_WALL_THICKNESS;
                   

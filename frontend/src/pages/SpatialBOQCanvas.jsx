@@ -144,6 +144,7 @@ export default function SpatialBOQCanvas() {
 
   // Floor polygon detection (Item #5)
   const [detectedFloor, setDetectedFloor] = useState(null);
+  const [manualFloorFill, setManualFloorFill] = useState(null); // Manual floor fill backup
 
   // Wall drawing state - Click-Release mode (Item #4)
   const [wallDrawMode, setWallDrawMode] = useState('free'); // rectangle, square, free

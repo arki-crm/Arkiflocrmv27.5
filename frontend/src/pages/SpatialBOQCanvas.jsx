@@ -2155,27 +2155,34 @@ export default function SpatialBOQCanvas() {
             {selectedItem?.type === 'module' && (
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
                 <Move className="h-3 w-3" />
-                Drag to move • Arrow keys for fine adjustment • Delete to remove
-                {selectedItem.item.wall_id && <span className="text-green-400 ml-1">• Pinned to wall</span>}
+                Drag to move • Arrow keys • Delete • ESC to cancel
+                {selectedItem.item.wall_id && <span className="text-green-400 ml-1">• Pinned</span>}
               </div>
             )}
             {(selectedItem?.type === 'door' || selectedItem?.type === 'window') && (
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
                 <GripVertical className="h-3 w-3" />
-                Drag to move along wall • Arrow keys to slide • Delete to remove
+                Drag along wall • Arrow keys • Delete • ESC to cancel
               </div>
             )}
             {selectedItem?.type === 'wall' && (
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
                 <Move className="h-3 w-3" />
-                Drag wall to reposition • Drag endpoints to resize • Delete to remove
+                Drag to move • Drag blue handles to extend/shorten • ESC to cancel
               </div>
             )}
             
             {/* Pan/Zoom hint (Item #1 & #2) */}
-            {!selectedItem && (
+            {!selectedItem && !isDrawing && (
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
-                <span>Scroll to zoom • Middle-click or Space+drag to pan • Ctrl+0 to reset</span>
+                <span>Scroll to zoom • Space+drag to pan • ESC to reset tool</span>
+              </div>
+            )}
+
+            {/* Drawing hint */}
+            {isDrawing && (
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
+                <span>Drawing... Release to place • ESC to cancel</span>
               </div>
             )}
             

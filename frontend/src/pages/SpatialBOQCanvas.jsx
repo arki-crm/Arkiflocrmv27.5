@@ -718,7 +718,10 @@ export default function SpatialBOQCanvas() {
   // Parametric update for rectangular loop - maintains rectangle shape
   const updateRectangularLoopWall = useCallback((wallId, movement) => {
     const rectLoop = detectRectangularLoop(wallId);
-    if (!rectLoop) return false; // Not a rectangular loop, use normal editing
+    if (!rectLoop) {
+      console.log('[ParametricEdit] Not a rectangular loop for wall', wallId);
+      return false;
+    }
     
     const { walls, targetWall, targetIsHorizontal } = rectLoop;
     const tolerance = CLOSURE_TOLERANCE;
@@ -733,18 +736,23 @@ export default function SpatialBOQCanvas() {
     
     if (Math.abs(perpMovement) < 1) return false;
     
-    // Find adjacent and opposite walls
+    console.log('[ParametricEdit] Moving wall', wallId, 'by', perpMovement, 'isHorizontal:', targetIsHorizontal);
+    
+    // Identify which walls share endpoints with the target wall
+    // In a rectangle: targetWall has 2 adjacent walls (perpendicular) and 1 opposite wall (parallel)
     const coordKey = (x, y) => `${Math.round(x / tolerance) * tolerance},${Math.round(y / tolerance) * tolerance}`;
     
-    // Get all corner coordinates
     const targetStartKey = coordKey(targetWall.start_x, targetWall.start_y);
     const targetEndKey = coordKey(targetWall.end_x, targetWall.end_y);
     
     const updates = [];
     
     for (const { wall, isHorizontal } of walls) {
+      const wallStartKey = coordKey(wall.start_x, wall.start_y);
+      const wallEndKey = coordKey(wall.end_x, wall.end_y);
+      
       if (wall.wall_id === wallId) {
-        // Move the target wall perpendicularly
+        // This is the target wall - move it entirely in perpendicular direction
         if (targetIsHorizontal) {
           updates.push({
             wallId: wall.wall_id,
@@ -763,30 +771,44 @@ export default function SpatialBOQCanvas() {
           });
         }
       } else if (isHorizontal !== targetIsHorizontal) {
-        // Adjacent perpendicular walls - extend/shrink one endpoint
-        const wallStartKey = coordKey(wall.start_x, wall.start_y);
-        const wallEndKey = coordKey(wall.end_x, wall.end_y);
+        // Perpendicular wall - extend/shrink one endpoint to stay connected
         
-        // Check which endpoint connects to target wall
-        const startConnectsToTarget = wallStartKey === targetStartKey || wallStartKey === targetEndKey;
-        const endConnectsToTarget = wallEndKey === targetStartKey || wallEndKey === targetEndKey;
+        // Check which endpoint of this wall connects to target wall
+        const startConnectsToTarget = (wallStartKey === targetStartKey || wallStartKey === targetEndKey);
+        const endConnectsToTarget = (wallEndKey === targetStartKey || wallEndKey === targetEndKey);
         
         if (startConnectsToTarget) {
+          // Move the start endpoint to follow target wall
           if (targetIsHorizontal) {
-            updates.push({ wallId: wall.wall_id, changes: { start_y: wall.start_y + perpMovement } });
+            updates.push({ 
+              wallId: wall.wall_id, 
+              changes: { start_y: wall.start_y + perpMovement } 
+            });
           } else {
-            updates.push({ wallId: wall.wall_id, changes: { start_x: wall.start_x + perpMovement } });
+            updates.push({ 
+              wallId: wall.wall_id, 
+              changes: { start_x: wall.start_x + perpMovement } 
+            });
           }
         } else if (endConnectsToTarget) {
+          // Move the end endpoint to follow target wall
           if (targetIsHorizontal) {
-            updates.push({ wallId: wall.wall_id, changes: { end_y: wall.end_y + perpMovement } });
+            updates.push({ 
+              wallId: wall.wall_id, 
+              changes: { end_y: wall.end_y + perpMovement } 
+            });
           } else {
-            updates.push({ wallId: wall.wall_id, changes: { end_x: wall.end_x + perpMovement } });
+            updates.push({ 
+              wallId: wall.wall_id, 
+              changes: { end_x: wall.end_x + perpMovement } 
+            });
           }
         }
       }
       // Opposite parallel wall stays unchanged
     }
+    
+    console.log('[ParametricEdit] Applying updates to', updates.length, 'walls');
     
     // Apply all updates atomically
     if (updates.length > 0) {
@@ -806,19 +828,17 @@ export default function SpatialBOQCanvas() {
       }));
       setHasChanges(true);
       
-      // Update selected item if it's the target wall
-      if (selectedItem?.item?.wall_id === wallId) {
-        const targetUpdate = updates.find(u => u.wallId === wallId);
-        if (targetUpdate) {
-          setSelectedItem(prev => {
-            const updated = { ...prev.item, ...targetUpdate.changes };
-            updated.length = Math.round(Math.sqrt(
-              Math.pow(updated.end_x - updated.start_x, 2) +
-              Math.pow(updated.end_y - updated.start_y, 2)
-            ));
-            return { ...prev, item: updated };
-          });
-        }
+      // Update selected item if it's one of the updated walls
+      const targetUpdate = updates.find(u => u.wallId === wallId);
+      if (targetUpdate && selectedItem?.item?.wall_id === wallId) {
+        setSelectedItem(prev => {
+          const updated = { ...prev.item, ...targetUpdate.changes };
+          updated.length = Math.round(Math.sqrt(
+            Math.pow(updated.end_x - updated.start_x, 2) +
+            Math.pow(updated.end_y - updated.start_y, 2)
+          ));
+          return { ...prev, item: updated };
+        });
       }
       
       return true;

@@ -9,7 +9,31 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Composer CAD-Level Drafting Enhancements COMPLETE ✅
+## Current Status: Composer CAD Interaction Fixes COMPLETE ✅
+**As of February 12, 2026**
+
+### Composer (SpatialBOQCanvas) - 4 CAD Interaction Bug Fixes
+
+All 4 CAD interaction issues reported by user have been fixed and verified.
+
+| # | Issue | Fix Applied | Status |
+|---|-------|-------------|--------|
+| 1 | **True Canvas Pan** | Grid patterns now use `patternTransform` with panOffset - grid moves with plan | ✅ |
+| 2 | **Floor Detection Visualization** | Improved algorithm with 50mm tolerance, blue polygon fill (#bae6fd @ 0.5 opacity) | ✅ |
+| 3 | **Wall Length Extension (Edge Drag)** | Enlarged endpoint handles (12px), `findSpecificWallEndpoint` for select mode | ✅ |
+| 4 | **ESC Key Universal Cancel** | Cancels drawing, dimension edit, drag, deselects, returns to Select tool | ✅ |
+
+**Technical Fixes:**
+- **Grid Transform**: `patternTransform={translate(${panOffset.x}, ${panOffset.y})}` on both grid patterns
+- **Floor Detection**: `COORD_TOLERANCE = 50mm` for endpoint matching, handles partial overlaps
+- **Endpoint Click**: `findSpecificWallEndpoint()` with `ENDPOINT_HANDLE_SIZE * 2.5 / scale` threshold
+- **ESC Handler**: Resets `isDrawing`, `editingDimension`, `isDragging`, `selectedItem`, `tool`, all panels
+
+**Verification (iteration_66.json):** 100% pass rate - All 4 CAD interaction fixes verified working.
+
+---
+
+## Previous Status: Composer CAD-Level Drafting Enhancements COMPLETE ✅
 **As of February 12, 2026**
 
 ### Composer (SpatialBOQCanvas) - 7 CAD-Level Drafting Enhancements

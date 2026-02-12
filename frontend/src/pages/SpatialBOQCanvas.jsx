@@ -2381,6 +2381,50 @@ export default function SpatialBOQCanvas() {
                         />
                       </div>
                     </div>
+
+                    {/* Rotation & Flip Controls (Item #4) */}
+                    <Separator />
+                    <div>
+                      <Label className="text-[10px] text-slate-500">Transform</Label>
+                      <div className="flex gap-1 mt-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 flex-1"
+                              onClick={() => {
+                                const key = selectedItem.type === 'door' ? 'door_id' : 'window_id';
+                                rotateOpening(selectedItem.type, selectedItem.item[key], 90);
+                              }}
+                            >
+                              <RotateCw className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Rotate 90°</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 flex-1"
+                              onClick={() => {
+                                const key = selectedItem.type === 'door' ? 'door_id' : 'window_id';
+                                flipOpening(selectedItem.type, selectedItem.item[key]);
+                              }}
+                            >
+                              <FlipHorizontal className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Flip Orientation</TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <p className="text-[9px] text-slate-400 mt-1">
+                        Rotation: {selectedItem.item.rotation || 0}° • {selectedItem.item.flipped ? 'Flipped' : 'Normal'}
+                      </p>
+                    </div>
+
                     <div className="bg-slate-50 rounded p-2">
                       <Label className="text-[10px] text-slate-500">Attached Wall</Label>
                       <p className="text-xs font-medium">

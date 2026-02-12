@@ -922,6 +922,7 @@ export default function SpatialBOQCanvas() {
   // Add module with wall snap (Item #7)
   const addModule = (x, y) => {
     if (!selectedModuleType || !moduleLibrary.module_types) return;
+    saveToHistory();
 
     const moduleType = moduleLibrary.module_types[selectedModuleType];
     if (!moduleType) return;

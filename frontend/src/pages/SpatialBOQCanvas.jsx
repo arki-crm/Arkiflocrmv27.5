@@ -2447,160 +2447,97 @@ export default function SpatialBOQCanvas() {
                   );
                 })()}
 
-                {/* Unified Room Boundary - For closed rooms with mitered corners */}
-                {(() => {
-                  if (!layout?.walls || layout.walls.length < 3) return null;
+                {/* ============================================
+                    UNIFIED WALL BOUNDARY RENDERING ENGINE
+                    Renders closed wall loops as unified polygons
+                    with proper miter joins at all corners
+                   ============================================ */}
+                {unifiedBoundary && (() => {
+                  const { outer, inner, wallIds } = unifiedBoundary;
                   
-                  const walls = layout.walls;
-                  const allPoints = [];
-                  for (const wall of walls) {
-                    allPoints.push({ x: wall.start_x, y: wall.start_y });
-                    allPoints.push({ x: wall.end_x, y: wall.end_y });
-                  }
-                  
-                  const minX = Math.min(...allPoints.map(p => p.x));
-                  const maxX = Math.max(...allPoints.map(p => p.x));
-                  const minY = Math.min(...allPoints.map(p => p.y));
-                  const maxY = Math.max(...allPoints.map(p => p.y));
-                  
-                  // Check if walls form a closed rectangle (4 walls with corners at bounding box)
-                  const isRectangle = layout.walls.length === 4 && allPoints.every(p => 
-                    (Math.abs(p.x - minX) < CLOSURE_TOLERANCE || Math.abs(p.x - maxX) < CLOSURE_TOLERANCE) &&
-                    (Math.abs(p.y - minY) < CLOSURE_TOLERANCE || Math.abs(p.y - maxY) < CLOSURE_TOLERANCE)
+                  const isAnyWallSelected = wallIds.some(wid => 
+                    selectedItem?.type === 'wall' && selectedItem.item.wall_id === wid
                   );
                   
-                  if (isRectangle) {
-                    const thickness = walls[0]?.thickness || DEFAULT_WALL_THICKNESS;
-                    const halfThickness = thickness / 2;
-                    
-                    // Create unified wall boundary with proper mitered corners
-                    // Outer rectangle (expanded by half wall thickness)
-                    const ox1 = (minX - halfThickness) * scale;
-                    const oy1 = (minY - halfThickness) * scale;
-                    const ox2 = (maxX + halfThickness) * scale;
-                    const oy2 = (maxY + halfThickness) * scale;
-                    
-                    // Inner rectangle (contracted by half wall thickness) 
-                    const ix1 = (minX + halfThickness) * scale;
-                    const iy1 = (minY + halfThickness) * scale;
-                    const ix2 = (maxX - halfThickness) * scale;
-                    const iy2 = (maxY - halfThickness) * scale;
-                    
-                    // SVG path: outer clockwise, inner counter-clockwise for proper hole
-                    const pathD = `
-                      M ${ox1} ${oy1}
-                      L ${ox2} ${oy1}
-                      L ${ox2} ${oy2}
-                      L ${ox1} ${oy2}
-                      Z
-                      M ${ix1} ${iy1}
-                      L ${ix1} ${iy2}
-                      L ${ix2} ${iy2}
-                      L ${ix2} ${iy1}
-                      Z
-                    `;
-                    
-                    const isAnyWallSelected = walls.some(w => 
-                      selectedItem?.type === 'wall' && selectedItem.item.wall_id === w.wall_id
-                    );
-                    
-                    return (
-                      <g>
-                        {/* Unified wall fill - no stroke to avoid corner artifacts */}
-                        <path
-                          d={pathD}
-                          fill={isAnyWallSelected ? '#93c5fd' : '#B0B0B0'}
-                          fillRule="evenodd"
-                          style={{ cursor: 'move' }}
-                        />
-                        {/* Outer edge - clean rectangle stroke */}
-                        <rect
-                          x={ox1}
-                          y={oy1}
-                          width={ox2 - ox1}
-                          height={oy2 - oy1}
-                          fill="none"
-                          stroke="#000000"
-                          strokeWidth="0.5"
-                          strokeLinejoin="miter"
-                        />
-                        {/* Inner edge - clean rectangle stroke */}
-                        <rect
-                          x={ix1}
-                          y={iy1}
-                          width={ix2 - ix1}
-                          height={iy2 - iy1}
-                          fill="none"
-                          stroke="#000000"
-                          strokeWidth="0.5"
-                          strokeLinejoin="miter"
-                        />
-                        {/* Dimension labels on each wall segment */}
-                        {walls.map(wall => {
-                          const midX = (wall.start_x + wall.end_x) / 2;
-                          const midY = (wall.start_y + wall.end_y) / 2;
-                          const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
-                          
-                          // Position label outside the wall
-                          let labelX = midX * scale;
-                          let labelY = midY * scale;
-                          
-                          if (isHorizontal) {
-                            const isTopWall = Math.abs(midY - minY) < Math.abs(midY - maxY);
-                            labelY = isTopWall ? (minY - halfThickness - 12) * scale : (maxY + halfThickness + 12) * scale;
-                          } else {
-                            const isLeftWall = Math.abs(midX - minX) < Math.abs(midX - maxX);
-                            labelX = isLeftWall ? (minX - halfThickness - 20) * scale : (maxX + halfThickness + 20) * scale;
-                          }
-                          
-                          return (
-                            <text
-                              key={`dim-${wall.wall_id}`}
-                              x={labelX}
-                              y={labelY}
-                              fontSize="10"
-                              fill="#4A5568"
-                              textAnchor="middle"
-                              dominantBaseline="middle"
-                              fontWeight="500"
-                              style={{ cursor: 'pointer' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startDimensionEdit(wall.wall_id, wall.length);
-                              }}
-                            >
-                              {wall.length}mm
-                            </text>
-                          );
-                        })}
-                      </g>
-                    );
-                  }
-                  return null;
+                  // Create SVG path: outer boundary clockwise, inner counter-clockwise
+                  const outerPath = outer.map((p, i) => 
+                    `${i === 0 ? 'M' : 'L'} ${p.x * scale} ${p.y * scale}`
+                  ).join(' ') + ' Z';
+                  
+                  const innerPath = inner.map((p, i) => 
+                    `${i === 0 ? 'M' : 'L'} ${p.x * scale} ${p.y * scale}`
+                  ).join(' ') + ' Z';
+                  
+                  // Reverse inner path for proper hole (counter-clockwise)
+                  const innerReversed = [...inner].reverse();
+                  const innerPathReversed = innerReversed.map((p, i) => 
+                    `${i === 0 ? 'M' : 'L'} ${p.x * scale} ${p.y * scale}`
+                  ).join(' ') + ' Z';
+                  
+                  return (
+                    <g>
+                      {/* Unified wall fill */}
+                      <path
+                        d={outerPath + ' ' + innerPathReversed}
+                        fill={isAnyWallSelected ? '#93c5fd' : '#B0B0B0'}
+                        fillRule="evenodd"
+                        style={{ cursor: 'move' }}
+                      />
+                      {/* Outer edge stroke - clean polygon */}
+                      <polygon
+                        points={outer.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
+                        fill="none"
+                        stroke="#000000"
+                        strokeWidth="0.5"
+                        strokeLinejoin="miter"
+                      />
+                      {/* Inner edge stroke - clean polygon */}
+                      <polygon
+                        points={inner.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
+                        fill="none"
+                        stroke="#000000"
+                        strokeWidth="0.5"
+                        strokeLinejoin="miter"
+                      />
+                      {/* Dimension labels for each wall */}
+                      {layout?.walls?.map(wall => {
+                        const midX = (wall.start_x + wall.end_x) / 2;
+                        const midY = (wall.start_y + wall.end_y) / 2;
+                        const dx = wall.end_x - wall.start_x;
+                        const dy = wall.end_y - wall.start_y;
+                        const len = Math.sqrt(dx * dx + dy * dy);
+                        
+                        // Perpendicular offset for label placement (outside wall)
+                        const perpX = len > 0 ? -dy / len : 0;
+                        const perpY = len > 0 ? dx / len : 0;
+                        const labelOffset = (wall.thickness || DEFAULT_WALL_THICKNESS) / 2 + 15;
+                        
+                        return (
+                          <text
+                            key={`dim-${wall.wall_id}`}
+                            x={(midX + perpX * labelOffset) * scale}
+                            y={(midY + perpY * labelOffset) * scale}
+                            fontSize="10"
+                            fill="#4A5568"
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            fontWeight="500"
+                            style={{ cursor: 'pointer' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startDimensionEdit(wall.wall_id, wall.length);
+                            }}
+                          >
+                            {wall.length}mm
+                          </text>
+                        );
+                      })}
+                    </g>
+                  );
                 })()}
 
-                {/* Individual Walls - For non-rectangle or open configurations */}
-                {layout?.walls?.map(wall => {
-                  // Skip if walls form a closed rectangle (rendered as unified shape above)
-                  if (layout.walls.length === 4) {
-                    const allPoints = [];
-                    for (const w of layout.walls) {
-                      allPoints.push({ x: w.start_x, y: w.start_y });
-                      allPoints.push({ x: w.end_x, y: w.end_y });
-                    }
-                    const minX = Math.min(...allPoints.map(p => p.x));
-                    const maxX = Math.max(...allPoints.map(p => p.x));
-                    const minY = Math.min(...allPoints.map(p => p.y));
-                    const maxY = Math.max(...allPoints.map(p => p.y));
-                    
-                    const isRectangle = allPoints.every(p => 
-                      (Math.abs(p.x - minX) < CLOSURE_TOLERANCE || Math.abs(p.x - maxX) < CLOSURE_TOLERANCE) &&
-                      (Math.abs(p.y - minY) < CLOSURE_TOLERANCE || Math.abs(p.y - maxY) < CLOSURE_TOLERANCE)
-                    );
-                    
-                    if (isRectangle) return null;
-                  }
-                  
+                {/* Individual Walls - Only render when NOT part of unified boundary */}
+                {!unifiedBoundary && layout?.walls?.map(wall => {
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
                   const thickness = wall.thickness || DEFAULT_WALL_THICKNESS;
                   

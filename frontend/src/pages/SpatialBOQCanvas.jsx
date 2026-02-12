@@ -2210,7 +2210,7 @@ export default function SpatialBOQCanvas() {
                   );
                 })()}
 
-                {/* Temp rectangle/square while drawing - CAD-style preview */}
+                {/* Temp rectangle/square while drawing - thin outline preview */}
                 {tempRectWalls && (
                   <rect
                     x={Math.min(tempRectWalls.start.x, tempRectWalls.end.x) * scale}
@@ -2220,8 +2220,8 @@ export default function SpatialBOQCanvas() {
                     fill="#93c5fd"
                     fillOpacity="0.3"
                     stroke="#1e40af"
-                    strokeWidth="1.5"
-                    strokeDasharray="5,5"
+                    strokeWidth="0.5"
+                    strokeDasharray="4,2"
                   />
                 )}
 

@@ -830,7 +830,7 @@ export default function SpatialBOQCanvas() {
       end_x: endX,
       end_y: endY,
       length: Math.round(length),
-      thickness: WALL_THICKNESS
+      thickness: DEFAULT_WALL_THICKNESS
     };
   };
 
@@ -864,10 +864,11 @@ export default function SpatialBOQCanvas() {
   const findWallAt = (x, y) => {
     if (!layout?.walls) return null;
     return layout.walls.find(w => {
-      const minX = Math.min(w.start_x, w.end_x) - WALL_THICKNESS / 2;
-      const maxX = Math.max(w.start_x, w.end_x) + WALL_THICKNESS / 2;
-      const minY = Math.min(w.start_y, w.end_y) - WALL_THICKNESS / 2;
-      const maxY = Math.max(w.start_y, w.end_y) + WALL_THICKNESS / 2;
+      const thickness = w.thickness || DEFAULT_WALL_THICKNESS;
+      const minX = Math.min(w.start_x, w.end_x) - thickness / 2;
+      const maxX = Math.max(w.start_x, w.end_x) + thickness / 2;
+      const minY = Math.min(w.start_y, w.end_y) - thickness / 2;
+      const maxY = Math.max(w.start_y, w.end_y) + thickness / 2;
       return x >= minX && x <= maxX && y >= minY && y <= maxY;
     });
   };

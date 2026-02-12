@@ -2289,6 +2289,7 @@ export default function SpatialBOQCanvas() {
                   const isSelected = selectedItem?.type === 'module' && selectedItem.item.module_id === module.module_id;
                   const color = MODULE_COLORS[module.module_type] || '#888';
                   const modInfo = moduleLibrary.module_types?.[module.module_type] || {};
+                  const isSnappedToWall = !!module.wall_id;
 
                   return (
                     <g
@@ -2296,26 +2297,52 @@ export default function SpatialBOQCanvas() {
                       transform={`translate(${module.x * scale}, ${module.y * scale}) rotate(${module.rotation})`}
                       style={{ cursor: 'grab' }}
                     >
+                      {/* Snap glow effect when attached to wall */}
+                      {isSnappedToWall && (
+                        <rect
+                          x="-2"
+                          y="-2"
+                          width={module.width * scale + 4}
+                          height={module.depth * scale + 4}
+                          fill="none"
+                          stroke="#22c55e"
+                          strokeWidth="2"
+                          strokeOpacity="0.5"
+                          rx="2"
+                          ry="2"
+                        />
+                      )}
                       <rect
                         x="0"
                         y="0"
                         width={module.width * scale}
                         height={module.depth * scale}
                         fill={color}
-                        fillOpacity="0.8"
+                        fillOpacity="0.85"
                         stroke={isSelected ? '#1e40af' : color}
-                        strokeWidth={isSelected ? 3 : 1}
+                        strokeWidth={isSelected ? 3 : 1.5}
                       />
-                      {/* Wall pin indicator */}
-                      {module.wall_id && (
-                        <circle
-                          cx={module.width * scale / 2}
-                          cy="4"
-                          r="3"
-                          fill="#22c55e"
-                          stroke="white"
-                          strokeWidth="1"
-                        />
+                      {/* Wall snap indicator - enhanced */}
+                      {isSnappedToWall && (
+                        <g>
+                          <circle
+                            cx={module.width * scale / 2}
+                            cy="4"
+                            r="4"
+                            fill="#22c55e"
+                            stroke="white"
+                            strokeWidth="1.5"
+                          />
+                          <line
+                            x1="0"
+                            y1="0"
+                            x2={module.width * scale}
+                            y2="0"
+                            stroke="#22c55e"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          />
+                        </g>
                       )}
                       <text
                         x={module.width * scale / 2}
@@ -2324,7 +2351,7 @@ export default function SpatialBOQCanvas() {
                         fill="white"
                         textAnchor="middle"
                         dominantBaseline="middle"
-                        fontWeight="500"
+                        fontWeight="600"
                       >
                         {modInfo.name?.substring(0, 3) || 'MOD'}
                       </text>
@@ -2334,6 +2361,7 @@ export default function SpatialBOQCanvas() {
                         fontSize="8"
                         fill="#374151"
                         textAnchor="middle"
+                        fontWeight="500"
                       >
                         {module.width}×{module.depth}
                       </text>

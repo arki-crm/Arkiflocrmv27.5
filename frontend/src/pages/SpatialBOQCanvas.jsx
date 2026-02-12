@@ -2187,27 +2187,67 @@ export default function SpatialBOQCanvas() {
                   {/* Major grid lines */}
                   <path d={`M ${500 * scale} 0 L 0 0 0 ${500 * scale}`} fill="none" stroke="#C8CBCE" strokeWidth="0.75" strokeOpacity="0.6" />
                 </pattern>
+                
+                {/* Floor material patterns */}
+                <pattern id="floorTiles" width={60 * scale} height={60 * scale} patternUnits="userSpaceOnUse">
+                  <rect width={60 * scale} height={60 * scale} fill={FLOOR_MATERIALS[floorMaterial]?.color || '#E8EAEB'} />
+                  <line x1="0" y1="0" x2={60 * scale} y2="0" stroke="#00000015" strokeWidth="1" />
+                  <line x1="0" y1="0" x2="0" y2={60 * scale} stroke="#00000015" strokeWidth="1" />
+                </pattern>
+                
+                <pattern id="floorWood" width={120 * scale} height={20 * scale} patternUnits="userSpaceOnUse">
+                  <rect width={120 * scale} height={20 * scale} fill={FLOOR_MATERIALS[floorMaterial]?.color || '#DEB887'} />
+                  <line x1="0" y1={20 * scale} x2={120 * scale} y2={20 * scale} stroke="#00000020" strokeWidth="0.5" />
+                  <line x1={60 * scale} y1="0" x2={60 * scale} y2={20 * scale} stroke="#00000015" strokeWidth="0.5" />
+                </pattern>
+                
+                <pattern id="floorMarble" width={80 * scale} height={80 * scale} patternUnits="userSpaceOnUse">
+                  <rect width={80 * scale} height={80 * scale} fill={FLOOR_MATERIALS[floorMaterial]?.color || '#FAFAFA'} />
+                  <path d={`M 0 ${40 * scale} Q ${40 * scale} ${20 * scale} ${80 * scale} ${40 * scale}`} stroke="#00000008" strokeWidth="2" fill="none" />
+                </pattern>
               </defs>
               <rect width="100%" height="100%" fill="url(#grid)" />
 
               <g transform={`translate(${panOffset.x}, ${panOffset.y})`}>
-                {/* Floor polygon - Auto-detected from closed room */}
-                {detectedFloor && detectedFloor.length >= 3 && (
-                  <polygon
-                    points={detectedFloor.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
-                    fill="#E8EAEB"
-                    fillOpacity="0.9"
-                    stroke="#B8BCBF"
-                    strokeWidth="0.5"
-                  />
-                )}
+                {/* Floor polygon - Auto-detected from closed room with material */}
+                {detectedFloor && detectedFloor.length >= 3 && (() => {
+                  const material = FLOOR_MATERIALS[floorMaterial];
+                  const patternId = material?.pattern === 'tiles' ? 'url(#floorTiles)' :
+                                   material?.pattern === 'wood' ? 'url(#floorWood)' :
+                                   material?.pattern === 'marble' ? 'url(#floorMarble)' :
+                                   material?.color || '#E8EAEB';
+                  const fillValue = material?.pattern === 'solid' ? material.color : patternId;
+                  
+                  return (
+                    <polygon
+                      points={detectedFloor.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
+                      fill={fillValue}
+                      fillOpacity="0.95"
+                      stroke="#A0A4A8"
+                      strokeWidth="0.5"
+                    />
+                  );
+                })()}
                 
                 {/* Manual floor fill (backup when auto-detection fails) */}
-                {!detectedFloor && manualFloorFill && manualFloorFill.length >= 3 && (
-                  <polygon
-                    points={manualFloorFill.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
-                    fill="#E8EAEB"
-                    fillOpacity="0.9"
+                {!detectedFloor && manualFloorFill && manualFloorFill.length >= 3 && (() => {
+                  const material = FLOOR_MATERIALS[floorMaterial];
+                  const patternId = material?.pattern === 'tiles' ? 'url(#floorTiles)' :
+                                   material?.pattern === 'wood' ? 'url(#floorWood)' :
+                                   material?.pattern === 'marble' ? 'url(#floorMarble)' :
+                                   material?.color || '#E8EAEB';
+                  const fillValue = material?.pattern === 'solid' ? material.color : patternId;
+                  
+                  return (
+                    <polygon
+                      points={manualFloorFill.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
+                      fill={fillValue}
+                      fillOpacity="0.95"
+                      stroke="#A0A4A8"
+                      strokeWidth="0.5"
+                    />
+                  );
+                })()}
                     stroke="#B8BCBF"
                     strokeWidth="0.5"
                   />

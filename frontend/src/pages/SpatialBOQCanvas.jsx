@@ -1555,12 +1555,12 @@ export default function SpatialBOQCanvas() {
       const incrementalDx = canvas.x - lastX;
       const incrementalDy = canvas.y - lastY;
       
-      // Calculate total delta from drag start (for fallback non-parametric mode)
+      // Calculate total delta from drag start (for both parametric and fallback modes)
       const totalDx = canvas.x - dragStart.x;
       const totalDy = canvas.y - dragStart.y;
       
-      // Try parametric editing for rectangular loops first (uses incremental delta)
-      const usedParametric = updateRectangularLoopWall(wall.wall_id, { dx: incrementalDx, dy: incrementalDy });
+      // Try parametric editing for rectangular loops first (uses total delta with stored loop)
+      const usedParametric = updateRectangularLoopWall(wall.wall_id, { dx: totalDx, dy: totalDy }, activeRectLoop);
       
       if (!usedParametric) {
         // Fallback to normal wall movement for non-rectangular walls (uses total delta)
@@ -1571,13 +1571,6 @@ export default function SpatialBOQCanvas() {
           end_y: dragStart.wall_end_y + totalDy
         });
       }
-      
-      // Always update last position for continuous dragging
-      setDragStart(prev => ({
-        ...prev,
-        lastX: canvas.x,
-        lastY: canvas.y
-      }));
     }
 
     // Dragging module with magnetic snap (Item #2)

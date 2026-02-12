@@ -2165,14 +2165,25 @@ export default function SpatialBOQCanvas() {
               <rect width="100%" height="100%" fill="url(#grid)" />
 
               <g transform={`translate(${panOffset.x}, ${panOffset.y})`}>
-                {/* Floor polygon - Neutral fill for closed rooms */}
+                {/* Floor polygon - Auto-detected from closed room */}
                 {detectedFloor && detectedFloor.length >= 3 && (
                   <polygon
                     points={detectedFloor.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
                     fill="#E8EAEB"
-                    fillOpacity="0.85"
-                    stroke="#C5C8CA"
-                    strokeWidth="1"
+                    fillOpacity="0.9"
+                    stroke="#B8BCBF"
+                    strokeWidth="0.5"
+                  />
+                )}
+                
+                {/* Manual floor fill (backup when auto-detection fails) */}
+                {!detectedFloor && manualFloorFill && manualFloorFill.length >= 3 && (
+                  <polygon
+                    points={manualFloorFill.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
+                    fill="#E8EAEB"
+                    fillOpacity="0.9"
+                    stroke="#B8BCBF"
+                    strokeWidth="0.5"
                   />
                 )}
 

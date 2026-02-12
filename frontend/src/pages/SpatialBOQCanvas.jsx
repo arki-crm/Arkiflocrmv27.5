@@ -2213,16 +2213,17 @@ export default function SpatialBOQCanvas() {
                   );
                 })()}
 
-                {/* Temp rectangle/square while drawing */}
+                {/* Temp rectangle/square while drawing - CAD-style preview */}
                 {tempRectWalls && (
                   <rect
                     x={Math.min(tempRectWalls.start.x, tempRectWalls.end.x) * scale}
                     y={Math.min(tempRectWalls.start.y, tempRectWalls.end.y) * scale}
                     width={Math.abs(tempRectWalls.end.x - tempRectWalls.start.x) * scale}
                     height={Math.abs(tempRectWalls.end.y - tempRectWalls.start.y) * scale}
-                    fill="none"
-                    stroke="#3b82f6"
-                    strokeWidth={DEFAULT_WALL_THICKNESS * scale}
+                    fill="#93c5fd"
+                    fillOpacity="0.3"
+                    stroke="#1e40af"
+                    strokeWidth="1.5"
                     strokeDasharray="5,5"
                   />
                 )}

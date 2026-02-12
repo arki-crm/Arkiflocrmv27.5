@@ -2144,56 +2144,74 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
-                {/* Temp wall while drawing (free mode) - with angle snap indicator (Item #2) */}
-                {tempWall && (
-                  <g>
-                    <line
-                      x1={tempWall.start.x * scale}
-                      y1={tempWall.start.y * scale}
-                      x2={tempWall.end.x * scale}
-                      y2={tempWall.end.y * scale}
-                      stroke={tempWall.snappedAngle !== null ? '#22c55e' : '#3b82f6'}
-                      strokeWidth={DEFAULT_WALL_THICKNESS * scale}
-                      strokeLinecap="square"
-                      strokeDasharray="5,5"
-                    />
-                    {/* Angle indicator when snapped (Item #2) */}
-                    {tempWall.snappedAngle !== null && (
+                {/* Temp wall while drawing (free mode) - CAD-style preview with edge strokes */}
+                {tempWall && (() => {
+                  const dx = tempWall.end.x - tempWall.start.x;
+                  const dy = tempWall.end.y - tempWall.start.y;
+                  const length = Math.sqrt(dx * dx + dy * dy);
+                  const halfThickness = DEFAULT_WALL_THICKNESS / 2;
+                  const perpX = length > 0 ? (-dy / length) * halfThickness : 0;
+                  const perpY = length > 0 ? (dx / length) * halfThickness : 0;
+                  
+                  const corners = [
+                    { x: (tempWall.start.x + perpX) * scale, y: (tempWall.start.y + perpY) * scale },
+                    { x: (tempWall.end.x + perpX) * scale, y: (tempWall.end.y + perpY) * scale },
+                    { x: (tempWall.end.x - perpX) * scale, y: (tempWall.end.y - perpY) * scale },
+                    { x: (tempWall.start.x - perpX) * scale, y: (tempWall.start.y - perpY) * scale }
+                  ];
+                  const pointsStr = corners.map(c => `${c.x},${c.y}`).join(' ');
+                  const isSnapped = tempWall.snappedAngle !== null;
+                  
+                  return (
+                    <g>
+                      {/* Temp wall with CAD-style edges */}
+                      <polygon
+                        points={pointsStr}
+                        fill={isSnapped ? '#86efac' : '#93c5fd'}
+                        fillOpacity="0.7"
+                        stroke={isSnapped ? '#166534' : '#1e40af'}
+                        strokeWidth="1.5"
+                        strokeLinejoin="miter"
+                        strokeDasharray="5,5"
+                      />
+                      {/* Angle indicator when snapped (Item #2) */}
+                      {isSnapped && (
+                        <text
+                          x={(tempWall.start.x + tempWall.end.x) / 2 * scale}
+                          y={(tempWall.start.y + tempWall.end.y) / 2 * scale - 28}
+                          fontSize="10"
+                          fill="#166534"
+                          textAnchor="middle"
+                          fontWeight="600"
+                        >
+                          {tempWall.snappedAngle === 0 || tempWall.snappedAngle === 180 || tempWall.snappedAngle === -180 ? 'Horizontal' : 'Vertical'}
+                        </text>
+                      )}
                       <text
                         x={(tempWall.start.x + tempWall.end.x) / 2 * scale}
-                        y={(tempWall.start.y + tempWall.end.y) / 2 * scale - 28}
-                        fontSize="10"
-                        fill="#22c55e"
+                        y={(tempWall.start.y + tempWall.end.y) / 2 * scale - 15}
+                        fontSize="12"
+                        fill={isSnapped ? '#166534' : '#1e40af'}
                         textAnchor="middle"
-                        fontWeight="600"
+                        fontWeight="bold"
                       >
-                        {tempWall.snappedAngle === 0 || tempWall.snappedAngle === 180 || tempWall.snappedAngle === -180 ? 'Horizontal' : 'Vertical'}
+                        {tempWall.length}mm
                       </text>
-                    )}
-                    <text
-                      x={(tempWall.start.x + tempWall.end.x) / 2 * scale}
-                      y={(tempWall.start.y + tempWall.end.y) / 2 * scale - 15}
-                      fontSize="12"
-                      fill={tempWall.snappedAngle !== null ? '#22c55e' : '#3b82f6'}
-                      textAnchor="middle"
-                      fontWeight="bold"
-                    >
-                      {tempWall.length}mm
-                    </text>
-                    {/* Click hint for click-release mode (Item #4) */}
-                    {wallClickMode === 'waiting_end' && (
-                      <text
-                        x={tempWall.end.x * scale + 15}
-                        y={tempWall.end.y * scale}
-                        fontSize="10"
-                        fill="#3b82f6"
-                        fontWeight="500"
-                      >
-                        Click to place
-                      </text>
-                    )}
-                  </g>
-                )}
+                      {/* Click hint for click-release mode (Item #4) */}
+                      {wallClickMode === 'waiting_end' && (
+                        <text
+                          x={tempWall.end.x * scale + 15}
+                          y={tempWall.end.y * scale}
+                          fontSize="10"
+                          fill="#1e40af"
+                          fontWeight="500"
+                        >
+                          Click to place
+                        </text>
+                      )}
+                    </g>
+                  );
+                })()}
 
                 {/* Temp rectangle/square while drawing */}
                 {tempRectWalls && (

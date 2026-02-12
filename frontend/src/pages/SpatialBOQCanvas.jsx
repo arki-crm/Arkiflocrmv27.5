@@ -2456,16 +2456,30 @@ export default function SpatialBOQCanvas() {
                   ];
                   const pointsStr = corners.map(c => `${c.x},${c.y}`).join(' ');
                   
+                  // Edge lines as separate paths for clean rendering
+                  const edge1 = `M ${corners[0].x} ${corners[0].y} L ${corners[1].x} ${corners[1].y}`;
+                  const edge2 = `M ${corners[2].x} ${corners[2].y} L ${corners[3].x} ${corners[3].y}`;
+                  
                   return (
                     <g key={wall.wall_id} style={{ cursor: 'move' }}>
-                      {/* Wall fill with thin precise black outline - Coohom style */}
+                      {/* Wall fill - no stroke */}
                       <polygon
                         points={pointsStr}
                         fill={isSelected ? '#93c5fd' : '#B0B0B0'}
-                        stroke="#000000"
-                        strokeWidth="0.5"
-                        strokeLinejoin="miter"
-                        strokeLinecap="square"
+                      />
+                      {/* Edge lines - drawn separately for clean corners */}
+                      <path d={edge1} stroke="#000000" strokeWidth="0.5" fill="none" />
+                      <path d={edge2} stroke="#000000" strokeWidth="0.5" fill="none" />
+                      {/* End caps */}
+                      <line 
+                        x1={corners[0].x} y1={corners[0].y} 
+                        x2={corners[3].x} y2={corners[3].y}
+                        stroke="#000000" strokeWidth="0.5"
+                      />
+                      <line 
+                        x1={corners[1].x} y1={corners[1].y} 
+                        x2={corners[2].x} y2={corners[2].y}
+                        stroke="#000000" strokeWidth="0.5"
                       />
                       {/* Inline dimension label - clickable (Item #6) */}
                       {editingDimension === wall.wall_id ? (

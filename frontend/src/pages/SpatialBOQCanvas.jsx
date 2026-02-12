@@ -324,6 +324,20 @@ export default function SpatialBOQCanvas() {
         return;
       }
 
+      // Undo/Redo shortcuts (Item #6-add)
+      if ((e.ctrlKey || e.metaKey) && document.activeElement.tagName !== 'INPUT') {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          handleUndo();
+          return;
+        }
+        if ((e.key === 'y') || (e.key === 'z' && e.shiftKey)) {
+          e.preventDefault();
+          handleRedo();
+          return;
+        }
+      }
+
       // Zoom keyboard shortcuts (Item #2)
       if ((e.ctrlKey || e.metaKey) && document.activeElement.tagName !== 'INPUT') {
         const rect = svgRef.current?.getBoundingClientRect();

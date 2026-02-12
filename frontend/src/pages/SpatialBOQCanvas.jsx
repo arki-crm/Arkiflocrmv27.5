@@ -2141,7 +2141,7 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
-                {/* Temp wall while drawing (free mode) - CAD-style preview with edge strokes */}
+                {/* Temp wall while drawing - Coohom-style thin outline preview */}
                 {tempWall && (() => {
                   const dx = tempWall.end.x - tempWall.start.x;
                   const dy = tempWall.end.y - tempWall.start.y;
@@ -2161,15 +2161,15 @@ export default function SpatialBOQCanvas() {
                   
                   return (
                     <g>
-                      {/* Temp wall with CAD-style edges */}
+                      {/* Temp wall with thin outline */}
                       <polygon
                         points={pointsStr}
                         fill={isSnapped ? '#86efac' : '#93c5fd'}
                         fillOpacity="0.7"
                         stroke={isSnapped ? '#166534' : '#1e40af'}
-                        strokeWidth="1.5"
+                        strokeWidth="0.5"
                         strokeLinejoin="miter"
-                        strokeDasharray="5,5"
+                        strokeDasharray="4,2"
                       />
                       {/* Angle indicator when snapped (Item #2) */}
                       {isSnapped && (

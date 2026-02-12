@@ -717,22 +717,22 @@ export default function SpatialBOQCanvas() {
   }, [layout?.walls]);
 
   // Parametric update for rectangular loop - maintains rectangle shape
-  const updateRectangularLoopWall = useCallback((wallId, movement) => {
-    const rectLoop = detectRectangularLoop(wallId);
+  // Uses activeRectLoop (detected at drag start) and total delta from original positions
+  const updateRectangularLoopWall = useCallback((wallId, totalDelta, rectLoop) => {
     if (!rectLoop) {
-      console.log('[ParametricEdit] Not a rectangular loop for wall', wallId);
+      console.log('[ParametricEdit] No active rect loop');
       return false;
     }
     
     const { walls, targetWall, targetIsHorizontal } = rectLoop;
     const tolerance = CLOSURE_TOLERANCE;
     
-    // Calculate movement perpendicular to wall
+    // Calculate movement perpendicular to wall (total from original position)
     let perpMovement;
     if (targetIsHorizontal) {
-      perpMovement = movement.dy; // Horizontal wall moves in Y
+      perpMovement = totalDelta.dy; // Horizontal wall moves in Y
     } else {
-      perpMovement = movement.dx; // Vertical wall moves in X
+      perpMovement = totalDelta.dx; // Vertical wall moves in X
     }
     
     if (Math.abs(perpMovement) < 1) return false;
@@ -743,12 +743,14 @@ export default function SpatialBOQCanvas() {
     // In a rectangle: targetWall has 2 adjacent walls (perpendicular) and 1 opposite wall (parallel)
     const coordKey = (x, y) => `${Math.round(x / tolerance) * tolerance},${Math.round(y / tolerance) * tolerance}`;
     
+    // Use ORIGINAL wall coordinates from rectLoop (captured at drag start)
     const targetStartKey = coordKey(targetWall.start_x, targetWall.start_y);
     const targetEndKey = coordKey(targetWall.end_x, targetWall.end_y);
     
     const updates = [];
     
     for (const { wall, isHorizontal } of walls) {
+      // Use original coordinates from the loop captured at drag start
       const wallStartKey = coordKey(wall.start_x, wall.start_y);
       const wallEndKey = coordKey(wall.end_x, wall.end_y);
       
@@ -758,7 +760,9 @@ export default function SpatialBOQCanvas() {
           updates.push({
             wallId: wall.wall_id,
             changes: {
+              start_x: wall.start_x, // Keep X unchanged
               start_y: wall.start_y + perpMovement,
+              end_x: wall.end_x, // Keep X unchanged
               end_y: wall.end_y + perpMovement
             }
           });
@@ -767,14 +771,16 @@ export default function SpatialBOQCanvas() {
             wallId: wall.wall_id,
             changes: {
               start_x: wall.start_x + perpMovement,
-              end_x: wall.end_x + perpMovement
+              start_y: wall.start_y, // Keep Y unchanged
+              end_x: wall.end_x + perpMovement,
+              end_y: wall.end_y // Keep Y unchanged
             }
           });
         }
       } else if (isHorizontal !== targetIsHorizontal) {
         // Perpendicular wall - extend/shrink one endpoint to stay connected
         
-        // Check which endpoint of this wall connects to target wall
+        // Check which endpoint of this wall connects to target wall (using original coords)
         const startConnectsToTarget = (wallStartKey === targetStartKey || wallStartKey === targetEndKey);
         const endConnectsToTarget = (wallEndKey === targetStartKey || wallEndKey === targetEndKey);
         
@@ -783,12 +789,22 @@ export default function SpatialBOQCanvas() {
           if (targetIsHorizontal) {
             updates.push({ 
               wallId: wall.wall_id, 
-              changes: { start_y: wall.start_y + perpMovement } 
+              changes: { 
+                start_x: wall.start_x, // Keep original X
+                start_y: wall.start_y + perpMovement,
+                end_x: wall.end_x, // Keep original
+                end_y: wall.end_y // Keep original
+              } 
             });
           } else {
             updates.push({ 
               wallId: wall.wall_id, 
-              changes: { start_x: wall.start_x + perpMovement } 
+              changes: { 
+                start_x: wall.start_x + perpMovement,
+                start_y: wall.start_y, // Keep original Y
+                end_x: wall.end_x, // Keep original
+                end_y: wall.end_y // Keep original
+              } 
             });
           }
         } else if (endConnectsToTarget) {
@@ -796,20 +812,30 @@ export default function SpatialBOQCanvas() {
           if (targetIsHorizontal) {
             updates.push({ 
               wallId: wall.wall_id, 
-              changes: { end_y: wall.end_y + perpMovement } 
+              changes: { 
+                start_x: wall.start_x, // Keep original
+                start_y: wall.start_y, // Keep original  
+                end_x: wall.end_x, // Keep original X
+                end_y: wall.end_y + perpMovement 
+              } 
             });
           } else {
             updates.push({ 
               wallId: wall.wall_id, 
-              changes: { end_x: wall.end_x + perpMovement } 
+              changes: { 
+                start_x: wall.start_x, // Keep original
+                start_y: wall.start_y, // Keep original
+                end_x: wall.end_x + perpMovement,
+                end_y: wall.end_y // Keep original Y
+              } 
             });
           }
         }
       }
-      // Opposite parallel wall stays unchanged
+      // Opposite parallel wall stays unchanged - but we still need to include it to preserve coordinates
     }
     
-    console.log('[ParametricEdit] Applying updates to', updates.length, 'walls');
+    console.log('[ParametricEdit] Applying updates to', updates.length, 'walls:', updates);
     
     // Apply all updates atomically
     if (updates.length > 0) {
@@ -846,7 +872,7 @@ export default function SpatialBOQCanvas() {
     }
     
     return false;
-  }, [detectRectangularLoop, selectedItem]);
+  }, [selectedItem]);
 
   // Manual floor fill function - click inside room to fill
   const handleFillFloor = useCallback((clickX, clickY) => {

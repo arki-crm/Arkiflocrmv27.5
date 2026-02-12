@@ -37,6 +37,7 @@ const MOVE_STEP = 10; // mm per arrow key press
 const ENDPOINT_HANDLE_SIZE = 12; // pixels
 const MAX_HISTORY_SIZE = 50; // Undo/Redo history limit
 const ANGLE_SNAP_TOLERANCE = 8; // degrees - Item #2 - Auto straight line assistance
+const CLOSURE_TOLERANCE = 200; // mm - tolerance for auto-sealing room closure gaps
 
 // Module colors
 const MODULE_COLORS = {

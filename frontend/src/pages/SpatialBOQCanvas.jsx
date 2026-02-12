@@ -1875,11 +1875,20 @@ export default function SpatialBOQCanvas() {
                   />
                 )}
 
-                {/* Doors */}
+                {/* Doors - with rotation support (Item #4) */}
                 {layout?.doors?.map(door => {
                   const isSelected = selectedItem?.type === 'door' && selectedItem.item.door_id === door.door_id;
+                  const rotation = door.rotation || 0;
+                  const flipped = door.flipped || false;
+                  const centerX = (door.x + door.width / 2) * scale;
+                  const centerY = (door.y + door.depth / 2) * scale;
+                  
                   return (
-                    <g key={door.door_id} style={{ cursor: 'move' }}>
+                    <g 
+                      key={door.door_id} 
+                      style={{ cursor: 'move' }}
+                      transform={`rotate(${rotation}, ${centerX}, ${centerY}) ${flipped ? `scale(-1, 1) translate(${-2 * centerX}, 0)` : ''}`}
+                    >
                       <rect
                         x={door.x * scale}
                         y={door.y * scale}
@@ -1906,6 +1915,7 @@ export default function SpatialBOQCanvas() {
                         textAnchor="middle"
                         dominantBaseline="middle"
                         fontWeight="500"
+                        transform={flipped ? `scale(-1, 1) translate(${-2 * (door.x + door.width / 2) * scale}, 0)` : ''}
                       >
                         {door.type_name || 'Door'}
                       </text>
@@ -1913,11 +1923,20 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
-                {/* Windows */}
+                {/* Windows - with rotation support (Item #4) */}
                 {layout?.windows?.map(win => {
                   const isSelected = selectedItem?.type === 'window' && selectedItem.item.window_id === win.window_id;
+                  const rotation = win.rotation || 0;
+                  const flipped = win.flipped || false;
+                  const centerX = (win.x + win.width / 2) * scale;
+                  const centerY = (win.y + win.depth / 2) * scale;
+                  
                   return (
-                    <g key={win.window_id} style={{ cursor: 'move' }}>
+                    <g 
+                      key={win.window_id} 
+                      style={{ cursor: 'move' }}
+                      transform={`rotate(${rotation}, ${centerX}, ${centerY}) ${flipped ? `scale(-1, 1) translate(${-2 * centerX}, 0)` : ''}`}
+                    >
                       <rect
                         x={win.x * scale}
                         y={win.y * scale}
@@ -1945,6 +1964,7 @@ export default function SpatialBOQCanvas() {
                         textAnchor="middle"
                         dominantBaseline="middle"
                         fontWeight="500"
+                        transform={flipped ? `scale(-1, 1) translate(${-2 * (win.x + win.width / 2) * scale}, 0)` : ''}
                       >
                         {win.type_name || 'Window'}
                       </text>

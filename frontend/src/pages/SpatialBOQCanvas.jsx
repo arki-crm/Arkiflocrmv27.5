@@ -437,9 +437,11 @@ export default function SpatialBOQCanvas() {
     }
   }, [layout?.walls]);
 
-  // Detect floor when walls change
+  // Detect floor when walls change - also clear manual fill if auto-detection succeeds
   useEffect(() => {
     detectFloorPolygon();
+    // Clear manual fill when walls change since auto-detection re-runs
+    setManualFloorFill(null);
   }, [detectFloorPolygon]);
 
   // Auto-collapse right panel when nothing selected

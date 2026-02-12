@@ -561,45 +561,178 @@ export default function SpatialBOQCanvas() {
     return nearest;
   };
 
-  // Magnetic snap module to wall (Item #2 & #7)
-  const snapModuleToWall = (x, y, width, depth) => {
-    if (!layout?.walls?.length) return { x, y, wall_id: null };
+  // Auto-straight line assistance (Item #2) - Snap to 0°/90°/180°
+  const snapToStraightLine = (startX, startY, endX, endY) => {
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    const length = Math.sqrt(dx * dx + dy * dy);
+    
+    // Target angles: 0, 90, 180, -90, -180
+    const targetAngles = [0, 90, 180, -90, -180, 270, -270];
+    
+    for (const target of targetAngles) {
+      const diff = Math.abs(angle - target);
+      if (diff < ANGLE_SNAP_TOLERANCE || Math.abs(diff - 360) < ANGLE_SNAP_TOLERANCE) {
+        // Snap to this angle
+        const radians = target * (Math.PI / 180);
+        return {
+          x: startX + Math.cos(radians) * length,
+          y: startY + Math.sin(radians) * length,
+          snapped: true,
+          angle: target
+        };
+      }
+    }
+    
+    return { x: endX, y: endY, snapped: false, angle: Math.round(angle) };
+  };
 
-    let bestSnap = { x, y, wall_id: null, distance: Infinity };
+  // Magnetic snap module to wall INNER EDGE (Item #7 - Fixed to snap to inner face)
+  const snapModuleToWall = (x, y, width, depth) => {
+    if (!layout?.walls?.length) return { x, y, wall_id: null, distance: null };
+
+    let bestSnap = { x, y, wall_id: null, distance: Infinity, distanceToWall: null };
 
     for (const wall of layout.walls) {
       const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+      const wallThickness = wall.thickness || DEFAULT_WALL_THICKNESS;
+      const halfThickness = wallThickness / 2;
       
       if (isHorizontal) {
-        // Horizontal wall - snap module Y to wall Y
+        // Horizontal wall - snap module Y to wall INNER edge
         const wallY = wall.start_y;
-        const distTop = Math.abs(y - wallY);
-        const distBottom = Math.abs((y + depth) - wallY);
         
+        // Top side of wall (inner edge is below centerline)
+        const innerTopY = wallY + halfThickness;
+        const distTop = Math.abs(y - innerTopY);
         if (distTop < SNAP_THRESHOLD && distTop < bestSnap.distance) {
-          // Snap top of module to wall
-          bestSnap = { x, y: wallY, wall_id: wall.wall_id, distance: distTop };
+          bestSnap = { x, y: innerTopY, wall_id: wall.wall_id, distance: distTop, distanceToWall: 0 };
         }
+        
+        // Bottom side of wall (inner edge is above centerline)  
+        const innerBottomY = wallY - halfThickness;
+        const distBottom = Math.abs((y + depth) - innerBottomY);
         if (distBottom < SNAP_THRESHOLD && distBottom < bestSnap.distance) {
-          // Snap bottom of module to wall
-          bestSnap = { x, y: wallY - depth, wall_id: wall.wall_id, distance: distBottom };
+          bestSnap = { x, y: innerBottomY - depth, wall_id: wall.wall_id, distance: distBottom, distanceToWall: 0 };
         }
       } else {
-        // Vertical wall - snap module X to wall X
+        // Vertical wall - snap module X to wall INNER edge
         const wallX = wall.start_x;
-        const distLeft = Math.abs(x - wallX);
-        const distRight = Math.abs((x + width) - wallX);
         
+        // Right side of wall (inner edge is to the right of centerline)
+        const innerRightX = wallX + halfThickness;
+        const distLeft = Math.abs(x - innerRightX);
         if (distLeft < SNAP_THRESHOLD && distLeft < bestSnap.distance) {
-          bestSnap = { x: wallX, y, wall_id: wall.wall_id, distance: distLeft };
+          bestSnap = { x: innerRightX, y, wall_id: wall.wall_id, distance: distLeft, distanceToWall: 0 };
         }
+        
+        // Left side of wall (inner edge is to the left of centerline)
+        const innerLeftX = wallX - halfThickness;
+        const distRight = Math.abs((x + width) - innerLeftX);
         if (distRight < SNAP_THRESHOLD && distRight < bestSnap.distance) {
-          bestSnap = { x: wallX - width, y, wall_id: wall.wall_id, distance: distRight };
+          bestSnap = { x: innerLeftX - width, y, wall_id: wall.wall_id, distance: distRight, distanceToWall: 0 };
         }
       }
     }
 
-    return { x: bestSnap.x, y: bestSnap.y, wall_id: bestSnap.wall_id };
+    return { x: bestSnap.x, y: bestSnap.y, wall_id: bestSnap.wall_id, distanceToWall: bestSnap.distanceToWall };
+  };
+
+  // Calculate distance from module to nearest wall (Item #8)
+  const calculateModuleToWallDistance = (module) => {
+    if (!layout?.walls?.length || !module) return null;
+
+    let nearestDistance = Infinity;
+    let direction = null;
+    let nearestWall = null;
+
+    for (const wall of layout.walls) {
+      const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+      const wallThickness = wall.thickness || DEFAULT_WALL_THICKNESS;
+      const halfThickness = wallThickness / 2;
+      
+      if (isHorizontal) {
+        const wallY = wall.start_y;
+        const innerTop = wallY + halfThickness;
+        const innerBottom = wallY - halfThickness;
+        
+        // Distance from module top to wall bottom
+        const distToBottom = Math.abs(module.y - innerBottom);
+        if (distToBottom < nearestDistance) {
+          nearestDistance = distToBottom;
+          direction = 'top';
+          nearestWall = wall;
+        }
+        
+        // Distance from module bottom to wall top
+        const distToTop = Math.abs((module.y + module.depth) - innerTop);
+        if (distToTop < nearestDistance) {
+          nearestDistance = distToTop;
+          direction = 'bottom';
+          nearestWall = wall;
+        }
+      } else {
+        const wallX = wall.start_x;
+        const innerRight = wallX + halfThickness;
+        const innerLeft = wallX - halfThickness;
+        
+        // Distance from module left to wall right
+        const distToRight = Math.abs(module.x - innerRight);
+        if (distToRight < nearestDistance) {
+          nearestDistance = distToRight;
+          direction = 'left';
+          nearestWall = wall;
+        }
+        
+        // Distance from module right to wall left
+        const distToLeft = Math.abs((module.x + module.width) - innerLeft);
+        if (distToLeft < nearestDistance) {
+          nearestDistance = distToLeft;
+          direction = 'right';
+          nearestWall = wall;
+        }
+      }
+    }
+
+    return nearestDistance < 5000 ? { distance: Math.round(nearestDistance), direction, wall: nearestWall } : null;
+  };
+
+  // Apply exact distance to wall (Item #8)
+  const applyModuleDistanceToWall = (moduleId, distance, direction) => {
+    saveToHistory();
+    const module = layout?.modules?.find(m => m.module_id === moduleId);
+    if (!module) return;
+
+    const distInfo = calculateModuleToWallDistance(module);
+    if (!distInfo?.wall) return;
+
+    const wall = distInfo.wall;
+    const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+    const wallThickness = wall.thickness || DEFAULT_WALL_THICKNESS;
+    const halfThickness = wallThickness / 2;
+
+    let newX = module.x;
+    let newY = module.y;
+
+    if (isHorizontal) {
+      const wallY = wall.start_y;
+      if (direction === 'top' || distInfo.direction === 'top') {
+        newY = wallY - halfThickness - distance;
+      } else {
+        newY = wallY + halfThickness + distance - module.depth;
+      }
+    } else {
+      const wallX = wall.start_x;
+      if (direction === 'left' || distInfo.direction === 'left') {
+        newX = wallX + halfThickness + distance;
+      } else {
+        newX = wallX - halfThickness - distance - module.width;
+      }
+    }
+
+    updateModule(moduleId, { x: newX, y: newY, wall_id: wall.wall_id });
+    setEditingModuleDistance(null);
   };
 
   // Handle mouse down

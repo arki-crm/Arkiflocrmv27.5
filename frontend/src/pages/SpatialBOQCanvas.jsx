@@ -2245,6 +2245,21 @@ export default function SpatialBOQCanvas() {
                       />
                     </div>
 
+                    {/* Wall Thickness Control (Item #5) */}
+                    <div>
+                      <Label className="text-[10px]">Thickness (mm)</Label>
+                      <Input
+                        type="number"
+                        value={selectedItem.item.thickness || DEFAULT_WALL_THICKNESS}
+                        onChange={(e) => updateWallThickness(selectedItem.item.wall_id, parseInt(e.target.value) || DEFAULT_WALL_THICKNESS)}
+                        className="h-7 text-xs"
+                        min="50"
+                        max="500"
+                        step="10"
+                      />
+                      <p className="text-[9px] text-slate-400 mt-0.5">Standard: 150mm</p>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <Label className="text-[10px]">Start X</Label>
@@ -2285,6 +2300,14 @@ export default function SpatialBOQCanvas() {
                         />
                       </div>
                     </div>
+
+                    {/* Floor Detection Status (Item #3) */}
+                    {detectedFloor && (
+                      <div className="bg-blue-50 rounded p-2">
+                        <Label className="text-[10px] text-blue-600">Floor Detected</Label>
+                        <p className="text-xs text-blue-700">Room closed with {layout?.walls?.length || 0} walls</p>
+                      </div>
+                    )}
 
                     {/* Full-Screen Elevation Button (Item #9) */}
                     <Button

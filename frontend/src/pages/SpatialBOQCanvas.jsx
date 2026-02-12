@@ -1956,11 +1956,11 @@ export default function SpatialBOQCanvas() {
             {leftPanelCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
           </button>
 
-          {/* Canvas Area */}
+          {/* Canvas Area - Coohom-style CAD background */}
           <div
             ref={containerRef}
             className="flex-1 overflow-hidden relative"
-            style={{ backgroundColor: '#F9FAFB' }}
+            style={{ backgroundColor: '#F5F7FA' }}
           >
             <svg
               ref={svgRef}
@@ -1986,7 +1986,7 @@ export default function SpatialBOQCanvas() {
                         isDragging ? 'grabbing' : 'default' 
               }}
             >
-              {/* Grid - now moves with pan offset for true viewport pan (Item #1) */}
+              {/* Grid - Coohom-style subtle grid lines */}
               <defs>
                 <pattern 
                   id="smallGrid" 
@@ -1995,8 +1995,8 @@ export default function SpatialBOQCanvas() {
                   patternUnits="userSpaceOnUse"
                   patternTransform={`translate(${panOffset.x}, ${panOffset.y})`}
                 >
-                  {/* Item #6 - Very light grid for background guidance only */}
-                  <path d={`M ${100 * scale} 0 L 0 0 0 ${100 * scale}`} fill="none" stroke="#E5E7EB" strokeWidth="0.5" />
+                  {/* Coohom-style subtle grid - lighter than walls */}
+                  <path d={`M ${100 * scale} 0 L 0 0 0 ${100 * scale}`} fill="none" stroke="#E1E5EA" strokeWidth="0.5" strokeOpacity="0.7" />
                 </pattern>
                 <pattern 
                   id="grid" 
@@ -2006,25 +2006,25 @@ export default function SpatialBOQCanvas() {
                   patternTransform={`translate(${panOffset.x}, ${panOffset.y})`}
                 >
                   <rect width={500 * scale} height={500 * scale} fill="url(#smallGrid)" />
-                  {/* Item #6 - Very subtle major grid lines */}
-                  <path d={`M ${500 * scale} 0 L 0 0 0 ${500 * scale}`} fill="none" stroke="#E5E7EB" strokeWidth="0.75" />
+                  {/* Coohom-style major grid lines */}
+                  <path d={`M ${500 * scale} 0 L 0 0 0 ${500 * scale}`} fill="none" stroke="#E1E5EA" strokeWidth="0.75" strokeOpacity="0.7" />
                 </pattern>
               </defs>
               <rect width="100%" height="100%" fill="url(#grid)" />
 
               <g transform={`translate(${panOffset.x}, ${panOffset.y})`}>
-                {/* Floor polygon detection - soft fill to visually confirm room closure */}
+                {/* Floor polygon - Coohom-style neutral fill for closed rooms */}
                 {detectedFloor && detectedFloor.length >= 3 && (
                   <polygon
                     points={detectedFloor.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
-                    fill="#F3F4F6"
-                    fillOpacity="0.8"
+                    fill="#EEF1F5"
+                    fillOpacity="0.9"
                     stroke="#D1D5DB"
                     strokeWidth="1"
                   />
                 )}
 
-                {/* Walls - Medium neutral grey for visibility without overpowering modules */}
+                {/* Walls - Coohom-style soft CAD grey */}
                 {layout?.walls?.map(wall => {
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
                   const thickness = wall.thickness || DEFAULT_WALL_THICKNESS;
@@ -2035,7 +2035,7 @@ export default function SpatialBOQCanvas() {
                         y1={wall.start_y * scale}
                         x2={wall.end_x * scale}
                         y2={wall.end_y * scale}
-                        stroke={isSelected ? '#3b82f6' : '#6B7280'}
+                        stroke={isSelected ? '#3b82f6' : '#7A869A'}
                         strokeWidth={thickness * scale}
                         strokeLinecap="square"
                         style={{ cursor: 'move' }}
@@ -2067,7 +2067,7 @@ export default function SpatialBOQCanvas() {
                           x={(wall.start_x + wall.end_x) / 2 * scale}
                           y={(wall.start_y + wall.end_y) / 2 * scale - 12}
                           fontSize="10"
-                          fill={isSelected ? '#2563eb' : '#374151'}
+                          fill={isSelected ? '#2563eb' : '#4A5568'}
                           textAnchor="middle"
                           fontWeight="500"
                           style={{ cursor: 'pointer' }}

@@ -938,6 +938,9 @@ export default function SpatialBOQCanvas() {
       addOpening(canvas.x, canvas.y, 'window', selectedWindowType);
     } else if (tool === 'module' && selectedModuleType) {
       addModule(canvas.x, canvas.y);
+    } else if (tool === 'fill') {
+      // Manual floor fill tool - click inside room
+      handleFillFloor(canvas.x, canvas.y);
     } else if (tool === 'select') {
       // First check for wall endpoint click (for length extension - Item #3)
       const endpoint = findWallEndpointAt(canvas.x, canvas.y);

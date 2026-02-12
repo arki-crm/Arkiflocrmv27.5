@@ -2359,7 +2359,7 @@ export default function SpatialBOQCanvas() {
                         x={module.width * scale / 2}
                         y={module.depth * scale + 10}
                         fontSize="8"
-                        fill="#374151"
+                        fill="#4A5568"
                         textAnchor="middle"
                         fontWeight="500"
                       >

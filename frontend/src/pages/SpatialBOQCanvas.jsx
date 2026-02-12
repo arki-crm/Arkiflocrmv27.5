@@ -2248,10 +2248,6 @@ export default function SpatialBOQCanvas() {
                     />
                   );
                 })()}
-                    stroke="#B8BCBF"
-                    strokeWidth="0.5"
-                  />
-                )}
 
                 {/* Walls - CAD-style with thin edge outlines (Coohom style) */}
                 {layout?.walls?.map(wall => {

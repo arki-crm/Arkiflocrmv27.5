@@ -2122,7 +2122,7 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
-                {/* Temp wall while drawing (free mode) */}
+                {/* Temp wall while drawing (free mode) - with angle snap indicator (Item #2) */}
                 {tempWall && (
                   <g>
                     <line
@@ -2130,25 +2130,50 @@ export default function SpatialBOQCanvas() {
                       y1={tempWall.start.y * scale}
                       x2={tempWall.end.x * scale}
                       y2={tempWall.end.y * scale}
-                      stroke="#3b82f6"
+                      stroke={tempWall.snappedAngle !== null ? '#22c55e' : '#3b82f6'}
                       strokeWidth={DEFAULT_WALL_THICKNESS * scale}
                       strokeLinecap="square"
                       strokeDasharray="5,5"
                     />
+                    {/* Angle indicator when snapped (Item #2) */}
+                    {tempWall.snappedAngle !== null && (
+                      <text
+                        x={(tempWall.start.x + tempWall.end.x) / 2 * scale}
+                        y={(tempWall.start.y + tempWall.end.y) / 2 * scale - 28}
+                        fontSize="10"
+                        fill="#22c55e"
+                        textAnchor="middle"
+                        fontWeight="600"
+                      >
+                        {tempWall.snappedAngle === 0 || tempWall.snappedAngle === 180 || tempWall.snappedAngle === -180 ? 'Horizontal' : 'Vertical'}
+                      </text>
+                    )}
                     <text
                       x={(tempWall.start.x + tempWall.end.x) / 2 * scale}
                       y={(tempWall.start.y + tempWall.end.y) / 2 * scale - 15}
                       fontSize="12"
-                      fill="#3b82f6"
+                      fill={tempWall.snappedAngle !== null ? '#22c55e' : '#3b82f6'}
                       textAnchor="middle"
                       fontWeight="bold"
                     >
                       {tempWall.length}mm
                     </text>
+                    {/* Click hint for click-release mode (Item #4) */}
+                    {wallClickMode === 'waiting_end' && (
+                      <text
+                        x={tempWall.end.x * scale + 15}
+                        y={tempWall.end.y * scale}
+                        fontSize="10"
+                        fill="#3b82f6"
+                        fontWeight="500"
+                      >
+                        Click to place
+                      </text>
+                    )}
                   </g>
                 )}
 
-                {/* Temp rectangle/square while drawing (Item #4) */}
+                {/* Temp rectangle/square while drawing */}
                 {tempRectWalls && (
                   <rect
                     x={Math.min(tempRectWalls.start.x, tempRectWalls.end.x) * scale}

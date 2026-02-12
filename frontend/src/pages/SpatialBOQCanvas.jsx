@@ -1685,6 +1685,7 @@ export default function SpatialBOQCanvas() {
     setDragStart(null);
     setDragType(null);
     setDragEndpoint(null);
+    setActiveRectLoop(null); // Clear parametric loop reference
   };
 
   // Create wall helper - now includes height (Item #1)

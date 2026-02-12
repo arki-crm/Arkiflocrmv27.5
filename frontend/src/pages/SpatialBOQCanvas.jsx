@@ -869,8 +869,8 @@ export default function SpatialBOQCanvas() {
 
     const canvas = screenToCanvas(e.clientX, e.clientY);
 
-    // Drawing wall
-    if (isDrawing && tool === 'wall') {
+    // Drawing wall with click-release mode (Item #4) or drag mode
+    if ((wallClickMode === 'waiting_end' || isDrawing) && tool === 'wall') {
       // Snap end point to nearest corner if close
       let endPoint = findNearestCorner(canvas.x, canvas.y) || canvas;
 
@@ -884,16 +884,17 @@ export default function SpatialBOQCanvas() {
         endPoint = { x: drawStart.x + size * signX, y: drawStart.y + size * signY };
         setTempRectWalls({ start: drawStart, end: endPoint });
       } else {
-        // Free line - constrain to horizontal/vertical
-        const dx = Math.abs(endPoint.x - drawStart.x);
-        const dy = Math.abs(endPoint.y - drawStart.y);
-        if (dx > dy) {
-          endPoint = { x: endPoint.x, y: drawStart.y };
-        } else {
-          endPoint = { x: drawStart.x, y: endPoint.y };
-        }
+        // Free line with auto-straight assistance (Item #2)
+        const snapped = snapToStraightLine(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
+        endPoint = { x: snapped.x, y: snapped.y };
+        
         const length = Math.sqrt(Math.pow(endPoint.x - drawStart.x, 2) + Math.pow(endPoint.y - drawStart.y, 2));
-        setTempWall({ start: drawStart, end: endPoint, length: Math.round(length) });
+        setTempWall({ 
+          start: drawStart, 
+          end: endPoint, 
+          length: Math.round(length),
+          snappedAngle: snapped.snapped ? snapped.angle : null
+        });
       }
     }
 

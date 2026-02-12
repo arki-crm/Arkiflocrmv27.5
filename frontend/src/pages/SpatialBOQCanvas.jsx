@@ -449,14 +449,19 @@ export default function SpatialBOQCanvas() {
 
     // Check if all vertices have exactly 2 connections (closed loop requirement)
     let isClosedLoop = true;
+    let connectionCounts = [];
     for (const [key, vertex] of vertices) {
+      connectionCounts.push(vertex.walls.length);
       if (vertex.walls.length !== 2) {
         isClosedLoop = false;
-        break;
       }
     }
+    
+    // Debug: log detection status
+    console.log('[UnifiedBoundary] Walls:', walls.length, 'Vertices:', vertices.size, 'Connections:', connectionCounts, 'isClosedLoop:', isClosedLoop);
 
     if (!isClosedLoop || vertices.size < 3) {
+      console.log('[UnifiedBoundary] Not a closed loop - using individual wall rendering');
       return null;
     }
 

@@ -141,16 +141,22 @@ export default function SpatialBOQCanvas() {
   const [dimensionInputValue, setDimensionInputValue] = useState('');
   const dimensionInputRef = useRef(null);
 
-  // Floor polygon detection (Item #3)
+  // Floor polygon detection (Item #5)
   const [detectedFloor, setDetectedFloor] = useState(null);
 
-  // Wall drawing state
+  // Wall drawing state - Click-Release mode (Item #4)
   const [wallDrawMode, setWallDrawMode] = useState('free'); // rectangle, square, free
   const [showWallModePanel, setShowWallModePanel] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
   const [tempWall, setTempWall] = useState(null);
   const [tempRectWalls, setTempRectWalls] = useState(null);
+  const [wallClickMode, setWallClickMode] = useState(null); // 'waiting_end' for click-release mode
+
+  // Module-to-Wall distance editing (Item #8)
+  const [editingModuleDistance, setEditingModuleDistance] = useState(null);
+  const [moduleDistanceValue, setModuleDistanceValue] = useState('');
+  const moduleDistanceInputRef = useRef(null);
 
   // Drag state for modules/walls/openings
   const [isDragging, setIsDragging] = useState(false);

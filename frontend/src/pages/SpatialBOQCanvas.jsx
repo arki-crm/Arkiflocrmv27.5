@@ -767,16 +767,32 @@ export default function SpatialBOQCanvas() {
         return;
       }
 
-      // Start drawing wall
-      setIsDrawing(true);
-      // Snap to nearest corner if close (Item #3)
+      // Click-Release wall drawing mode (Item #4)
+      if (wallClickMode === 'waiting_end') {
+        // Second click - complete the wall
+        saveToHistory();
+        if (tempWall && tempWall.length > 100) {
+          const newWall = createWall(tempWall.start.x, tempWall.start.y, tempWall.end.x, tempWall.end.y);
+          setLayout(prev => ({ ...prev, walls: [...prev.walls, newWall] }));
+          setHasChanges(true);
+        }
+        setWallClickMode(null);
+        setTempWall(null);
+        setDrawStart(null);
+        return;
+      }
+
+      // First click - start wall drawing
       const snappedStart = findNearestCorner(canvas.x, canvas.y) || canvas;
       setDrawStart(snappedStart);
       
       if (wallDrawMode === 'rectangle' || wallDrawMode === 'square') {
+        setIsDrawing(true);
         setTempRectWalls({ start: snappedStart, end: snappedStart });
       } else {
-        setTempWall({ start: snappedStart, end: snappedStart });
+        // Free line - use click-release mode
+        setWallClickMode('waiting_end');
+        setTempWall({ start: snappedStart, end: snappedStart, length: 0 });
       }
     } else if (tool === 'door' && selectedDoorType) {
       addOpening(canvas.x, canvas.y, 'door', selectedDoorType);

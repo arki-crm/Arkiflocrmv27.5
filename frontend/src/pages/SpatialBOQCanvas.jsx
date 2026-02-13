@@ -5353,6 +5353,139 @@ export default function SpatialBOQCanvas() {
                   />
                 )}
 
+                {/* Temp ARC WALL while drawing - curved wall preview */}
+                {tempArcWall && (() => {
+                  const boundaries = calculateArcWallBoundaries(tempArcWall, DEFAULT_WALL_THICKNESS);
+                  const { inner, outer, sweepFlag, largeArcFlag } = boundaries;
+                  
+                  // Create scaled path for temp arc wall
+                  const arcPath = [
+                    `M ${outer.startX * scale} ${outer.startY * scale}`,
+                    `A ${outer.radius * scale} ${outer.radius * scale} 0 ${largeArcFlag} ${sweepFlag} ${outer.endX * scale} ${outer.endY * scale}`,
+                    `L ${inner.endX * scale} ${inner.endY * scale}`,
+                    `A ${inner.radius * scale} ${inner.radius * scale} 0 ${largeArcFlag} ${1 - sweepFlag} ${inner.startX * scale} ${inner.startY * scale}`,
+                    `Z`
+                  ].join(' ');
+                  
+                  // Center line arc for dimension display
+                  const centerArc = `M ${tempArcWall.startX * scale} ${tempArcWall.startY * scale} A ${tempArcWall.radius * scale} ${tempArcWall.radius * scale} 0 ${largeArcFlag} ${sweepFlag} ${tempArcWall.endX * scale} ${tempArcWall.endY * scale}`;
+                  
+                  return (
+                    <g>
+                      {/* Arc wall fill with dashed outline */}
+                      <path
+                        d={arcPath}
+                        fill="#c4b5fd"
+                        fillOpacity="0.6"
+                        stroke="#7c3aed"
+                        strokeWidth="1"
+                        strokeDasharray="6,3"
+                      />
+                      
+                      {/* Center line of arc (for reference) */}
+                      <path
+                        d={centerArc}
+                        fill="none"
+                        stroke="#7c3aed"
+                        strokeWidth="1"
+                        strokeDasharray="4,2"
+                      />
+                      
+                      {/* Center point marker */}
+                      <circle
+                        cx={tempArcWall.centerX * scale}
+                        cy={tempArcWall.centerY * scale}
+                        r={6}
+                        fill="none"
+                        stroke="#7c3aed"
+                        strokeWidth="1.5"
+                      />
+                      <line
+                        x1={tempArcWall.centerX * scale - 8}
+                        y1={tempArcWall.centerY * scale}
+                        x2={tempArcWall.centerX * scale + 8}
+                        y2={tempArcWall.centerY * scale}
+                        stroke="#7c3aed"
+                        strokeWidth="1"
+                      />
+                      <line
+                        x1={tempArcWall.centerX * scale}
+                        y1={tempArcWall.centerY * scale - 8}
+                        x2={tempArcWall.centerX * scale}
+                        y2={tempArcWall.centerY * scale + 8}
+                        stroke="#7c3aed"
+                        strokeWidth="1"
+                      />
+                      
+                      {/* Radius line from center to arc midpoint */}
+                      {(() => {
+                        const midAngle = (tempArcWall.startAngle + tempArcWall.endAngle) / 2;
+                        const midX = tempArcWall.centerX + tempArcWall.radius * Math.cos(midAngle);
+                        const midY = tempArcWall.centerY + tempArcWall.radius * Math.sin(midAngle);
+                        return (
+                          <line
+                            x1={tempArcWall.centerX * scale}
+                            y1={tempArcWall.centerY * scale}
+                            x2={midX * scale}
+                            y2={midY * scale}
+                            stroke="#7c3aed"
+                            strokeWidth="0.5"
+                            strokeDasharray="3,2"
+                          />
+                        );
+                      })()}
+                      
+                      {/* Arc dimensions */}
+                      <rect
+                        x={tempArcWall.centerX * scale - 50}
+                        y={tempArcWall.centerY * scale + 12}
+                        width="100"
+                        height="38"
+                        rx="4"
+                        fill="rgba(124, 58, 237, 0.95)"
+                      />
+                      <text
+                        x={tempArcWall.centerX * scale}
+                        y={tempArcWall.centerY * scale + 26}
+                        fontSize="10"
+                        fill="white"
+                        textAnchor="middle"
+                        fontWeight="600"
+                      >
+                        R: {Math.round(tempArcWall.radius)}mm
+                      </text>
+                      <text
+                        x={tempArcWall.centerX * scale}
+                        y={tempArcWall.centerY * scale + 40}
+                        fontSize="10"
+                        fill="white"
+                        textAnchor="middle"
+                        fontWeight="500"
+                      >
+                        Arc: {Math.round(tempArcWall.arcLength)}mm
+                      </text>
+                      
+                      {/* Start and end point markers */}
+                      <circle
+                        cx={tempArcWall.startX * scale}
+                        cy={tempArcWall.startY * scale}
+                        r={6}
+                        fill="#7c3aed"
+                        stroke="white"
+                        strokeWidth="2"
+                      />
+                      <circle
+                        cx={tempArcWall.endX * scale}
+                        cy={tempArcWall.endY * scale}
+                        r={6}
+                        fill="#7c3aed"
+                        stroke="white"
+                        strokeWidth="2"
+                      />
+                    </g>
+                  );
+                })()}
+
                 {/* Doors - with rotation support (Item #4) */}
                 {layout?.doors?.map(door => {
                   const isSelected = selectedItem?.type === 'door' && selectedItem.item.door_id === door.door_id;

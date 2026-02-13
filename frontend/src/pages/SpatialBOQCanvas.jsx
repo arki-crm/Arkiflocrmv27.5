@@ -4984,22 +4984,23 @@ export default function SpatialBOQCanvas() {
                     />
                     {/* Label */}
                     <rect
-                      x={canCloseShape.x * scale - 35}
-                      y={canCloseShape.y * scale - 35}
-                      width="70"
-                      height="18"
-                      rx="3"
+                      x={canCloseShape.x * scale - 40}
+                      y={canCloseShape.y * scale - 38}
+                      width="80"
+                      height="20"
+                      rx="4"
                       fill="#22C55E"
+                      filter="drop-shadow(0 2px 4px rgba(0,0,0,0.2))"
                     />
                     <text
                       x={canCloseShape.x * scale}
-                      y={canCloseShape.y * scale - 23}
-                      fontSize="10"
+                      y={canCloseShape.y * scale - 25}
+                      fontSize="11"
                       fill="white"
                       textAnchor="middle"
                       fontWeight="600"
                     >
-                      CLOSE SHAPE
+                      Close Room
                     </text>
                   </g>
                 )}

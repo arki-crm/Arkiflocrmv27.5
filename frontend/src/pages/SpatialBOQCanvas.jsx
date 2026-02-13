@@ -3460,6 +3460,120 @@ export default function SpatialBOQCanvas() {
                     </g>
                   );
                 })}
+
+                {/* CAD Enhancement: Alignment Guides */}
+                {alignmentGuides.map((guide, index) => (
+                  <line
+                    key={`guide-${index}`}
+                    x1={guide.type === 'vertical' ? guide.position * scale : guide.start * scale}
+                    y1={guide.type === 'horizontal' ? guide.position * scale : guide.start * scale}
+                    x2={guide.type === 'vertical' ? guide.position * scale : guide.end * scale}
+                    y2={guide.type === 'horizontal' ? guide.position * scale : guide.end * scale}
+                    stroke="#3B82F6"
+                    strokeWidth="1"
+                    strokeDasharray="6,3"
+                    strokeOpacity="0.7"
+                  />
+                ))}
+
+                {/* CAD Enhancement: Snap Indicator */}
+                {snapIndicator && (
+                  <g>
+                    {/* Outer glow ring */}
+                    <circle
+                      cx={snapIndicator.x * scale}
+                      cy={snapIndicator.y * scale}
+                      r={snapIndicator.type === 'endpoint' ? 14 : snapIndicator.type === 'midpoint' ? 12 : 8}
+                      fill="none"
+                      stroke={snapIndicator.type === 'endpoint' ? '#22C55E' : snapIndicator.type === 'midpoint' ? '#F59E0B' : '#6B7280'}
+                      strokeWidth="2"
+                      strokeOpacity="0.5"
+                    />
+                    {/* Inner filled circle */}
+                    <circle
+                      cx={snapIndicator.x * scale}
+                      cy={snapIndicator.y * scale}
+                      r={snapIndicator.type === 'endpoint' ? 6 : snapIndicator.type === 'midpoint' ? 5 : 4}
+                      fill={snapIndicator.type === 'endpoint' ? '#22C55E' : snapIndicator.type === 'midpoint' ? '#F59E0B' : '#6B7280'}
+                      fillOpacity="0.9"
+                    />
+                    {/* Crosshair for endpoint snap */}
+                    {snapIndicator.type === 'endpoint' && (
+                      <>
+                        <line
+                          x1={snapIndicator.x * scale - 18}
+                          y1={snapIndicator.y * scale}
+                          x2={snapIndicator.x * scale - 8}
+                          y2={snapIndicator.y * scale}
+                          stroke="#22C55E"
+                          strokeWidth="2"
+                        />
+                        <line
+                          x1={snapIndicator.x * scale + 8}
+                          y1={snapIndicator.y * scale}
+                          x2={snapIndicator.x * scale + 18}
+                          y2={snapIndicator.y * scale}
+                          stroke="#22C55E"
+                          strokeWidth="2"
+                        />
+                        <line
+                          x1={snapIndicator.x * scale}
+                          y1={snapIndicator.y * scale - 18}
+                          x2={snapIndicator.x * scale}
+                          y2={snapIndicator.y * scale - 8}
+                          stroke="#22C55E"
+                          strokeWidth="2"
+                        />
+                        <line
+                          x1={snapIndicator.x * scale}
+                          y1={snapIndicator.y * scale + 8}
+                          x2={snapIndicator.x * scale}
+                          y2={snapIndicator.y * scale + 18}
+                          stroke="#22C55E"
+                          strokeWidth="2"
+                        />
+                      </>
+                    )}
+                    {/* Diamond for midpoint snap */}
+                    {snapIndicator.type === 'midpoint' && (
+                      <polygon
+                        points={`
+                          ${snapIndicator.x * scale},${snapIndicator.y * scale - 10}
+                          ${snapIndicator.x * scale + 10},${snapIndicator.y * scale}
+                          ${snapIndicator.x * scale},${snapIndicator.y * scale + 10}
+                          ${snapIndicator.x * scale - 10},${snapIndicator.y * scale}
+                        `}
+                        fill="none"
+                        stroke="#F59E0B"
+                        strokeWidth="1.5"
+                      />
+                    )}
+                    {/* Snap type label */}
+                    <text
+                      x={snapIndicator.x * scale}
+                      y={snapIndicator.y * scale - 20}
+                      fontSize="10"
+                      fill={snapIndicator.type === 'endpoint' ? '#16A34A' : snapIndicator.type === 'midpoint' ? '#D97706' : '#4B5563'}
+                      textAnchor="middle"
+                      fontWeight="600"
+                    >
+                      {snapIndicator.type === 'endpoint' ? 'ENDPOINT' : snapIndicator.type === 'midpoint' ? 'MIDPOINT' : 'GRID'}
+                    </text>
+                  </g>
+                )}
+
+                {/* CAD Enhancement: Shift-lock indicator */}
+                {shiftKeyHeld && (isDrawing || isDragging) && (
+                  <text
+                    x="50"
+                    y="30"
+                    fontSize="12"
+                    fill="#3B82F6"
+                    fontWeight="600"
+                  >
+                    ⌇ ORTHOGONAL LOCK (Shift)
+                  </text>
+                )}
               </g>
             </svg>
 

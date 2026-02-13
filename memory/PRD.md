@@ -9,7 +9,43 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Loop Closure Prediction COMPLETE ✅
+## Current Status: Arc Wall Feature COMPLETE ✅
+**As of February 13, 2026**
+
+### Composer (SpatialBOQCanvas) - Arc Wall Drawing
+
+Implemented curved/arc wall drawing capability with two input methods and full structural support.
+
+| # | Feature | Description | Status |
+|---|---------|-------------|--------|
+| 1 | **Arc Input: Radius** | Define arc by specifying radius value (mm) | ✅ |
+| 2 | **Arc Input: Chord Height** | Define arc by chord height/string height (mm) | ✅ |
+| 3 | **Mouse-Based Bulge Direction** | Arc bulges toward mouse position (live preview) | ✅ |
+| 4 | **Flip Arc Button** | Secondary control to flip arc direction | ✅ |
+| 5 | **True SVG Arc Rendering** | Smooth SVG arc curves (not segmented polylines) | ✅ |
+| 6 | **Wall Thickness Visualization** | Inner/outer boundary rendering with thickness | ✅ |
+| 7 | **Arc Wall Data Model** | Stores radius, chord length, chord height, center, angles | ✅ |
+| 8 | **Arc Dimension Display** | Shows R:XXXmm and Arc:XXXmm while drawing | ✅ |
+| 9 | **Endpoint Snapping** | Arc endpoints snap to grid and existing vertices | ✅ |
+| 10 | **UI Integration** | Arc Wall option in Wall Tool dropdown panel | ✅ |
+
+**Arc Wall Technical Details:**
+- Two calculation functions: `calculateArcFromRadius()` and `calculateArcFromChordHeight()`
+- Arc boundaries calculated with `calculateArcWallBoundaries()` for inner/outer curves
+- SVG path generation: outer arc → end cap → inner arc (reversed) → start cap → close
+- Bulge direction determined by cross product of chord and mouse vectors
+- Arc wall properties stored: `is_arc`, `arc_radius`, `arc_chord_length`, `arc_chord_height`, `arc_center_x/y`, `arc_start/end_angle`, `arc_sweep_flag`, `arc_large_arc_flag`, `arc_bulge_direction`
+
+**Arc Wall UI:**
+- Located under Wall Tool dropdown (alongside Straight Wall, Rectangle, Square)
+- Input method toggle: "Radius" or "Chord Height (String Height)"
+- Numeric input for selected method value
+- "Flip Arc Direction" button
+- Helper text: "Mouse position determines arc bulge"
+
+---
+
+## Previous Status: Loop Closure Prediction COMPLETE ✅
 **As of February 13, 2026**
 
 ### Composer (SpatialBOQCanvas) - Loop Closure Prediction

@@ -126,6 +126,7 @@ export default function SpatialBOQCanvas() {
   const [tool, setTool] = useState('select');
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedModuleType, setSelectedModuleType] = useState(null);
+  const [splitPreview, setSplitPreview] = useState(null); // { wallId, x, y } - preview split point
 
   // Panel collapse state
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);

@@ -2681,6 +2681,28 @@ export default function SpatialBOQCanvas() {
       if (wallDrawMode === 'rectangle' || wallDrawMode === 'square') {
         setIsDrawing(true);
         setTempRectWalls({ start: startPoint, end: startPoint });
+      } else if (wallDrawMode === 'arc') {
+        // Arc wall mode - use drag drawing like rectangle/square
+        setIsDrawing(true);
+        // Initialize temp arc wall with zero chord length
+        const initialArc = {
+          startX: startPoint.x,
+          startY: startPoint.y,
+          endX: startPoint.x,
+          endY: startPoint.y,
+          radius: parseFloat(arcRadiusInput) || 1000,
+          chordLength: 0,
+          chordHeight: 0,
+          arcLength: 0,
+          centerX: startPoint.x,
+          centerY: startPoint.y,
+          startAngle: 0,
+          endAngle: 0,
+          sweepFlag: 0,
+          largeArcFlag: 0,
+          bulgeDirection: 1
+        };
+        setTempArcWall(initialArc);
       } else {
         // Free line - use click-release mode
         setWallClickMode('waiting_end');

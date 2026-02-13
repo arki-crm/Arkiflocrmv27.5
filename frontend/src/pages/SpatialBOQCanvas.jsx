@@ -4794,6 +4794,46 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
+                {/* Selected vertex indicator - shows when a junction point is selected */}
+                {selectedVertex && (
+                  <g>
+                    <circle
+                      cx={selectedVertex.x * scale}
+                      cy={selectedVertex.y * scale}
+                      r={14}
+                      fill="#3B82F6"
+                      fillOpacity="0.3"
+                      stroke="#3B82F6"
+                      strokeWidth="3"
+                    />
+                    <circle
+                      cx={selectedVertex.x * scale}
+                      cy={selectedVertex.y * scale}
+                      r={6}
+                      fill="#3B82F6"
+                    />
+                    {/* Show count of connected walls */}
+                    <rect
+                      x={selectedVertex.x * scale + 16}
+                      y={selectedVertex.y * scale - 10}
+                      width="50"
+                      height="20"
+                      rx="3"
+                      fill="#3B82F6"
+                    />
+                    <text
+                      x={selectedVertex.x * scale + 41}
+                      y={selectedVertex.y * scale + 4}
+                      fontSize="10"
+                      fill="white"
+                      textAnchor="middle"
+                      fontWeight="600"
+                    >
+                      {selectedVertex.walls.length} walls
+                    </text>
+                  </g>
+                )}
+
                 {/* Snap indicator during drawing/dragging */}
                 {snapIndicator && (
                   <g>

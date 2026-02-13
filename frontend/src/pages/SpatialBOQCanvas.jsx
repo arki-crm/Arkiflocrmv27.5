@@ -2598,6 +2598,7 @@ export default function SpatialBOQCanvas() {
     setDragType(null);
     setDragEndpoint(null);
     setActiveRectLoop(null); // Clear parametric loop reference
+    setSelectedVertex(null); // Clear vertex selection
     
     // Clear all visual indicators
     setSnapIndicator(null);

@@ -1546,6 +1546,7 @@ export default function SpatialBOQCanvas() {
           setTempRectWalls(null);
           setTempArcWall(null);
           setDrawStart(null);
+          arcDrawingRef.current = { isDrawing: false, startPoint: null };
         }
         // Cancel inline dimension editing
         if (editingDimension) {

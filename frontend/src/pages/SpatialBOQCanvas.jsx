@@ -1740,19 +1740,55 @@ export default function SpatialBOQCanvas() {
   const findMergeTarget = useCallback((x, y, excludeWallId, excludeEndpoint) => {
     if (!layout?.walls?.length) return null;
     
+    // First priority: Check for endpoint-to-endpoint merge
     for (const wall of layout.walls) {
       if (wall.wall_id === excludeWallId) continue;
       
       const distStart = Math.sqrt(Math.pow(x - wall.start_x, 2) + Math.pow(y - wall.start_y, 2));
       if (distStart < VERTEX_MERGE_THRESHOLD) {
-        return { x: wall.start_x, y: wall.start_y, wallId: wall.wall_id, endpoint: 'start' };
+        return { x: wall.start_x, y: wall.start_y, wallId: wall.wall_id, endpoint: 'start', type: 'endpoint' };
       }
       
       const distEnd = Math.sqrt(Math.pow(x - wall.end_x, 2) + Math.pow(y - wall.end_y, 2));
       if (distEnd < VERTEX_MERGE_THRESHOLD) {
-        return { x: wall.end_x, y: wall.end_y, wallId: wall.wall_id, endpoint: 'end' };
+        return { x: wall.end_x, y: wall.end_y, wallId: wall.wall_id, endpoint: 'end', type: 'endpoint' };
       }
     }
+    
+    // Second priority: Check for T-junction (endpoint near middle of another wall)
+    const T_JUNCTION_THRESHOLD = 80; // mm - threshold for T-junction detection
+    for (const wall of layout.walls) {
+      if (wall.wall_id === excludeWallId) continue;
+      
+      const dx = wall.end_x - wall.start_x;
+      const dy = wall.end_y - wall.start_y;
+      const wallLength = Math.sqrt(dx * dx + dy * dy);
+      
+      if (wallLength < 200) continue; // Wall too short for T-junction
+      
+      // Project point onto wall line
+      const t = ((x - wall.start_x) * dx + (y - wall.start_y) * dy) / (wallLength * wallLength);
+      
+      // Only consider points along the wall middle (not near endpoints)
+      if (t < 0.15 || t > 0.85) continue;
+      
+      const projX = wall.start_x + t * dx;
+      const projY = wall.start_y + t * dy;
+      
+      // Distance from cursor to projected point
+      const dist = Math.sqrt(Math.pow(x - projX, 2) + Math.pow(y - projY, 2));
+      
+      if (dist < T_JUNCTION_THRESHOLD) {
+        return { 
+          x: Math.round(projX), 
+          y: Math.round(projY), 
+          wallId: wall.wall_id, 
+          type: 'tjunction',
+          t: t // Parameter along wall for splitting
+        };
+      }
+    }
+    
     return null;
   }, [layout?.walls]);
 

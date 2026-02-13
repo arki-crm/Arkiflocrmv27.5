@@ -5039,6 +5039,110 @@ export default function SpatialBOQCanvas() {
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
                   const thickness = wall.thickness || DEFAULT_WALL_THICKNESS;
                   
+                  // ARC WALL RENDERING
+                  if (wall.is_arc) {
+                    const arcParams = {
+                      startX: wall.start_x,
+                      startY: wall.start_y,
+                      endX: wall.end_x,
+                      endY: wall.end_y,
+                      radius: wall.arc_radius,
+                      centerX: wall.arc_center_x,
+                      centerY: wall.arc_center_y,
+                      startAngle: wall.arc_start_angle,
+                      endAngle: wall.arc_end_angle,
+                      sweepFlag: wall.arc_sweep_flag,
+                      largeArcFlag: wall.arc_large_arc_flag,
+                      bulgeDirection: wall.arc_bulge_direction
+                    };
+                    
+                    const boundaries = calculateArcWallBoundaries(arcParams, thickness);
+                    const { inner, outer, sweepFlag, largeArcFlag } = boundaries;
+                    
+                    // Create scaled path for arc wall
+                    const arcPath = [
+                      `M ${outer.startX * scale} ${outer.startY * scale}`,
+                      `A ${outer.radius * scale} ${outer.radius * scale} 0 ${largeArcFlag} ${sweepFlag} ${outer.endX * scale} ${outer.endY * scale}`,
+                      `L ${inner.endX * scale} ${inner.endY * scale}`,
+                      `A ${inner.radius * scale} ${inner.radius * scale} 0 ${largeArcFlag} ${1 - sweepFlag} ${inner.startX * scale} ${inner.startY * scale}`,
+                      `Z`
+                    ].join(' ');
+                    
+                    // Outer and inner arc edges for stroke
+                    const outerArcEdge = `M ${outer.startX * scale} ${outer.startY * scale} A ${outer.radius * scale} ${outer.radius * scale} 0 ${largeArcFlag} ${sweepFlag} ${outer.endX * scale} ${outer.endY * scale}`;
+                    const innerArcEdge = `M ${inner.startX * scale} ${inner.startY * scale} A ${inner.radius * scale} ${inner.radius * scale} 0 ${largeArcFlag} ${sweepFlag} ${inner.endX * scale} ${inner.endY * scale}`;
+                    
+                    return (
+                      <g key={wall.wall_id} style={{ cursor: 'move' }}>
+                        {/* Arc wall fill */}
+                        <path
+                          d={arcPath}
+                          fill={isSelected ? '#93c5fd' : '#B0B0B0'}
+                        />
+                        {/* Outer arc edge */}
+                        <path d={outerArcEdge} stroke="#000000" strokeWidth="0.5" fill="none" />
+                        {/* Inner arc edge */}
+                        <path d={innerArcEdge} stroke="#000000" strokeWidth="0.5" fill="none" />
+                        {/* End caps */}
+                        <line 
+                          x1={outer.startX * scale} y1={outer.startY * scale}
+                          x2={inner.startX * scale} y2={inner.startY * scale}
+                          stroke="#000000" strokeWidth="0.5"
+                        />
+                        <line 
+                          x1={outer.endX * scale} y1={outer.endY * scale}
+                          x2={inner.endX * scale} y2={inner.endY * scale}
+                          stroke="#000000" strokeWidth="0.5"
+                        />
+                        {/* Arc dimensions label */}
+                        <text
+                          x={wall.arc_center_x * scale}
+                          y={wall.arc_center_y * scale - 15}
+                          fontSize="10"
+                          fill={isSelected ? '#2563eb' : '#4A5568'}
+                          textAnchor="middle"
+                          fontWeight="500"
+                        >
+                          R{Math.round(wall.arc_radius)}mm | {wall.length}mm
+                        </text>
+                        {/* Endpoint handles for arc wall */}
+                        {isSelected && (
+                          <>
+                            <circle
+                              cx={wall.start_x * scale}
+                              cy={wall.start_y * scale}
+                              r={ENDPOINT_HANDLE_SIZE}
+                              fill="#3b82f6"
+                              stroke="#1d4ed8"
+                              strokeWidth="2"
+                              style={{ cursor: 'crosshair' }}
+                            />
+                            <circle
+                              cx={wall.end_x * scale}
+                              cy={wall.end_y * scale}
+                              r={ENDPOINT_HANDLE_SIZE}
+                              fill="#3b82f6"
+                              stroke="#1d4ed8"
+                              strokeWidth="2"
+                              style={{ cursor: 'crosshair' }}
+                            />
+                            {/* Center point indicator */}
+                            <circle
+                              cx={wall.arc_center_x * scale}
+                              cy={wall.arc_center_y * scale}
+                              r={6}
+                              fill="none"
+                              stroke="#9333ea"
+                              strokeWidth="1.5"
+                              strokeDasharray="3,3"
+                            />
+                          </>
+                        )}
+                      </g>
+                    );
+                  }
+                  
+                  // STRAIGHT WALL RENDERING
                   // Calculate wall rectangle corners for proper rendering
                   const dx = wall.end_x - wall.start_x;
                   const dy = wall.end_y - wall.start_y;

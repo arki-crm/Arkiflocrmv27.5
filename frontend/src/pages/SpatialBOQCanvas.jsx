@@ -194,6 +194,8 @@ export default function SpatialBOQCanvas() {
   const [shiftKeyHeld, setShiftKeyHeld] = useState(false); // For orthogonal constraint
   const [orthoMode, setOrthoMode] = useState(true); // Coohom-style ortho mode (default ON)
   const [drawingDimension, setDrawingDimension] = useState(null); // { length, angle, x, y } - live dimension display
+  const [preClickSnap, setPreClickSnap] = useState(null); // { x, y, type } - shows snap point BEFORE click
+  const [hoveredVertex, setHoveredVertex] = useState(null); // { x, y, wallIds } - vertex being hovered
 
   // Elevation view - full screen mode (Item #9)
   const [showElevationModal, setShowElevationModal] = useState(false);

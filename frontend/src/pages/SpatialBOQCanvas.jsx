@@ -2817,6 +2817,7 @@ export default function SpatialBOQCanvas() {
       if (canCloseShape) setCanCloseShape(null);
       if (projectedIntersections.length > 0) setProjectedIntersections([]);
       if (loopClosureProjection) setLoopClosureProjection(null);
+      if (tempArcWall) setTempArcWall(null);
       
       // PRE-CLICK SNAP: Show vertex snap indicator BEFORE clicking (when wall tool is active)
       if (tool === 'wall' && !wallClickMode) {

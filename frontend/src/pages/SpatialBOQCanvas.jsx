@@ -103,9 +103,16 @@ const WINDOW_TYPES = [
 
 // Wall drawing modes (Item #4)
 const WALL_DRAW_MODES = {
+  free: { name: 'Straight Wall', icon: Pencil, desc: 'Draw individual walls' },
   rectangle: { name: 'Rectangle Room', icon: RectangleHorizontal, desc: 'Drag to create 4 walls' },
   square: { name: 'Square Room', icon: SquareIcon, desc: 'Create equal-sided room' },
-  free: { name: 'Free Line Draw', icon: Pencil, desc: 'Draw individual walls' }
+  arc: { name: 'Arc Wall', icon: Circle, desc: 'Draw curved walls' }
+};
+
+// Arc wall input methods
+const ARC_INPUT_METHODS = {
+  radius: { name: 'Radius', desc: 'Define by radius value' },
+  chordHeight: { name: 'Chord Height (String Height)', desc: 'Define by bulge height' }
 };
 
 export default function SpatialBOQCanvas() {

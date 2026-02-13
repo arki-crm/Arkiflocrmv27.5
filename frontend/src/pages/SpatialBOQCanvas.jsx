@@ -1909,6 +1909,10 @@ export default function SpatialBOQCanvas() {
     setDragType(null);
     setDragEndpoint(null);
     setActiveRectLoop(null); // Clear parametric loop reference
+    
+    // CAD Enhancement: Clear visual indicators
+    setSnapIndicator(null);
+    setAlignmentGuides([]);
   };
 
   // Create wall helper - now includes height (Item #1)

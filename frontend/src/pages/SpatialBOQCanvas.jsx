@@ -3916,6 +3916,37 @@ export default function SpatialBOQCanvas() {
     }
   };
 
+  // Add module to canvas
+  const addModule = (x, y) => {
+    if (!selectedModuleType) return;
+    
+    const modInfo = moduleLibrary.module_types?.[selectedModuleType] || {};
+    const newModule = {
+      module_id: `mod_${Date.now()}`,
+      module_type: selectedModuleType,
+      x: x,
+      y: y,
+      width: modInfo.default_width || 600,
+      height: modInfo.default_height || 720,
+      depth: modInfo.default_depth || 600,
+      rotation: 0,
+      finish_type: 'laminate',
+      shutter_type: 'flat',
+      carcass_material: 'plywood_710',
+      carcass_finish: 'laminate',
+      wall_id: null
+    };
+    
+    saveToHistory();
+    setLayout(prev => ({
+      ...prev,
+      modules: [...(prev.modules || []), newModule]
+    }));
+    setHasChanges(true);
+    setSelectedItem({ type: 'module', item: newModule });
+    toast.success(`${modInfo.name || selectedModuleType} added`);
+  };
+
   // Update module
   const updateModule = (moduleId, updates) => {
     setLayout(prev => ({

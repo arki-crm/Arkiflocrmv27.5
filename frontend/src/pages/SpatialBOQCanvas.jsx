@@ -9,7 +9,7 @@ import {
   DoorOpen, PanelTop, Layers, Move, Maximize2, X,
   RectangleHorizontal, SquareIcon, Pencil, GripVertical,
   Undo2, Redo2, RotateCw, FlipHorizontal, FlipVertical,
-  Slice
+  Slice, Circle
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';

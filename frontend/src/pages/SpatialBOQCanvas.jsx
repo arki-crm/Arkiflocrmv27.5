@@ -3428,41 +3428,87 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
-                {/* CAD Enhancement: Alignment Guides */}
+                {/* Coohom-style: Green dashed alignment guides */}
                 {alignmentGuides.map((guide, index) => (
                   <line
                     key={`guide-${index}`}
-                    x1={guide.type === 'vertical' ? guide.position * scale : guide.start * scale}
-                    y1={guide.type === 'horizontal' ? guide.position * scale : guide.start * scale}
-                    x2={guide.type === 'vertical' ? guide.position * scale : guide.end * scale}
-                    y2={guide.type === 'horizontal' ? guide.position * scale : guide.end * scale}
-                    stroke="#3B82F6"
+                    x1={guide.type === 'vertical' ? guide.x * scale : guide.x1 * scale}
+                    y1={guide.type === 'horizontal' ? guide.y * scale : guide.y1 * scale}
+                    x2={guide.type === 'vertical' ? guide.x * scale : guide.x2 * scale}
+                    y2={guide.type === 'horizontal' ? guide.y * scale : guide.y2 * scale}
+                    stroke="#22C55E"
                     strokeWidth="1"
-                    strokeDasharray="6,3"
-                    strokeOpacity="0.7"
+                    strokeDasharray="8,4"
+                    strokeOpacity="0.9"
                   />
                 ))}
 
-                {/* CAD Enhancement: Snap Indicator */}
+                {/* Coohom-style: Simple circle snap indicator */}
                 {snapIndicator && (
+                  <circle
+                    cx={snapIndicator.x * scale}
+                    cy={snapIndicator.y * scale}
+                    r={snapIndicator.type === 'endpoint' ? 8 : 5}
+                    fill={snapIndicator.type === 'endpoint' ? '#22C55E' : '#94A3B8'}
+                    fillOpacity="0.8"
+                    stroke={snapIndicator.type === 'endpoint' ? '#16A34A' : '#64748B'}
+                    strokeWidth="2"
+                  />
+                )}
+
+                {/* Coohom-style: Real-time dimension display while drawing */}
+                {drawingDimension && (wallClickMode === 'waiting_end' || isDrawing) && (
                   <g>
-                    {/* Outer glow ring */}
-                    <circle
-                      cx={snapIndicator.x * scale}
-                      cy={snapIndicator.y * scale}
-                      r={snapIndicator.type === 'endpoint' ? 14 : snapIndicator.type === 'midpoint' ? 12 : 8}
-                      fill="none"
-                      stroke={snapIndicator.type === 'endpoint' ? '#22C55E' : snapIndicator.type === 'midpoint' ? '#F59E0B' : '#6B7280'}
-                      strokeWidth="2"
-                      strokeOpacity="0.5"
+                    {/* Background box */}
+                    <rect
+                      x={drawingDimension.x * scale - 40}
+                      y={drawingDimension.y * scale - 25}
+                      width="80"
+                      height="20"
+                      rx="3"
+                      fill="#F1F5F9"
+                      stroke="#CBD5E1"
+                      strokeWidth="1"
                     />
-                    {/* Inner filled circle */}
-                    <circle
-                      cx={snapIndicator.x * scale}
-                      cy={snapIndicator.y * scale}
-                      r={snapIndicator.type === 'endpoint' ? 6 : snapIndicator.type === 'midpoint' ? 5 : 4}
-                      fill={snapIndicator.type === 'endpoint' ? '#22C55E' : snapIndicator.type === 'midpoint' ? '#F59E0B' : '#6B7280'}
-                      fillOpacity="0.9"
+                    {/* Dimension text */}
+                    <text
+                      x={drawingDimension.x * scale}
+                      y={drawingDimension.y * scale - 11}
+                      fontSize="12"
+                      fill="#1E293B"
+                      textAnchor="middle"
+                      fontWeight="600"
+                    >
+                      {drawingDimension.length} mm
+                    </text>
+                  </g>
+                )}
+
+                {/* Coohom-style: Ortho mode indicator */}
+                {(orthoMode || shiftKeyHeld) && (wallClickMode === 'waiting_end' || isDrawing) && (
+                  <g>
+                    <rect
+                      x="10"
+                      y="10"
+                      width="140"
+                      height="24"
+                      rx="4"
+                      fill="#DCFCE7"
+                      stroke="#22C55E"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x="80"
+                      y="26"
+                      fontSize="11"
+                      fill="#166534"
+                      textAnchor="middle"
+                      fontWeight="500"
+                    >
+                      ✓ Ortho Drawing Active
+                    </text>
+                  </g>
+                )}
                     />
                     {/* Crosshair for endpoint snap */}
                     {snapIndicator.type === 'endpoint' && (

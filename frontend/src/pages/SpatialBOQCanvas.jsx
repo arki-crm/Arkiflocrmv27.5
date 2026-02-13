@@ -4087,6 +4087,45 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
+                {/* T-Junction fill patches - closes gaps where walls meet at T-junctions */}
+                {unifiedBoundary && unifiedBoundary.tJunctions && unifiedBoundary.tJunctions.map((tJunc, idx) => {
+                  // Create a small fill patch at the T-junction to close the gap
+                  const thickness = tJunc.stemWall?.thickness || DEFAULT_WALL_THICKNESS;
+                  const halfThickness = thickness / 2;
+                  
+                  // Get the direction of the "through" wall
+                  const throughWall1 = tJunc.throughWalls[0];
+                  const dx = throughWall1.end_x - throughWall1.start_x;
+                  const dy = throughWall1.end_y - throughWall1.start_y;
+                  const len = Math.sqrt(dx * dx + dy * dy);
+                  
+                  if (len === 0) return null;
+                  
+                  // Perpendicular direction to through wall
+                  const perpX = -dy / len;
+                  const perpY = dx / len;
+                  
+                  // Create a rectangular patch that fills the gap
+                  const patchSize = halfThickness + 5; // Slightly larger to ensure overlap
+                  const patch = [
+                    { x: tJunc.x - perpX * patchSize - (dx/len) * 5, y: tJunc.y - perpY * patchSize - (dy/len) * 5 },
+                    { x: tJunc.x + perpX * patchSize - (dx/len) * 5, y: tJunc.y + perpY * patchSize - (dy/len) * 5 },
+                    { x: tJunc.x + perpX * patchSize + (dx/len) * 5, y: tJunc.y + perpY * patchSize + (dy/len) * 5 },
+                    { x: tJunc.x - perpX * patchSize + (dx/len) * 5, y: tJunc.y - perpY * patchSize + (dy/len) * 5 }
+                  ];
+                  
+                  const pointsStr = patch.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
+                  
+                  return (
+                    <polygon
+                      key={`t-junction-fill-${idx}`}
+                      points={pointsStr}
+                      fill="#B0B0B0"
+                      stroke="none"
+                    />
+                  );
+                })}
+
                 {/* Temp wall while drawing - Coohom-style thin outline preview */}
                 {tempWall && (() => {
                   const dx = tempWall.end.x - tempWall.start.x;

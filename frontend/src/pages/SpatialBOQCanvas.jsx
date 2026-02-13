@@ -1900,20 +1900,54 @@ export default function SpatialBOQCanvas() {
     };
   };
 
-  // Find wall endpoint at position (for resizing)
-  const findWallEndpointAt = (x, y) => {
-    if (!layout?.walls) return null;
-    const threshold = (ENDPOINT_HANDLE_SIZE * 2) / scale; // Larger threshold for easier selection
+  // Find nearest vertex (wall endpoint) with larger hitbox for priority selection
+  // Returns { x, y, walls: [{wall, endpoint}], distance } or null
+  const findVertexAt = useCallback((x, y) => {
+    if (!layout?.walls?.length) return null;
+    
+    // Use larger hitbox for vertex detection (invisible but larger than visual handle)
+    const hitboxThreshold = (VERTEX_HITBOX_RADIUS * 2) / scale;
+    
+    // Build a map of unique vertices (endpoints that may be shared by multiple walls)
+    const vertexMap = new Map();
     
     for (const wall of layout.walls) {
-      const distStart = Math.sqrt(Math.pow(x - wall.start_x, 2) + Math.pow(y - wall.start_y, 2));
-      if (distStart < threshold) {
-        return { wall, endpoint: 'start' };
+      // Check start endpoint
+      const startKey = `${Math.round(wall.start_x)},${Math.round(wall.start_y)}`;
+      if (!vertexMap.has(startKey)) {
+        vertexMap.set(startKey, { x: wall.start_x, y: wall.start_y, walls: [] });
       }
-      const distEnd = Math.sqrt(Math.pow(x - wall.end_x, 2) + Math.pow(y - wall.end_y, 2));
-      if (distEnd < threshold) {
-        return { wall, endpoint: 'end' };
+      vertexMap.get(startKey).walls.push({ wall, endpoint: 'start' });
+      
+      // Check end endpoint
+      const endKey = `${Math.round(wall.end_x)},${Math.round(wall.end_y)}`;
+      if (!vertexMap.has(endKey)) {
+        vertexMap.set(endKey, { x: wall.end_x, y: wall.end_y, walls: [] });
       }
+      vertexMap.get(endKey).walls.push({ wall, endpoint: 'end' });
+    }
+    
+    // Find the nearest vertex within hitbox
+    let nearest = null;
+    let minDist = hitboxThreshold;
+    
+    for (const vertex of vertexMap.values()) {
+      const dist = Math.sqrt(Math.pow(x - vertex.x, 2) + Math.pow(y - vertex.y, 2));
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = { ...vertex, distance: dist };
+      }
+    }
+    
+    return nearest;
+  }, [layout?.walls, scale]);
+
+  // Find wall endpoint at position (for resizing) - uses vertex detection
+  const findWallEndpointAt = (x, y) => {
+    const vertex = findVertexAt(x, y);
+    if (vertex && vertex.walls.length > 0) {
+      // Return the first wall at this vertex
+      return vertex.walls[0];
     }
     return null;
   };

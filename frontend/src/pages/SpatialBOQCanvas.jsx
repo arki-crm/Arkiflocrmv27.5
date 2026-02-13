@@ -2848,14 +2848,22 @@ export default function SpatialBOQCanvas() {
                 <Button
                   variant={tool === 'fill' ? 'secondary' : 'ghost'}
                   size="sm"
-                  className="w-9 h-9 p-0"
-                  onClick={() => setTool('fill')}
+                  className={`w-9 h-9 p-0 ${tool === 'fill' ? 'bg-blue-100' : ''}`}
+                  onClick={() => {
+                    if (tool === 'fill') {
+                      // Toggle panel if already on fill tool
+                      setShowFloorMaterialPanel(!showFloorMaterialPanel);
+                    } else {
+                      setTool('fill');
+                      setShowFloorMaterialPanel(true);
+                    }
+                  }}
                   disabled={!layout?.walls || layout.walls.length < 3}
                 >
                   <Layers className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="right">Fill Floor (F) - Click inside room</TooltipContent>
+              <TooltipContent side="right">Fill Floor (F) - Click to toggle panel</TooltipContent>
             </Tooltip>
 
             <Separator className="my-2 w-6" />

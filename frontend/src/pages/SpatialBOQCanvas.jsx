@@ -2500,7 +2500,6 @@ export default function SpatialBOQCanvas() {
       
       // PRE-CLICK SNAP: Show vertex snap indicator BEFORE clicking (when wall tool is active)
       if (tool === 'wall' && !wallClickMode) {
-      if (tool === 'wall' && !wallClickMode) {
         const vertex = findVertexAt(canvas.x, canvas.y);
         if (vertex) {
           setPreClickSnap({ x: vertex.x, y: vertex.y, type: 'vertex' });

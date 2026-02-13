@@ -2669,6 +2669,28 @@ export default function SpatialBOQCanvas() {
                   <X className="h-3 w-3" />
                 </Button>
               </div>
+              
+              {/* Coohom-style Ortho Toggle */}
+              <button
+                onClick={() => setOrthoMode(!orthoMode)}
+                className={`w-full text-left p-2 rounded text-xs mb-2 transition-colors border ${
+                  orthoMode 
+                    ? 'bg-green-100 border-green-400 text-green-800' 
+                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{orthoMode ? '✓' : '○'}</span>
+                    <span className="font-medium">Ortho Drawing</span>
+                  </div>
+                </div>
+                <p className="text-[10px] mt-0.5 ml-6 opacity-70">
+                  {orthoMode ? 'Snaps to 90° angles' : 'Click to enable'}
+                </p>
+              </button>
+              
+              <h5 className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Shape Mode</h5>
               <div className="space-y-1">
                 {Object.entries(WALL_DRAW_MODES).map(([key, mode]) => (
                   <button

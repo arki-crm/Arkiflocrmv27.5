@@ -1746,7 +1746,6 @@ export default function SpatialBOQCanvas() {
         }
       }
     }
-    }
 
     // Dragging entire wall (Item #1) - with parametric editing for rectangular loops
     if (isDragging && dragType === 'wall' && selectedItem?.type === 'wall') {

@@ -1908,10 +1908,12 @@ export default function SpatialBOQCanvas() {
     setDragEndpoint(null);
     setActiveRectLoop(null); // Clear parametric loop reference
     
-    // Coohom-style: Clear all visual indicators
+    // Clear all visual indicators
     setSnapIndicator(null);
     setAlignmentGuides([]);
     setDrawingDimension(null);
+    setPreClickSnap(null);
+    setHoveredVertex(null);
   };
 
   // Create wall helper - now includes height (Item #1)

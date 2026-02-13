@@ -1869,7 +1869,8 @@ export default function SpatialBOQCanvas() {
     
     return { 
       suggestions: suggestions.slice(0, 3), 
-      closePoint 
+      closePoint,
+      chainStart: chainStartPoint // Return chain start for visual indicator
     };
   }, [layout?.walls]);
 

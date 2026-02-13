@@ -744,6 +744,7 @@ export default function SpatialBOQCanvas() {
       const curr = vertices[i];
       const isFirst = i === 0;
       const isLast = i === n - 1;
+      const isEndpoint = curr.isEndpoint || isFirst || isLast;
 
       if (isFirst) {
         // First vertex - flat cap perpendicular to first edge
@@ -772,11 +773,11 @@ export default function SpatialBOQCanvas() {
         leftSide.push({ x: curr.x + perpX * offset, y: curr.y + perpY * offset });
         rightSide.push({ x: curr.x - perpX * offset, y: curr.y - perpY * offset });
       } else {
-        // Internal vertex - miter join
+        // Internal vertex - MITER JOIN for clean L-corner
         const prev = vertices[i - 1];
         const next = vertices[i + 1];
         
-        // Edge vectors
+        // Edge vectors (incoming and outgoing)
         const e1x = curr.x - prev.x;
         const e1y = curr.y - prev.y;
         const e2x = next.x - curr.x;
@@ -786,7 +787,7 @@ export default function SpatialBOQCanvas() {
         const len2 = Math.sqrt(e2x * e2x + e2y * e2y);
         
         if (len1 === 0 || len2 === 0) {
-          // Fallback to simple perpendicular offset
+          // Degenerate case - use simple perpendicular
           const perpX = len1 > 0 ? -e1y / len1 : -e2y / len2;
           const perpY = len1 > 0 ? e1x / len1 : e2x / len2;
           leftSide.push({ x: curr.x + perpX * offset, y: curr.y + perpY * offset });
@@ -794,36 +795,39 @@ export default function SpatialBOQCanvas() {
           continue;
         }
         
-        // Normalized directions
+        // Normalized edge directions
         const d1x = e1x / len1, d1y = e1y / len1;
         const d2x = e2x / len2, d2y = e2y / len2;
         
-        // Perpendicular normals (left side)
+        // Perpendicular normals (pointing "left" of each edge)
         const n1x = -d1y, n1y = d1x;
         const n2x = -d2y, n2y = d2x;
         
-        // Bisector for miter
-        const bisectX = n1x + n2x;
-        const bisectY = n1y + n2y;
-        const bisectLen = Math.sqrt(bisectX * bisectX + bisectY * bisectY);
+        // Calculate the miter direction as the average of the two normals
+        const miterX = n1x + n2x;
+        const miterY = n1y + n2y;
+        const miterLen = Math.sqrt(miterX * miterX + miterY * miterY);
         
-        if (bisectLen < 0.001) {
-          // Parallel edges - use simple offset
+        if (miterLen < 0.001) {
+          // Edges are parallel (180° turn) - use simple perpendicular
           leftSide.push({ x: curr.x + n1x * offset, y: curr.y + n1y * offset });
           rightSide.push({ x: curr.x - n1x * offset, y: curr.y - n1y * offset });
           continue;
         }
         
-        const bx = bisectX / bisectLen;
-        const by = bisectY / bisectLen;
+        // Normalized miter direction
+        const mx = miterX / miterLen;
+        const my = miterY / miterLen;
         
-        // Miter length calculation
-        const cosHalfAngle = Math.abs(n1x * bx + n1y * by);
-        const clampedCos = Math.max(cosHalfAngle, 0.25);
-        const miterLength = offset / clampedCos;
+        // Calculate miter length using the dot product
+        // miterLength = offset / cos(halfAngle) where halfAngle is angle between normal and miter
+        const dotProduct = n1x * mx + n1y * my;
+        const clampedDot = Math.max(Math.abs(dotProduct), 0.3); // Clamp to prevent infinite miter
+        const miterOffset = offset / clampedDot;
         
-        leftSide.push({ x: curr.x + bx * miterLength, y: curr.y + by * miterLength });
-        rightSide.push({ x: curr.x - bx * miterLength, y: curr.y - by * miterLength });
+        // Apply miter offset in both directions
+        leftSide.push({ x: curr.x + mx * miterOffset, y: curr.y + my * miterOffset });
+        rightSide.push({ x: curr.x - mx * miterOffset, y: curr.y - my * miterOffset });
       }
     }
 

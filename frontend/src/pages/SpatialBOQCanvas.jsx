@@ -4278,6 +4278,78 @@ export default function SpatialBOQCanvas() {
                   </g>
                 )}
 
+                {/* SPLIT PREVIEW INDICATOR - Shows where wall will be split */}
+                {splitPreview && tool === 'split' && (
+                  <g>
+                    {/* Highlight the wall being split */}
+                    <line
+                      x1={splitPreview.wall.start_x * scale}
+                      y1={splitPreview.wall.start_y * scale}
+                      x2={splitPreview.wall.end_x * scale}
+                      y2={splitPreview.wall.end_y * scale}
+                      stroke="#EF4444"
+                      strokeWidth={(splitPreview.wall.thickness || 150) * scale + 4}
+                      strokeLinecap="round"
+                      opacity="0.3"
+                    />
+                    {/* Split point marker - scissors icon style */}
+                    <circle
+                      cx={splitPreview.x * scale}
+                      cy={splitPreview.y * scale}
+                      r={12}
+                      fill="#EF4444"
+                      fillOpacity="0.9"
+                    />
+                    <circle
+                      cx={splitPreview.x * scale}
+                      cy={splitPreview.y * scale}
+                      r={16}
+                      fill="none"
+                      stroke="#EF4444"
+                      strokeWidth="2"
+                      strokeDasharray="4,2"
+                    />
+                    {/* Cross/cut indicator */}
+                    <line
+                      x1={splitPreview.x * scale - 8}
+                      y1={splitPreview.y * scale - 8}
+                      x2={splitPreview.x * scale + 8}
+                      y2={splitPreview.y * scale + 8}
+                      stroke="white"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                    />
+                    <line
+                      x1={splitPreview.x * scale + 8}
+                      y1={splitPreview.y * scale - 8}
+                      x2={splitPreview.x * scale - 8}
+                      y2={splitPreview.y * scale + 8}
+                      stroke="white"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                    />
+                    {/* Label */}
+                    <rect
+                      x={splitPreview.x * scale - 30}
+                      y={splitPreview.y * scale + 20}
+                      width="60"
+                      height="20"
+                      rx="3"
+                      fill="#EF4444"
+                    />
+                    <text
+                      x={splitPreview.x * scale}
+                      y={splitPreview.y * scale + 34}
+                      fontSize="11"
+                      fill="white"
+                      textAnchor="middle"
+                      fontWeight="600"
+                    >
+                      Click to Split
+                    </text>
+                  </g>
+                )}
+
                 {/* Snap indicator during drawing/dragging */}
                 {snapIndicator && (
                   <circle

@@ -9,12 +9,12 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Arc Wall Feature COMPLETE ✅
+## Current Status: Arc Wall Feature + Junction Merging COMPLETE ✅
 **As of February 13, 2026**
 
-### Composer (SpatialBOQCanvas) - Arc Wall Drawing
+### Composer (SpatialBOQCanvas) - Arc Wall Drawing & Junction Merging
 
-Implemented curved/arc wall drawing capability with two input methods and full structural support.
+Implemented curved/arc wall drawing capability with two input methods, full structural support, AND seamless junction merging between arc and straight walls.
 
 | # | Feature | Description | Status |
 |---|---------|-------------|--------|
@@ -35,7 +35,10 @@ Implemented curved/arc wall drawing capability with two input methods and full s
 | 15 | **Arc Wall Translation** | Drag to move entire arc wall | ✅ |
 | 16 | **Arc Click Detection** | Click detection works for arc walls | ✅ |
 | 17 | **Arc Endpoint Dragging** | Drag endpoints to resize arc while maintaining curvature | ✅ |
-| 18 | **Arc-Straight Junction** | Detection and rendering of arc-to-straight connections | ✅ |
+| 18 | **Arc-Straight Junction Detection** | Detects when arc wall endpoint connects to straight wall endpoint | ✅ |
+| 19 | **Arc-Straight Junction Fill** | Fill polygon at junction for seamless visual merge | ✅ |
+| 20 | **Conditional End Cap Hiding** | Arc end caps hidden when connected to straight wall | ✅ |
+| 21 | **Chain Edge Skipping** | Straight wall end caps hidden at arc junctions | ✅ |
 
 **Arc Wall Technical Details:**
 - Two calculation functions: `calculateArcFromRadius()` and `calculateArcFromChordHeight()`
@@ -43,6 +46,13 @@ Implemented curved/arc wall drawing capability with two input methods and full s
 - SVG path generation: outer arc → end cap → inner arc (reversed) → start cap → close
 - Bulge direction determined by cross product of chord and mouse vectors
 - Arc wall properties stored: `is_arc`, `arc_radius`, `arc_chord_length`, `arc_chord_height`, `arc_center_x/y`, `arc_start/end_angle`, `arc_sweep_flag`, `arc_large_arc_flag`, `arc_bulge_direction`
+
+**Arc-Straight Junction Merging Technical Details:**
+- `arcStraightJunctions` memo: Detects connections within `CLOSURE_TOLERANCE` (200mm) and computes `fillPolygon` geometry
+- `isArcEndpointConnected()` helper: Checks if specific arc endpoint has junction
+- Junction fill polygon: Connects arc inner/outer points to straight wall corner points
+- Conditional rendering: End cap strokes skipped when `startConnected` or `endConnected` is true
+- Edge skipping in chain rendering: Filters out short edges near arc-straight junction points
 
 **Arc Wall UI:**
 - Located under Wall Tool dropdown (alongside Straight Wall, Rectangle, Square)

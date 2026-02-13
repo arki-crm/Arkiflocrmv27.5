@@ -1772,6 +1772,181 @@ export default function SpatialBOQCanvas() {
     return guides;
   }, []);
 
+  // ============================================
+  // ARC WALL CALCULATION UTILITIES
+  // ============================================
+  
+  // Calculate arc parameters from start, end, and radius
+  const calculateArcFromRadius = useCallback((startX, startY, endX, endY, radius, bulgeDirection = 1) => {
+    // Chord length (distance between start and end)
+    const chordLength = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+    
+    // If radius is too small to span the chord, adjust it
+    const minRadius = chordLength / 2;
+    const actualRadius = Math.max(radius, minRadius + 1);
+    
+    // Midpoint of chord
+    const midX = (startX + endX) / 2;
+    const midY = (startY + endY) / 2;
+    
+    // Distance from midpoint to center (perpendicular to chord)
+    const halfChord = chordLength / 2;
+    const distToCenter = Math.sqrt(actualRadius * actualRadius - halfChord * halfChord);
+    
+    // Direction perpendicular to chord
+    const chordDx = endX - startX;
+    const chordDy = endY - startY;
+    const perpX = -chordDy / chordLength;
+    const perpY = chordDx / chordLength;
+    
+    // Center point (bulgeDirection determines which side)
+    const centerX = midX + perpX * distToCenter * bulgeDirection;
+    const centerY = midY + perpY * distToCenter * bulgeDirection;
+    
+    // Calculate angles for SVG arc
+    const startAngle = Math.atan2(startY - centerY, startX - centerX);
+    const endAngle = Math.atan2(endY - centerY, endX - centerX);
+    
+    // Arc length
+    let angleDiff = endAngle - startAngle;
+    if (bulgeDirection > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+    if (bulgeDirection < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+    const arcLength = Math.abs(angleDiff * actualRadius);
+    
+    // Chord height (sagitta)
+    const chordHeight = actualRadius - distToCenter;
+    
+    // Determine sweep flag for SVG (0 = counter-clockwise, 1 = clockwise)
+    const sweepFlag = bulgeDirection > 0 ? 0 : 1;
+    
+    // Large arc flag (0 if arc < 180°, 1 if arc > 180°)
+    const largeArcFlag = Math.abs(angleDiff) > Math.PI ? 1 : 0;
+    
+    return {
+      startX, startY, endX, endY,
+      radius: actualRadius,
+      chordLength,
+      chordHeight,
+      arcLength,
+      centerX, centerY,
+      startAngle, endAngle,
+      sweepFlag,
+      largeArcFlag,
+      bulgeDirection
+    };
+  }, []);
+
+  // Calculate arc parameters from start, end, and chord height (string height)
+  const calculateArcFromChordHeight = useCallback((startX, startY, endX, endY, chordHeight, bulgeDirection = 1) => {
+    // Chord length (distance between start and end)
+    const chordLength = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+    
+    // Minimum chord height
+    const minChordHeight = 10; // 10mm minimum
+    const actualChordHeight = Math.max(chordHeight, minChordHeight);
+    
+    // Calculate radius from chord height: r = (h/2) + (c²/(8h))
+    // where h = chord height, c = chord length
+    const radius = (actualChordHeight / 2) + (chordLength * chordLength) / (8 * actualChordHeight);
+    
+    // Use the radius-based calculation
+    return calculateArcFromRadius(startX, startY, endX, endY, radius, bulgeDirection);
+  }, [calculateArcFromRadius]);
+
+  // Calculate arc wall boundaries (inner and outer curves for wall thickness)
+  const calculateArcWallBoundaries = useCallback((arcParams, thickness = DEFAULT_WALL_THICKNESS) => {
+    const { centerX, centerY, radius, startAngle, endAngle, sweepFlag, largeArcFlag, startX, startY, endX, endY } = arcParams;
+    const halfThickness = thickness / 2;
+    
+    // Inner and outer radii
+    const innerRadius = radius - halfThickness;
+    const outerRadius = radius + halfThickness;
+    
+    // Calculate inner arc points
+    const innerStartX = centerX + innerRadius * Math.cos(startAngle);
+    const innerStartY = centerY + innerRadius * Math.sin(startAngle);
+    const innerEndX = centerX + innerRadius * Math.cos(endAngle);
+    const innerEndY = centerY + innerRadius * Math.sin(endAngle);
+    
+    // Calculate outer arc points
+    const outerStartX = centerX + outerRadius * Math.cos(startAngle);
+    const outerStartY = centerY + outerRadius * Math.sin(startAngle);
+    const outerEndX = centerX + outerRadius * Math.cos(endAngle);
+    const outerEndY = centerY + outerRadius * Math.sin(endAngle);
+    
+    return {
+      inner: { startX: innerStartX, startY: innerStartY, endX: innerEndX, endY: innerEndY, radius: innerRadius },
+      outer: { startX: outerStartX, startY: outerStartY, endX: outerEndX, endY: outerEndY, radius: outerRadius },
+      sweepFlag,
+      largeArcFlag
+    };
+  }, []);
+
+  // Generate SVG path for arc wall with thickness
+  const generateArcWallPath = useCallback((arcParams, thickness = DEFAULT_WALL_THICKNESS) => {
+    const boundaries = calculateArcWallBoundaries(arcParams, thickness);
+    const { inner, outer, sweepFlag, largeArcFlag } = boundaries;
+    
+    // Create a closed path: outer arc → end cap → inner arc (reversed) → start cap
+    const path = [
+      `M ${outer.startX} ${outer.startY}`,
+      `A ${outer.radius} ${outer.radius} 0 ${largeArcFlag} ${sweepFlag} ${outer.endX} ${outer.endY}`,
+      `L ${inner.endX} ${inner.endY}`,
+      `A ${inner.radius} ${inner.radius} 0 ${largeArcFlag} ${1 - sweepFlag} ${inner.startX} ${inner.startY}`,
+      `Z`
+    ].join(' ');
+    
+    return path;
+  }, [calculateArcWallBoundaries]);
+
+  // Calculate tangent angle at a point on the arc (for door/window placement)
+  const getArcTangentAngle = useCallback((arcParams, positionRatio) => {
+    // positionRatio: 0 = start, 1 = end
+    const { centerX, centerY, startAngle, endAngle, bulgeDirection } = arcParams;
+    
+    let angleDiff = endAngle - startAngle;
+    if (bulgeDirection > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+    if (bulgeDirection < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+    
+    const angle = startAngle + angleDiff * positionRatio;
+    // Tangent is perpendicular to radius
+    const tangentAngle = angle + Math.PI / 2;
+    
+    return tangentAngle * (180 / Math.PI); // Return in degrees
+  }, []);
+
+  // Get point on arc at a specific position ratio (for door/window placement)
+  const getPointOnArc = useCallback((arcParams, positionRatio) => {
+    const { centerX, centerY, radius, startAngle, endAngle, bulgeDirection } = arcParams;
+    
+    let angleDiff = endAngle - startAngle;
+    if (bulgeDirection > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+    if (bulgeDirection < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+    
+    const angle = startAngle + angleDiff * positionRatio;
+    
+    return {
+      x: centerX + radius * Math.cos(angle),
+      y: centerY + radius * Math.sin(angle)
+    };
+  }, []);
+
+  // Determine bulge direction based on mouse position relative to chord
+  const calculateBulgeDirection = useCallback((startX, startY, endX, endY, mouseX, mouseY) => {
+    // Vector from start to end
+    const chordDx = endX - startX;
+    const chordDy = endY - startY;
+    
+    // Vector from start to mouse
+    const toMouseDx = mouseX - startX;
+    const toMouseDy = mouseY - startY;
+    
+    // Cross product determines which side of the chord the mouse is on
+    const crossProduct = chordDx * toMouseDy - chordDy * toMouseDx;
+    
+    return crossProduct >= 0 ? 1 : -1;
+  }, []);
+
   // Find connection suggestions - endpoints that the user might want to connect to
   // Shows dotted guidelines to help complete shapes
   const findConnectionSuggestions = useCallback((fromX, fromY, currentEndX, currentEndY) => {

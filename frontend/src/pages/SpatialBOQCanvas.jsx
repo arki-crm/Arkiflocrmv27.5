@@ -873,22 +873,26 @@ export default function SpatialBOQCanvas() {
       }
     }
     
-    if (allBoundaries.length === 0 && tJunctions.length === 0) {
+    // Combine regular T-junctions (3 walls at same vertex) with mid-span T-junctions
+    const allTJunctions = [...tJunctions, ...midSpanTJunctions];
+    
+    if (allBoundaries.length === 0 && allTJunctions.length === 0) {
       return null;
     }
     
     // Debug: Log T-junction detection
-    if (tJunctions.length > 0) {
-      console.log('[T-Junction] Detected', tJunctions.length, 'T-junction(s)');
-      tJunctions.forEach((tj, i) => {
-        console.log(`  T-Junction ${i}: at (${tj.x}, ${tj.y}), stem wall: ${tj.stemWall?.wall_id}, through thickness: ${tj.throughThickness}`);
+    if (allTJunctions.length > 0) {
+      console.log('[T-Junction] Detected', allTJunctions.length, 'T-junction(s) total');
+      allTJunctions.forEach((tj, i) => {
+        const type = tj.isMidSpan ? 'mid-span' : 'vertex';
+        console.log(`  T-Junction ${i} (${type}): at (${tj.x?.toFixed(0)}, ${tj.y?.toFixed(0)}), stem: ${tj.stemWall?.wall_id}`);
       });
     }
 
     return {
       loops: loopBoundaries,
       chains: chainBoundaries,
-      tJunctions: tJunctions,
+      tJunctions: allTJunctions,
       allWallIds: allBoundaries.flatMap(b => b.wallIds)
     };
   }, [layout?.walls]);

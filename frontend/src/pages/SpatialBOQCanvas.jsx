@@ -3828,7 +3828,7 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
-                {/* Coohom-style: Green dashed alignment guides */}
+                {/* Guided lines for straight drawing - shows when approaching horizontal/vertical */}
                 {alignmentGuides.map((guide, index) => (
                   <line
                     key={`guide-${index}`}
@@ -3836,10 +3836,10 @@ export default function SpatialBOQCanvas() {
                     y1={guide.type === 'horizontal' ? guide.y * scale : guide.y1 * scale}
                     x2={guide.type === 'vertical' ? guide.x * scale : guide.x2 * scale}
                     y2={guide.type === 'horizontal' ? guide.y * scale : guide.y2 * scale}
-                    stroke="#22C55E"
-                    strokeWidth="1"
-                    strokeDasharray="8,4"
-                    strokeOpacity="0.9"
+                    stroke={guide.isLocked ? '#22C55E' : '#F59E0B'}
+                    strokeWidth={guide.isLocked ? 2 : 1}
+                    strokeDasharray={guide.isLocked ? '0' : '8,4'}
+                    strokeOpacity={guide.isLocked ? 1 : 0.7}
                   />
                 ))}
 

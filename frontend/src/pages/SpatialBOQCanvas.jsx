@@ -3313,7 +3313,73 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
-                {/* Individual Walls - Only render walls NOT part of any unified boundary loop */}
+                {/* ============================================
+                    OPEN WALL CHAIN RENDERING
+                    Renders connected walls with proper miter joins
+                    even when they don't form a closed loop
+                   ============================================ */}
+                {unifiedBoundary && unifiedBoundary.chains && unifiedBoundary.chains.map((chain, chainIndex) => {
+                  const { outline, wallIds } = chain;
+                  
+                  if (!outline || outline.length < 3) return null;
+                  
+                  const isAnyWallSelected = wallIds.some(wid => 
+                    selectedItem?.type === 'wall' && selectedItem.item.wall_id === wid
+                  );
+                  
+                  // Get walls in this chain for dimension labels
+                  const chainWalls = layout?.walls?.filter(w => wallIds.includes(w.wall_id)) || [];
+                  
+                  const pointsStr = outline.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
+                  
+                  return (
+                    <g key={`chain-${chainIndex}`}>
+                      {/* Chain fill with proper miter corners */}
+                      <polygon
+                        points={pointsStr}
+                        fill={isAnyWallSelected ? '#93c5fd' : '#B0B0B0'}
+                        stroke="#000000"
+                        strokeWidth="0.5"
+                        strokeLinejoin="miter"
+                        style={{ cursor: 'move' }}
+                      />
+                      {/* Dimension labels for walls in this chain */}
+                      {chainWalls.map(wall => {
+                        const midX = (wall.start_x + wall.end_x) / 2;
+                        const midY = (wall.start_y + wall.end_y) / 2;
+                        const dx = wall.end_x - wall.start_x;
+                        const dy = wall.end_y - wall.start_y;
+                        const len = Math.sqrt(dx * dx + dy * dy);
+                        
+                        const perpX = len > 0 ? -dy / len : 0;
+                        const perpY = len > 0 ? dx / len : 0;
+                        const labelOffset = (wall.thickness || DEFAULT_WALL_THICKNESS) / 2 + 15;
+                        
+                        return (
+                          <text
+                            key={`dim-chain-${wall.wall_id}`}
+                            x={(midX + perpX * labelOffset) * scale}
+                            y={(midY + perpY * labelOffset) * scale}
+                            fontSize="10"
+                            fill="#4A5568"
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            fontWeight="500"
+                            style={{ cursor: 'pointer' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startDimensionEdit(wall.wall_id, wall.length);
+                            }}
+                          >
+                            {wall.length}mm
+                          </text>
+                        );
+                      })}
+                    </g>
+                  );
+                })}
+
+                {/* Individual Walls - Only render walls NOT part of any unified boundary */}
                 {layout?.walls?.map(wall => {
                   // Skip if this wall is part of a unified boundary
                   if (unifiedBoundary?.allWallIds?.includes(wall.wall_id)) {

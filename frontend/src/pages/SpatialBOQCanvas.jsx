@@ -5069,34 +5069,83 @@ export default function SpatialBOQCanvas() {
                 ))}
 
                 {/* ============================================
-                   PROJECTED INTERSECTION INDICATOR
+                   PROJECTED INTERSECTION INDICATOR (HIGH Z-INDEX)
                    Shows where the wall being drawn will intersect existing walls
                    BEFORE the cursor reaches the intersection point
+                   Rendered LAST for maximum visibility
                    ============================================ */}
-                {(wallClickMode === 'waiting_end' || isDrawing) && projectedIntersections.length > 0 && (
-                  <g>
-                    {projectedIntersections.slice(0, 3).map((intersection, idx) => (
+                {(wallClickMode === 'waiting_end' || isDrawing) && projectedIntersections.length > 0 && tempWall && (
+                  <g style={{ zIndex: 9999 }}>
+                    {projectedIntersections.slice(0, 2).map((intersection, idx) => (
                       <g key={`proj-intersection-${idx}`}>
-                        {/* Green dashed crosshair at intersection point */}
-                        {/* Horizontal crosshair line */}
+                        {/* Dashed projection line from cursor to intersection point */}
+                        {idx === 0 && (
+                          <line
+                            x1={tempWall.end.x * scale}
+                            y1={tempWall.end.y * scale}
+                            x2={intersection.x * scale}
+                            y2={intersection.y * scale}
+                            stroke="#22C55E"
+                            strokeWidth="1.5"
+                            strokeDasharray="8,4"
+                            strokeOpacity="0.6"
+                          />
+                        )}
+                        
+                        {/* Extended alignment guides at intersection */}
+                        {/* Horizontal guide */}
                         <line
-                          x1={intersection.x * scale - 15}
+                          x1={0}
                           y1={intersection.y * scale}
-                          x2={intersection.x * scale + 15}
+                          x2={canvasSize.width}
                           y2={intersection.y * scale}
                           stroke="#22C55E"
-                          strokeWidth="2"
-                          strokeOpacity={idx === 0 ? 1 : 0.5}
+                          strokeWidth="1"
+                          strokeDasharray="6,4"
+                          strokeOpacity={idx === 0 ? 0.5 : 0.3}
+                        />
+                        {/* Vertical guide */}
+                        <line
+                          x1={intersection.x * scale}
+                          y1={0}
+                          x2={intersection.x * scale}
+                          y2={canvasSize.height}
+                          stroke="#22C55E"
+                          strokeWidth="1"
+                          strokeDasharray="6,4"
+                          strokeOpacity={idx === 0 ? 0.5 : 0.3}
+                        />
+                        
+                        {/* Large crosshair at intersection point */}
+                        {/* Horizontal crosshair line */}
+                        <line
+                          x1={intersection.x * scale - 20}
+                          y1={intersection.y * scale}
+                          x2={intersection.x * scale + 20}
+                          y2={intersection.y * scale}
+                          stroke="#22C55E"
+                          strokeWidth="3"
+                          strokeOpacity={idx === 0 ? 1 : 0.6}
                         />
                         {/* Vertical crosshair line */}
                         <line
                           x1={intersection.x * scale}
-                          y1={intersection.y * scale - 15}
+                          y1={intersection.y * scale - 20}
                           x2={intersection.x * scale}
-                          y2={intersection.y * scale + 15}
+                          y2={intersection.y * scale + 20}
+                          stroke="#22C55E"
+                          strokeWidth="3"
+                          strokeOpacity={idx === 0 ? 1 : 0.6}
+                        />
+                        {/* Outer ring */}
+                        <circle
+                          cx={intersection.x * scale}
+                          cy={intersection.y * scale}
+                          r={idx === 0 ? 12 : 8}
+                          fill="none"
                           stroke="#22C55E"
                           strokeWidth="2"
-                          strokeOpacity={idx === 0 ? 1 : 0.5}
+                          strokeOpacity={idx === 0 ? 0.8 : 0.5}
                         />
                         {/* Center target dot */}
                         <circle
@@ -5104,20 +5153,31 @@ export default function SpatialBOQCanvas() {
                           cy={intersection.y * scale}
                           r={idx === 0 ? 5 : 3}
                           fill="#22C55E"
-                          fillOpacity={idx === 0 ? 1 : 0.6}
+                          fillOpacity={idx === 0 ? 1 : 0.7}
                         />
-                        {/* "Intersection" label for the nearest one */}
+                        
+                        {/* "Intersection" label with background for visibility */}
                         {idx === 0 && (
-                          <text
-                            x={intersection.x * scale}
-                            y={intersection.y * scale + 25}
-                            fontSize="11"
-                            fill="#22C55E"
-                            textAnchor="middle"
-                            fontWeight="500"
-                          >
-                            Intersection
-                          </text>
+                          <>
+                            <rect
+                              x={intersection.x * scale - 42}
+                              y={intersection.y * scale + 18}
+                              width="84"
+                              height="18"
+                              rx="3"
+                              fill="rgba(34, 197, 94, 0.9)"
+                            />
+                            <text
+                              x={intersection.x * scale}
+                              y={intersection.y * scale + 31}
+                              fontSize="11"
+                              fill="white"
+                              textAnchor="middle"
+                              fontWeight="600"
+                            >
+                              Intersection
+                            </text>
+                          </>
                         )}
                       </g>
                     ))}

@@ -2688,8 +2688,10 @@ export default function SpatialBOQCanvas() {
         setTempRectWalls({ start: startPoint, end: startPoint });
       } else if (wallDrawMode === 'arc') {
         // Arc wall mode - use drag drawing like rectangle/square
+        // NOTE: State updates are async, so for arc mode we need special handling
         console.log('[ArcInit] Setting up arc wall drawing');
         setIsDrawing(true);
+        setDrawStart(startPoint); // This needs to be set here too for immediate use
         // Initialize temp arc wall with zero chord length
         const initialArc = {
           startX: startPoint.x,

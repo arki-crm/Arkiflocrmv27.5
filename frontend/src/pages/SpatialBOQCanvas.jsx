@@ -504,6 +504,93 @@ export default function SpatialBOQCanvas() {
       vertices.get(endKey).walls.push({ wall, isStart: false, otherKey: startKey });
     }
 
+    // ============================================
+    // MID-SPAN T-JUNCTION DETECTION
+    // Detect when a wall endpoint lies on the middle of another wall
+    // ============================================
+    const midSpanTJunctions = [];
+    const T_JUNCTION_DIST_THRESHOLD = 50; // mm - how close endpoint must be to wall line
+    
+    for (const stemWall of walls) {
+      // Check both endpoints of the stem wall
+      for (const isStart of [true, false]) {
+        const endpointX = isStart ? stemWall.start_x : stemWall.end_x;
+        const endpointY = isStart ? stemWall.start_y : stemWall.end_y;
+        
+        // Check against all other walls
+        for (const throughWall of walls) {
+          if (throughWall.wall_id === stemWall.wall_id) continue;
+          
+          // Check if endpoint is at either endpoint of the through wall (not mid-span)
+          const atThroughStart = Math.abs(endpointX - throughWall.start_x) < tolerance && 
+                                 Math.abs(endpointY - throughWall.start_y) < tolerance;
+          const atThroughEnd = Math.abs(endpointX - throughWall.end_x) < tolerance && 
+                               Math.abs(endpointY - throughWall.end_y) < tolerance;
+          
+          if (atThroughStart || atThroughEnd) continue; // Not mid-span
+          
+          // Calculate distance from endpoint to through-wall line segment
+          const twDx = throughWall.end_x - throughWall.start_x;
+          const twDy = throughWall.end_y - throughWall.start_y;
+          const twLen = Math.sqrt(twDx * twDx + twDy * twDy);
+          
+          if (twLen < 10) continue;
+          
+          // Project endpoint onto through-wall line
+          const toEndpointX = endpointX - throughWall.start_x;
+          const toEndpointY = endpointY - throughWall.start_y;
+          const t = (toEndpointX * twDx + toEndpointY * twDy) / (twLen * twLen);
+          
+          // Check if projection is within the wall segment (not at endpoints)
+          if (t < 0.05 || t > 0.95) continue;
+          
+          // Calculate closest point on wall
+          const closestX = throughWall.start_x + t * twDx;
+          const closestY = throughWall.start_y + t * twDy;
+          
+          // Distance from endpoint to closest point on wall
+          const dist = Math.sqrt(
+            (endpointX - closestX) * (endpointX - closestX) + 
+            (endpointY - closestY) * (endpointY - closestY)
+          );
+          
+          if (dist < T_JUNCTION_DIST_THRESHOLD) {
+            // Found a mid-span T-junction!
+            const throughThickness = throughWall.thickness || DEFAULT_WALL_THICKNESS;
+            const stemThickness = stemWall.thickness || DEFAULT_WALL_THICKNESS;
+            
+            // Get stem direction (away from through wall)
+            const stemOtherX = isStart ? stemWall.end_x : stemWall.start_x;
+            const stemOtherY = isStart ? stemWall.end_y : stemWall.start_y;
+            const stemDx = stemOtherX - endpointX;
+            const stemDy = stemOtherY - endpointY;
+            const stemLen = Math.sqrt(stemDx * stemDx + stemDy * stemDy);
+            
+            // Through wall direction (normalized)
+            const throughDirX = twDx / twLen;
+            const throughDirY = twDy / twLen;
+            
+            midSpanTJunctions.push({
+              x: closestX, // Use the closest point on through wall as junction point
+              y: closestY,
+              throughWall: throughWall,
+              throughWallIds: [throughWall.wall_id],
+              stemWall: stemWall,
+              throughThickness: throughThickness,
+              stemThickness: stemThickness,
+              stemDirX: stemLen > 0 ? stemDx / stemLen : 0,
+              stemDirY: stemLen > 0 ? stemDy / stemLen : 0,
+              throughDirX: throughDirX,
+              throughDirY: throughDirY,
+              isMidSpan: true
+            });
+            
+            console.log(`[T-Junction] Mid-span detected: stem ${stemWall.wall_id} connects to ${throughWall.wall_id} at (${closestX.toFixed(0)}, ${closestY.toFixed(0)})`);
+          }
+        }
+      }
+    }
+
     // Find all closed loops by looking for cycles in the graph
     const closedLoops = [];
     const processedWalls = new Set();

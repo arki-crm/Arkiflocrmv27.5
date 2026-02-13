@@ -3572,6 +3572,7 @@ export default function SpatialBOQCanvas() {
     setTempWall(null);
     setTempRectWalls(null);
     setTempArcWall(null);
+    arcDrawingRef.current = { isDrawing: false, startPoint: null }; // Clear arc drawing ref
     setIsDragging(false);
     setDragStart(null);
     setDragType(null);

@@ -3849,51 +3849,95 @@ export default function SpatialBOQCanvas() {
                 })()}
 
                 {/* ============================================
-                   T-JUNCTION FILL PATCHES
-                   Renders fill rectangles at all junction points BEFORE walls
-                   to close gaps where walls meet
+                   T-JUNCTION PROPER RENDERING
+                   Renders T-junctions as unified shapes where the stem wall
+                   seamlessly merges into the through wall (like Coohom)
                    ============================================ */}
-                {layout?.walls && layout.walls.length > 0 && (() => {
-                  const tolerance = 20;
-                  const coordKey = (x, y) => `${Math.round(x/tolerance)*tolerance}_${Math.round(y/tolerance)*tolerance}`;
-                  const vertexMap = new Map();
+                {unifiedBoundary?.tJunctions?.map((tj, tjIndex) => {
+                  const { x: jx, y: jy, throughWalls, stemWall, throughThickness } = tj;
+                  if (!stemWall || throughWalls.length < 2) return null;
                   
-                  for (const wall of layout.walls) {
-                    const startKey = coordKey(wall.start_x, wall.start_y);
-                    const endKey = coordKey(wall.end_x, wall.end_y);
-                    
-                    if (!vertexMap.has(startKey)) {
-                      vertexMap.set(startKey, { x: wall.start_x, y: wall.start_y, thicknesses: [] });
-                    }
-                    vertexMap.get(startKey).thicknesses.push(wall.thickness || DEFAULT_WALL_THICKNESS);
-                    
-                    if (!vertexMap.has(endKey)) {
-                      vertexMap.set(endKey, { x: wall.end_x, y: wall.end_y, thicknesses: [] });
-                    }
-                    vertexMap.get(endKey).thicknesses.push(wall.thickness || DEFAULT_WALL_THICKNESS);
-                  }
+                  const stemThickness = stemWall.thickness || DEFAULT_WALL_THICKNESS;
+                  const halfThroughThickness = throughThickness / 2;
+                  const halfStemThickness = stemThickness / 2;
                   
-                  const patches = [];
-                  for (const [key, vertex] of vertexMap) {
-                    if (vertex.thicknesses.length >= 2) {
-                      const maxThickness = Math.max(...vertex.thicknesses);
-                      const patchSize = maxThickness / 2 + 5;
-                      
-                      patches.push(
-                        <rect
-                          key={`junction-fill-${key}`}
-                          x={(vertex.x - patchSize) * scale}
-                          y={(vertex.y - patchSize) * scale}
-                          width={patchSize * 2 * scale}
-                          height={patchSize * 2 * scale}
-                          fill="#B0B0B0"
-                          stroke="none"
-                        />
-                      );
-                    }
-                  }
-                  return patches;
-                })()}
+                  // Find the "other end" of the stem wall (the end not at the junction)
+                  const stemAtJunctionIsStart = 
+                    Math.abs(stemWall.start_x - jx) < 50 && Math.abs(stemWall.start_y - jy) < 50;
+                  const stemOtherX = stemAtJunctionIsStart ? stemWall.end_x : stemWall.start_x;
+                  const stemOtherY = stemAtJunctionIsStart ? stemWall.end_y : stemWall.start_y;
+                  
+                  // Stem direction vector (from junction toward other end)
+                  const stemDx = stemOtherX - jx;
+                  const stemDy = stemOtherY - jy;
+                  const stemLen = Math.sqrt(stemDx * stemDx + stemDy * stemDy);
+                  if (stemLen < 10) return null;
+                  
+                  const stemDirX = stemDx / stemLen;
+                  const stemDirY = stemDy / stemLen;
+                  
+                  // Perpendicular to stem (for stem wall thickness)
+                  const stemPerpX = -stemDirY;
+                  const stemPerpY = stemDirX;
+                  
+                  // The stem wall should START at the inner edge of the through wall
+                  // (offset from junction by half through-wall thickness)
+                  const stemStartX = jx + stemDirX * halfThroughThickness;
+                  const stemStartY = jy + stemDirY * halfThroughThickness;
+                  
+                  // Build the T-junction stem polygon
+                  // The 4 corners of the stem, starting from the through-wall inner edge
+                  const stemCorners = [
+                    // Start-left corner (at through-wall inner edge)
+                    { x: stemStartX + stemPerpX * halfStemThickness, y: stemStartY + stemPerpY * halfStemThickness },
+                    // End-left corner
+                    { x: stemOtherX + stemPerpX * halfStemThickness, y: stemOtherY + stemPerpY * halfStemThickness },
+                    // End-right corner
+                    { x: stemOtherX - stemPerpX * halfStemThickness, y: stemOtherY - stemPerpY * halfStemThickness },
+                    // Start-right corner (at through-wall inner edge)
+                    { x: stemStartX - stemPerpX * halfStemThickness, y: stemStartY - stemPerpY * halfStemThickness }
+                  ];
+                  
+                  // Now create the T-junction fill polygon that fills the gap
+                  // This is a rectangle from the through-wall outer edge to inner edge
+                  const tJunctionFillCorners = [
+                    // Through-wall outer edge, left side of stem
+                    { x: jx - stemDirX * halfThroughThickness + stemPerpX * halfStemThickness, 
+                      y: jy - stemDirY * halfThroughThickness + stemPerpY * halfStemThickness },
+                    // Through-wall inner edge, left side of stem
+                    { x: stemStartX + stemPerpX * halfStemThickness, y: stemStartY + stemPerpY * halfStemThickness },
+                    // Through-wall inner edge, right side of stem
+                    { x: stemStartX - stemPerpX * halfStemThickness, y: stemStartY - stemPerpY * halfStemThickness },
+                    // Through-wall outer edge, right side of stem
+                    { x: jx - stemDirX * halfThroughThickness - stemPerpX * halfStemThickness, 
+                      y: jy - stemDirY * halfThroughThickness - stemPerpY * halfStemThickness }
+                  ];
+                  
+                  const stemPointsStr = stemCorners.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
+                  const fillPointsStr = tJunctionFillCorners.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
+                  
+                  const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === stemWall.wall_id;
+                  const fillColor = isSelected ? '#93c5fd' : '#B0B0B0';
+                  
+                  return (
+                    <g key={`tjunction-${tjIndex}`}>
+                      {/* T-junction fill - connects through-wall to stem */}
+                      <polygon
+                        points={fillPointsStr}
+                        fill={fillColor}
+                        stroke="none"
+                      />
+                      {/* Stem wall body (shortened to start at through-wall inner edge) */}
+                      <polygon
+                        points={stemPointsStr}
+                        fill={fillColor}
+                        stroke="#000000"
+                        strokeWidth="0.5"
+                        strokeLinejoin="miter"
+                      />
+                    </g>
+                  );
+                })}
 
                 {/* ============================================
                     UNIFIED WALL BOUNDARY RENDERING ENGINE

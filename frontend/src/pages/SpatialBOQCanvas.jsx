@@ -3626,6 +3626,67 @@ export default function SpatialBOQCanvas() {
     }
   };
 
+  // Update arc wall position (translate whole arc)
+  const updateArcWallPosition = (wallId, updates) => {
+    setLayout(prev => ({
+      ...prev,
+      walls: prev.walls.map(w => {
+        if (w.wall_id !== wallId || !w.is_arc) return w;
+        return { ...w, ...updates };
+      })
+    }));
+    setHasChanges(true);
+
+    if (selectedItem?.item?.wall_id === wallId) {
+      setSelectedItem(prev => ({ ...prev, item: { ...prev.item, ...updates } }));
+    }
+  };
+
+  // Update arc wall curvature (recalculate from new parameters)
+  const updateArcWall = (wallId, arcParams) => {
+    setLayout(prev => ({
+      ...prev,
+      walls: prev.walls.map(w => {
+        if (w.wall_id !== wallId || !w.is_arc) return w;
+        return {
+          ...w,
+          arc_radius: arcParams.radius,
+          arc_chord_length: arcParams.chordLength,
+          arc_chord_height: arcParams.chordHeight,
+          arc_center_x: arcParams.centerX,
+          arc_center_y: arcParams.centerY,
+          arc_start_angle: arcParams.startAngle,
+          arc_end_angle: arcParams.endAngle,
+          arc_sweep_flag: arcParams.sweepFlag,
+          arc_large_arc_flag: arcParams.largeArcFlag,
+          arc_bulge_direction: arcParams.bulgeDirection,
+          length: Math.round(arcParams.arcLength)
+        };
+      })
+    }));
+    setHasChanges(true);
+
+    if (selectedItem?.item?.wall_id === wallId) {
+      setSelectedItem(prev => ({
+        ...prev,
+        item: {
+          ...prev.item,
+          arc_radius: arcParams.radius,
+          arc_chord_length: arcParams.chordLength,
+          arc_chord_height: arcParams.chordHeight,
+          arc_center_x: arcParams.centerX,
+          arc_center_y: arcParams.centerY,
+          arc_start_angle: arcParams.startAngle,
+          arc_end_angle: arcParams.endAngle,
+          arc_sweep_flag: arcParams.sweepFlag,
+          arc_large_arc_flag: arcParams.largeArcFlag,
+          arc_bulge_direction: arcParams.bulgeDirection,
+          length: Math.round(arcParams.arcLength)
+        }
+      }));
+    }
+  };
+
   // Update wall (legacy - for length edits)
   const updateWall = (wallId, updates) => {
     setLayout(prev => ({

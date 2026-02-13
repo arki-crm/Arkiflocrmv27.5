@@ -2835,7 +2835,9 @@ export default function SpatialBOQCanvas() {
     const canvas = screenToCanvas(e.clientX, e.clientY);
 
     // Coohom-style wall drawing with real-time dimension display
-    if ((wallClickMode === 'waiting_end' || isDrawing) && tool === 'wall') {
+    if ((wallClickMode === 'waiting_end' || isDrawing) && tool === 'wall' && drawStart) {
+      console.log('[ArcDebug] Drawing mode active, wallDrawMode:', wallDrawMode, 'isDrawing:', isDrawing, 'drawStart:', drawStart);
+      
       // First snap to endpoints, then grid
       const snapResult = findSnapPoint(canvas.x, canvas.y);
       let endPoint = { x: snapResult.x, y: snapResult.y };

@@ -3140,6 +3140,14 @@ export default function SpatialBOQCanvas() {
             setHasChanges(true);
           }
         }
+      } else if (wallDrawMode === 'arc' && tempArcWall) {
+        // Create arc wall
+        if (tempArcWall.chordLength > 100) {
+          const newArcWall = createArcWall(tempArcWall);
+          setLayout(prev => ({ ...prev, walls: [...prev.walls, newArcWall] }));
+          setHasChanges(true);
+          toast.success(`Arc wall created: ${Math.round(tempArcWall.arcLength)}mm arc length`);
+        }
       } else if (tempWall && tempWall.length > 100) {
         const newWall = createWall(tempWall.start.x, tempWall.start.y, tempWall.end.x, tempWall.end.y);
         setLayout(prev => ({ ...prev, walls: [...prev.walls, newWall] }));
@@ -3150,6 +3158,7 @@ export default function SpatialBOQCanvas() {
     setIsDrawing(false);
     setTempWall(null);
     setTempRectWalls(null);
+    setTempArcWall(null);
     setIsDragging(false);
     setDragStart(null);
     setDragType(null);

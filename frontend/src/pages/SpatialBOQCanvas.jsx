@@ -2843,8 +2843,14 @@ export default function SpatialBOQCanvas() {
     const canvas = screenToCanvas(e.clientX, e.clientY);
 
     // Coohom-style wall drawing with real-time dimension display
-    if ((wallClickMode === 'waiting_end' || isDrawing) && tool === 'wall' && drawStart) {
-      console.log('[ArcDebug] Drawing mode active, wallDrawMode:', wallDrawMode, 'isDrawing:', isDrawing, 'drawStart:', drawStart);
+    // For arc mode, also check tempArcWall since state updates are async
+    const shouldProcessWallDrawing = (wallClickMode === 'waiting_end' || isDrawing || (wallDrawMode === 'arc' && tempArcWall)) && tool === 'wall';
+    
+    if (shouldProcessWallDrawing && (drawStart || tempArcWall)) {
+      const effectiveDrawStart = drawStart || (tempArcWall ? { x: tempArcWall.startX, y: tempArcWall.startY } : null);
+      if (!effectiveDrawStart) return;
+      
+      console.log('[ArcDebug] Drawing mode active, wallDrawMode:', wallDrawMode, 'isDrawing:', isDrawing, 'tempArcWall:', !!tempArcWall);
       
       // First snap to endpoints, then grid
       const snapResult = findSnapPoint(canvas.x, canvas.y);
@@ -2852,13 +2858,13 @@ export default function SpatialBOQCanvas() {
       
       // ALWAYS show alignment guides to help draw straight lines (except for arc mode)
       if (wallDrawMode !== 'arc') {
-        const guides = findAlignmentGuides(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
+        const guides = findAlignmentGuides(effectiveDrawStart.x, effectiveDrawStart.y, endPoint.x, endPoint.y);
         setAlignmentGuides(guides);
       }
       
       // Apply ortho constraint if enabled (Coohom default behavior) - NOT for arc mode
       if ((orthoMode || shiftKeyHeld) && wallDrawMode !== 'arc') {
-        const orthoResult = applyOrthogonalConstraint(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
+        const orthoResult = applyOrthogonalConstraint(effectiveDrawStart.x, effectiveDrawStart.y, endPoint.x, endPoint.y);
         endPoint = { x: orthoResult.x, y: orthoResult.y };
       }
       

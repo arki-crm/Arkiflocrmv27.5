@@ -1103,12 +1103,25 @@ export default function SpatialBOQCanvas() {
       if (e.code === 'Space') {
         setSpacePressed(false);
       }
+      // CAD Enhancement: Release orthogonal lock on Shift release
+      if (e.key === 'Shift') {
+        setShiftKeyHeld(false);
+      }
+    };
+
+    // CAD Enhancement: Track Shift key for orthogonal constraint
+    const handleShiftDown = (e) => {
+      if (e.key === 'Shift') {
+        setShiftKeyHeld(true);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleShiftDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleShiftDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [selectedItem, layout, scale, zoomAtCursor, resetZoomToFit, handleUndo, handleRedo, isDrawing, isDragging, editingDimension]);

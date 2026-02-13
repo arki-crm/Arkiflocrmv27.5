@@ -3975,65 +3975,71 @@ export default function SpatialBOQCanvas() {
                    T-JUNCTION UNIFIED GEOMETRY RENDERING
                    Computes boolean union of through-wall and stem-wall polygons
                    to create seamless merged geometry (like Coohom)
+                   Handles both vertex T-junctions (3 walls at point) and
+                   mid-span T-junctions (wall endpoint on another wall's middle)
                    ============================================ */}
                 {unifiedBoundary?.tJunctions?.map((tj, tjIndex) => {
-                  const { x: jx, y: jy, throughWalls, stemWall, throughThickness } = tj;
-                  if (!stemWall || throughWalls.length < 2) return null;
+                  const { x: jx, y: jy, stemWall, throughThickness, isMidSpan } = tj;
+                  if (!stemWall) return null;
+                  
+                  // For mid-span T-junctions, throughWall is single; for vertex T-junctions, throughWalls is array
+                  const throughWall = tj.throughWall || (tj.throughWalls && tj.throughWalls[0]);
+                  if (!throughWall && !tj.throughWalls) return null;
                   
                   const stemThickness = stemWall.thickness || DEFAULT_WALL_THICKNESS;
-                  const halfThroughThickness = throughThickness / 2;
+                  const effectiveThroughThickness = throughThickness || DEFAULT_WALL_THICKNESS;
+                  const halfThroughThickness = effectiveThroughThickness / 2;
                   const halfStemThickness = stemThickness / 2;
                   
-                  // Find the "other end" of the stem wall (the end not at the junction)
+                  // Use pre-calculated directions if available, otherwise calculate
+                  let stemDirX = tj.stemDirX;
+                  let stemDirY = tj.stemDirY;
+                  let throughDirX = tj.throughDirX;
+                  let throughDirY = tj.throughDirY;
+                  
+                  if (stemDirX === undefined || stemDirY === undefined) {
+                    // Calculate stem direction
+                    const stemAtJunctionIsStart = 
+                      Math.abs(stemWall.start_x - jx) < 50 && Math.abs(stemWall.start_y - jy) < 50;
+                    const stemOtherX = stemAtJunctionIsStart ? stemWall.end_x : stemWall.start_x;
+                    const stemOtherY = stemAtJunctionIsStart ? stemWall.end_y : stemWall.start_y;
+                    const stemDx = stemOtherX - jx;
+                    const stemDy = stemOtherY - jy;
+                    const stemLen = Math.sqrt(stemDx * stemDx + stemDy * stemDy);
+                    if (stemLen < 10) return null;
+                    stemDirX = stemDx / stemLen;
+                    stemDirY = stemDy / stemLen;
+                  }
+                  
+                  if (throughDirX === undefined || throughDirY === undefined) {
+                    // Calculate through wall direction
+                    const tw = throughWall || tj.throughWalls[0];
+                    const twDx = tw.end_x - tw.start_x;
+                    const twDy = tw.end_y - tw.start_y;
+                    const twLen = Math.sqrt(twDx * twDx + twDy * twDy);
+                    throughDirX = twLen > 0 ? twDx / twLen : 1;
+                    throughDirY = twLen > 0 ? twDy / twLen : 0;
+                  }
+                  
+                  // Find the other end of the stem wall
                   const stemAtJunctionIsStart = 
                     Math.abs(stemWall.start_x - jx) < 50 && Math.abs(stemWall.start_y - jy) < 50;
                   const stemOtherX = stemAtJunctionIsStart ? stemWall.end_x : stemWall.start_x;
                   const stemOtherY = stemAtJunctionIsStart ? stemWall.end_y : stemWall.start_y;
                   
-                  // Stem direction vector (from junction toward other end)
-                  const stemDx = stemOtherX - jx;
-                  const stemDy = stemOtherY - jy;
-                  const stemLen = Math.sqrt(stemDx * stemDx + stemDy * stemDy);
-                  if (stemLen < 10) return null;
-                  
-                  const stemDirX = stemDx / stemLen;
-                  const stemDirY = stemDy / stemLen;
-                  
                   // Perpendicular to stem (for stem wall thickness)
                   const stemPerpX = -stemDirY;
                   const stemPerpY = stemDirX;
-                  
-                  // Get through wall direction
-                  const tw1 = throughWalls[0];
-                  const tw1Dx = tw1.end_x - tw1.start_x;
-                  const tw1Dy = tw1.end_y - tw1.start_y;
-                  const tw1Len = Math.sqrt(tw1Dx * tw1Dx + tw1Dy * tw1Dy);
-                  const throughDirX = tw1Len > 0 ? tw1Dx / tw1Len : 1;
-                  const throughDirY = tw1Len > 0 ? tw1Dy / tw1Len : 0;
                   
                   // Through wall perpendicular (points toward one side)
                   const throughPerpX = -throughDirY;
                   const throughPerpY = throughDirX;
                   
                   // Determine which side of through-wall the stem is on
-                  // (dot product of stem direction with through perpendicular)
                   const stemSide = stemDirX * throughPerpX + stemDirY * throughPerpY;
                   const sideSign = stemSide > 0 ? 1 : -1;
                   
-                  // Build unified T-junction polygon (merged through + stem)
-                  // This creates a single polygon with no overlap
-                  // 
-                  // The shape looks like a "T" rotated appropriately:
-                  //   ┌─────────────────────────┐  <- through outer edge
-                  //   │     ┌───────────┐       │  <- stem connects here
-                  //   │     │           │       │
-                  //   │     │   STEM    │       │
-                  //   │     │           │       │
-                  //   │     └───────────┘       │
-                  //   └─────────────────────────┘  <- through inner edge (with notch)
-                  
-                  // For the stem wall polygon that connects to through wall
-                  // Start from through-wall outer edge on stem's side
+                  // Build the stem wall polygon that connects to through wall outer edge
                   const stemPolygon = [
                     // Point 1: Where stem left edge meets through-wall outer edge
                     { 

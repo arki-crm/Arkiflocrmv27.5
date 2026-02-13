@@ -498,7 +498,13 @@ export default function SpatialBOQCanvas() {
       return null;
     }
 
-    const walls = layout.walls;
+    // Filter out arc walls - they are rendered separately and don't participate in unified boundary
+    const walls = layout.walls.filter(w => !w.is_arc);
+    
+    if (walls.length === 0) {
+      return null;
+    }
+    
     const tolerance = CLOSURE_TOLERANCE;
 
     // Build adjacency graph from wall endpoints

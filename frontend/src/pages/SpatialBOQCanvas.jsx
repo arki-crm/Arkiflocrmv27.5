@@ -4513,6 +4513,28 @@ export default function SpatialBOQCanvas() {
                   );
                 })()}
 
+                {/* Split markers - dotted lines showing where walls were split */}
+                {splitMarkers.map((marker, idx) => {
+                  const halfLen = (marker.thickness / 2 + 20) * scale;
+                  const x1 = marker.x * scale - Math.cos(marker.angle) * halfLen;
+                  const y1 = marker.y * scale - Math.sin(marker.angle) * halfLen;
+                  const x2 = marker.x * scale + Math.cos(marker.angle) * halfLen;
+                  const y2 = marker.y * scale + Math.sin(marker.angle) * halfLen;
+                  return (
+                    <line
+                      key={`split-marker-${idx}`}
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke="#94A3B8"
+                      strokeWidth="1.5"
+                      strokeDasharray="3,3"
+                      opacity="0.8"
+                    />
+                  );
+                })}
+
                 {/* Snap indicator during drawing/dragging */}
                 {snapIndicator && (
                   <circle

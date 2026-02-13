@@ -4378,77 +4378,128 @@ export default function SpatialBOQCanvas() {
                   </g>
                 )}
 
-                {/* SPLIT PREVIEW INDICATOR - Shows where wall will be split */}
-                {splitPreview && tool === 'split' && (
-                  <g>
-                    {/* Highlight the wall being split */}
-                    <line
-                      x1={splitPreview.wall.start_x * scale}
-                      y1={splitPreview.wall.start_y * scale}
-                      x2={splitPreview.wall.end_x * scale}
-                      y2={splitPreview.wall.end_y * scale}
-                      stroke="#EF4444"
-                      strokeWidth={(splitPreview.wall.thickness || 150) * scale + 4}
-                      strokeLinecap="round"
-                      opacity="0.3"
-                    />
-                    {/* Split point marker - scissors icon style */}
-                    <circle
-                      cx={splitPreview.x * scale}
-                      cy={splitPreview.y * scale}
-                      r={12}
-                      fill="#EF4444"
-                      fillOpacity="0.9"
-                    />
-                    <circle
-                      cx={splitPreview.x * scale}
-                      cy={splitPreview.y * scale}
-                      r={16}
-                      fill="none"
-                      stroke="#EF4444"
-                      strokeWidth="2"
-                      strokeDasharray="4,2"
-                    />
-                    {/* Cross/cut indicator */}
-                    <line
-                      x1={splitPreview.x * scale - 8}
-                      y1={splitPreview.y * scale - 8}
-                      x2={splitPreview.x * scale + 8}
-                      y2={splitPreview.y * scale + 8}
-                      stroke="white"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                    />
-                    <line
-                      x1={splitPreview.x * scale + 8}
-                      y1={splitPreview.y * scale - 8}
-                      x2={splitPreview.x * scale - 8}
-                      y2={splitPreview.y * scale + 8}
-                      stroke="white"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                    />
-                    {/* Label */}
-                    <rect
-                      x={splitPreview.x * scale - 30}
-                      y={splitPreview.y * scale + 20}
-                      width="60"
-                      height="20"
-                      rx="3"
-                      fill="#EF4444"
-                    />
-                    <text
-                      x={splitPreview.x * scale}
-                      y={splitPreview.y * scale + 34}
-                      fontSize="11"
-                      fill="white"
-                      textAnchor="middle"
-                      fontWeight="600"
-                    >
-                      Click to Split
-                    </text>
-                  </g>
-                )}
+                {/* SPLIT PREVIEW INDICATOR - Shows where wall will be split with distance measurement */}
+                {splitPreview && tool === 'split' && (() => {
+                  // Calculate distances from split point to both endpoints
+                  const wall = splitPreview.wall;
+                  const distToStart = Math.round(Math.sqrt(
+                    Math.pow(splitPreview.x - wall.start_x, 2) + Math.pow(splitPreview.y - wall.start_y, 2)
+                  ));
+                  const distToEnd = Math.round(Math.sqrt(
+                    Math.pow(splitPreview.x - wall.end_x, 2) + Math.pow(splitPreview.y - wall.end_y, 2)
+                  ));
+                  
+                  // Calculate wall angle for perpendicular cut line
+                  const wallDx = wall.end_x - wall.start_x;
+                  const wallDy = wall.end_y - wall.start_y;
+                  const wallLen = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
+                  const perpX = wallLen > 0 ? -wallDy / wallLen : 0;
+                  const perpY = wallLen > 0 ? wallDx / wallLen : 1;
+                  const cutLength = (wall.thickness || 150) / 2 + 30; // Extend beyond wall
+                  
+                  return (
+                    <g>
+                      {/* Highlight the wall being split */}
+                      <line
+                        x1={wall.start_x * scale}
+                        y1={wall.start_y * scale}
+                        x2={wall.end_x * scale}
+                        y2={wall.end_y * scale}
+                        stroke="#1F2937"
+                        strokeWidth={(wall.thickness || 150) * scale + 4}
+                        strokeLinecap="round"
+                        opacity="0.15"
+                      />
+                      
+                      {/* Cut line - perpendicular dotted line across wall */}
+                      <line
+                        x1={(splitPreview.x - perpX * cutLength) * scale}
+                        y1={(splitPreview.y - perpY * cutLength) * scale}
+                        x2={(splitPreview.x + perpX * cutLength) * scale}
+                        y2={(splitPreview.y + perpY * cutLength) * scale}
+                        stroke="#1F2937"
+                        strokeWidth="2"
+                        strokeDasharray="4,3"
+                      />
+                      
+                      {/* Split point - small black knife marker */}
+                      <circle
+                        cx={splitPreview.x * scale}
+                        cy={splitPreview.y * scale}
+                        r={6}
+                        fill="#1F2937"
+                      />
+                      
+                      {/* Distance label to start endpoint */}
+                      <g>
+                        <rect
+                          x={((splitPreview.x + wall.start_x) / 2) * scale - 28}
+                          y={((splitPreview.y + wall.start_y) / 2) * scale - 12}
+                          width="56"
+                          height="18"
+                          rx="3"
+                          fill="#F8FAFC"
+                          stroke="#CBD5E1"
+                          strokeWidth="1"
+                        />
+                        <text
+                          x={((splitPreview.x + wall.start_x) / 2) * scale}
+                          y={((splitPreview.y + wall.start_y) / 2) * scale + 2}
+                          fontSize="11"
+                          fill="#1F2937"
+                          textAnchor="middle"
+                          fontWeight="600"
+                        >
+                          {distToStart}mm
+                        </text>
+                      </g>
+                      
+                      {/* Distance label to end endpoint */}
+                      <g>
+                        <rect
+                          x={((splitPreview.x + wall.end_x) / 2) * scale - 28}
+                          y={((splitPreview.y + wall.end_y) / 2) * scale - 12}
+                          width="56"
+                          height="18"
+                          rx="3"
+                          fill="#F8FAFC"
+                          stroke="#CBD5E1"
+                          strokeWidth="1"
+                        />
+                        <text
+                          x={((splitPreview.x + wall.end_x) / 2) * scale}
+                          y={((splitPreview.y + wall.end_y) / 2) * scale + 2}
+                          fontSize="11"
+                          fill="#1F2937"
+                          textAnchor="middle"
+                          fontWeight="600"
+                        >
+                          {distToEnd}mm
+                        </text>
+                      </g>
+                      
+                      {/* Click to split label - compact */}
+                      <rect
+                        x={splitPreview.x * scale - 25}
+                        y={splitPreview.y * scale + 12}
+                        width="50"
+                        height="16"
+                        rx="2"
+                        fill="#1F2937"
+                      />
+                      <text
+                        x={splitPreview.x * scale}
+                        y={splitPreview.y * scale + 24}
+                        fontSize="9"
+                        fill="white"
+                        textAnchor="middle"
+                        fontWeight="500"
+                      >
+                        Click to Cut
+                      </text>
+                    </g>
+                  );
+                })()}
 
                 {/* Snap indicator during drawing/dragging */}
                 {snapIndicator && (

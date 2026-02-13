@@ -4068,10 +4068,10 @@ export default function SpatialBOQCanvas() {
                 {/* ============================================
                     OPEN WALL CHAIN RENDERING
                     Renders connected walls with proper miter joins
-                    even when they don't form a closed loop
+                    WITH NOTCHES at T-junction points for proper merging
                    ============================================ */}
                 {unifiedBoundary && unifiedBoundary.chains && unifiedBoundary.chains.map((chain, chainIndex) => {
-                  const { outline, wallIds } = chain;
+                  const { outline, wallIds, centerline } = chain;
                   
                   if (!outline || outline.length < 3) return null;
                   
@@ -4081,6 +4081,107 @@ export default function SpatialBOQCanvas() {
                   const isOnlyStemWalls = wallIds.every(wid => tJunctionStemWallIds.includes(wid));
                   if (isOnlyStemWalls) return null;
                   
+                  // Find T-junctions that affect this chain (where this chain is the "through" wall)
+                  const affectingTJunctions = (unifiedBoundary.tJunctions || []).filter(tj => 
+                    tj.throughWallIds && tj.throughWallIds.some(twid => wallIds.includes(twid))
+                  );
+                  
+                  // If this chain has T-junctions, we need to modify the outline to add notches
+                  let modifiedOutline = outline;
+                  
+                  if (affectingTJunctions.length > 0) {
+                    // Build a new outline with notches at T-junction points
+                    const halfN = Math.floor(outline.length / 2);
+                    const leftSide = outline.slice(0, halfN);
+                    const rightSide = outline.slice(halfN).reverse(); // Right side is reversed in original
+                    
+                    // For each T-junction, find where it intersects each side and insert notch points
+                    const insertNotchPoints = (side, isLeftSide) => {
+                      const newSide = [];
+                      
+                      for (let i = 0; i < side.length; i++) {
+                        const pt = side[i];
+                        newSide.push(pt);
+                        
+                        // Check if any T-junction point is between this point and the next
+                        if (i < side.length - 1) {
+                          const nextPt = side[i + 1];
+                          
+                          for (const tj of affectingTJunctions) {
+                            const halfStemThickness = tj.stemThickness / 2;
+                            const halfThroughThickness = tj.throughThickness / 2;
+                            
+                            // Calculate the stem perpendicular direction
+                            const stemPerpX = -tj.stemDirY;
+                            const stemPerpY = tj.stemDirX;
+                            
+                            // Through wall perpendicular
+                            const throughPerpX = -tj.throughDirY;
+                            const throughPerpY = tj.throughDirX;
+                            
+                            // Determine which side the stem is on
+                            const stemSide = tj.stemDirX * throughPerpX + tj.stemDirY * throughPerpY;
+                            const sideSign = stemSide > 0 ? 1 : -1;
+                            
+                            // Check if this edge segment contains the T-junction
+                            // Project junction point onto edge segment
+                            const edgeX = nextPt.x - pt.x;
+                            const edgeY = nextPt.y - pt.y;
+                            const edgeLen = Math.sqrt(edgeX * edgeX + edgeY * edgeY);
+                            
+                            if (edgeLen < 1) continue;
+                            
+                            // The junction outer edge point on this side
+                            const junctionEdgeX = tj.x + throughPerpX * halfThroughThickness * (isLeftSide ? 1 : -1);
+                            const junctionEdgeY = tj.y + throughPerpY * halfThroughThickness * (isLeftSide ? 1 : -1);
+                            
+                            // Check if junction point is near this edge
+                            const toJuncX = junctionEdgeX - pt.x;
+                            const toJuncY = junctionEdgeY - pt.y;
+                            const t = (toJuncX * edgeX + toJuncY * edgeY) / (edgeLen * edgeLen);
+                            
+                            if (t > 0.05 && t < 0.95) {
+                              // Check if this is the correct side for the notch
+                              // Notch should be on the side where stem connects
+                              const isCorrectSide = (isLeftSide && sideSign > 0) || (!isLeftSide && sideSign < 0);
+                              
+                              if (isCorrectSide) {
+                                // Insert notch points
+                                // Notch start point (at through wall edge, left of stem)
+                                const notchStartX = junctionEdgeX - stemPerpX * halfStemThickness;
+                                const notchStartY = junctionEdgeY - stemPerpY * halfStemThickness;
+                                
+                                // Notch end point (at through wall edge, right of stem)
+                                const notchEndX = junctionEdgeX + stemPerpX * halfStemThickness;
+                                const notchEndY = junctionEdgeY + stemPerpY * halfStemThickness;
+                                
+                                // Determine order based on edge direction
+                                const dotStart = (notchStartX - pt.x) * edgeX + (notchStartY - pt.y) * edgeY;
+                                const dotEnd = (notchEndX - pt.x) * edgeX + (notchEndY - pt.y) * edgeY;
+                                
+                                if (dotStart < dotEnd) {
+                                  newSide.push({ x: notchStartX, y: notchStartY });
+                                  newSide.push({ x: notchEndX, y: notchEndY });
+                                } else {
+                                  newSide.push({ x: notchEndX, y: notchEndY });
+                                  newSide.push({ x: notchStartX, y: notchStartY });
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      
+                      return newSide;
+                    };
+                    
+                    const modifiedLeft = insertNotchPoints(leftSide, true);
+                    const modifiedRight = insertNotchPoints(rightSide, false);
+                    
+                    // Reconstruct the outline
+                    modifiedOutline = [...modifiedLeft, ...modifiedRight.reverse()];
+                  }
+                  
                   const isAnyWallSelected = wallIds.some(wid => 
                     selectedItem?.type === 'wall' && selectedItem.item.wall_id === wid
                   );
@@ -4088,11 +4189,11 @@ export default function SpatialBOQCanvas() {
                   // Get walls in this chain for dimension labels
                   const chainWalls = layout?.walls?.filter(w => wallIds.includes(w.wall_id)) || [];
                   
-                  const pointsStr = outline.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
+                  const pointsStr = modifiedOutline.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
                   
                   return (
                     <g key={`chain-${chainIndex}`}>
-                      {/* Chain fill with proper miter corners */}
+                      {/* Chain fill with proper miter corners and T-junction notches */}
                       <polygon
                         points={pointsStr}
                         fill={isAnyWallSelected ? '#93c5fd' : '#B0B0B0'}

@@ -2870,7 +2870,7 @@ export default function SpatialBOQCanvas() {
       
       // Find connection suggestions - show guidelines to potential endpoints
       const { suggestions, closePoint, chainStart } = findConnectionSuggestions(
-        drawStart.x, drawStart.y, endPoint.x, endPoint.y
+        effectiveDrawStart.x, effectiveDrawStart.y, endPoint.x, endPoint.y
       );
       setConnectionSuggestions(suggestions);
       setCanCloseShape(closePoint);
@@ -2879,7 +2879,7 @@ export default function SpatialBOQCanvas() {
       // LOOP CLOSURE PROJECTION: Detect if trajectory aligns with room start
       // This shows guidance WHILE drawing 3rd wall (before final wall)
       const closureProjection = findLoopClosureProjection(
-        drawStart.x, drawStart.y, endPoint.x, endPoint.y, chainStart
+        effectiveDrawStart.x, effectiveDrawStart.y, endPoint.x, endPoint.y, chainStart
       );
       setLoopClosureProjection(closureProjection);
       
@@ -2898,33 +2898,33 @@ export default function SpatialBOQCanvas() {
       
       // Calculate and display real-time dimension (Coohom-style)
       const length = Math.round(Math.sqrt(
-        Math.pow(endPoint.x - drawStart.x, 2) + Math.pow(endPoint.y - drawStart.y, 2)
+        Math.pow(endPoint.x - effectiveDrawStart.x, 2) + Math.pow(endPoint.y - effectiveDrawStart.y, 2)
       ));
-      const midX = (drawStart.x + endPoint.x) / 2;
-      const midY = (drawStart.y + endPoint.y) / 2;
+      const midX = (effectiveDrawStart.x + endPoint.x) / 2;
+      const midY = (effectiveDrawStart.y + endPoint.y) / 2;
       setDrawingDimension({ length, x: midX, y: midY });
 
       if (wallDrawMode === 'rectangle') {
-        setTempRectWalls({ start: drawStart, end: endPoint });
+        setTempRectWalls({ start: effectiveDrawStart, end: endPoint });
       } else if (wallDrawMode === 'square') {
-        const size = Math.max(Math.abs(endPoint.x - drawStart.x), Math.abs(endPoint.y - drawStart.y));
-        const signX = endPoint.x > drawStart.x ? 1 : -1;
-        const signY = endPoint.y > drawStart.y ? 1 : -1;
-        endPoint = { x: drawStart.x + size * signX, y: drawStart.y + size * signY };
-        setTempRectWalls({ start: drawStart, end: endPoint });
+        const size = Math.max(Math.abs(endPoint.x - effectiveDrawStart.x), Math.abs(endPoint.y - effectiveDrawStart.y));
+        const signX = endPoint.x > effectiveDrawStart.x ? 1 : -1;
+        const signY = endPoint.y > effectiveDrawStart.y ? 1 : -1;
+        endPoint = { x: effectiveDrawStart.x + size * signX, y: effectiveDrawStart.y + size * signY };
+        setTempRectWalls({ start: effectiveDrawStart, end: endPoint });
       } else if (wallDrawMode === 'arc') {
         // Arc wall mode - calculate arc based on input method
-        console.log('[ArcDebug] Arc mode - calculating arc from', drawStart, 'to', endPoint);
-        const bulgeDir = calculateBulgeDirection(drawStart.x, drawStart.y, endPoint.x, endPoint.y, canvas.x, canvas.y);
+        console.log('[ArcDebug] Arc mode - calculating arc from', effectiveDrawStart, 'to', endPoint);
+        const bulgeDir = calculateBulgeDirection(effectiveDrawStart.x, effectiveDrawStart.y, endPoint.x, endPoint.y, canvas.x, canvas.y);
         setArcBulgeDirection(bulgeDir);
         
         let arcParams;
         if (arcInputMethod === 'radius') {
           const radiusValue = parseFloat(arcRadiusInput) || 1000;
-          arcParams = calculateArcFromRadius(drawStart.x, drawStart.y, endPoint.x, endPoint.y, radiusValue, bulgeDir);
+          arcParams = calculateArcFromRadius(effectiveDrawStart.x, effectiveDrawStart.y, endPoint.x, endPoint.y, radiusValue, bulgeDir);
         } else {
           const chordHeightValue = parseFloat(arcChordHeightInput) || 500;
-          arcParams = calculateArcFromChordHeight(drawStart.x, drawStart.y, endPoint.x, endPoint.y, chordHeightValue, bulgeDir);
+          arcParams = calculateArcFromChordHeight(effectiveDrawStart.x, effectiveDrawStart.y, endPoint.x, endPoint.y, chordHeightValue, bulgeDir);
         }
         
         console.log('[ArcDebug] Arc params calculated:', arcParams);
@@ -2940,7 +2940,7 @@ export default function SpatialBOQCanvas() {
       } else {
         // Free line mode (straight wall)
         // Calculate projected intersections with existing walls
-        const intersections = findProjectedIntersections(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
+        const intersections = findProjectedIntersections(effectiveDrawStart.x, effectiveDrawStart.y, endPoint.x, endPoint.y);
         setProjectedIntersections(intersections);
         
         // Log first intersection for debugging

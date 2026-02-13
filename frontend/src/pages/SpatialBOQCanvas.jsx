@@ -4070,13 +4070,30 @@ export default function SpatialBOQCanvas() {
                   
                   return (
                     <g key={`tjunction-stem-${tjIndex}`}>
-                      {/* Stem wall - connects exactly to through-wall outer edge */}
-                      {/* No stroke so it blends seamlessly with through-wall */}
+                      {/* Stem wall fill - no stroke so it blends with through-wall */}
                       <polygon
                         points={stemPointsStr}
                         fill={fillColor}
                         stroke="none"
                       />
+                      {/* Draw outer edge strokes (left edge, far end, right edge) */}
+                      {/* Skip the junction edge (between points 0 and 3) */}
+                      <line
+                        x1={stemPolygon[0].x * scale} y1={stemPolygon[0].y * scale}
+                        x2={stemPolygon[1].x * scale} y2={stemPolygon[1].y * scale}
+                        stroke="#000000" strokeWidth="0.5"
+                      />
+                      <line
+                        x1={stemPolygon[1].x * scale} y1={stemPolygon[1].y * scale}
+                        x2={stemPolygon[2].x * scale} y2={stemPolygon[2].y * scale}
+                        stroke="#000000" strokeWidth="0.5"
+                      />
+                      <line
+                        x1={stemPolygon[2].x * scale} y1={stemPolygon[2].y * scale}
+                        x2={stemPolygon[3].x * scale} y2={stemPolygon[3].y * scale}
+                        stroke="#000000" strokeWidth="0.5"
+                      />
+                      {/* Junction edge (points 3 to 0) - no stroke, blends with through-wall */}
                     </g>
                   );
                 })}

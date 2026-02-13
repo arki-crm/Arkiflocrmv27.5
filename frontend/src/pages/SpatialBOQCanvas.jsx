@@ -1106,6 +1106,90 @@ export default function SpatialBOQCanvas() {
   const unifiedBoundary = useMemo(() => computeUnifiedWallBoundary(), [computeUnifiedWallBoundary]);
 
   // ============================================
+  // ARC-TO-STRAIGHT WALL JUNCTION DETECTION
+  // Detects where arc walls connect to straight walls
+  // ============================================
+  const arcStraightJunctions = useMemo(() => {
+    if (!layout?.walls || layout.walls.length < 2) return [];
+    
+    const junctions = [];
+    const tolerance = CLOSURE_TOLERANCE;
+    const arcWalls = layout.walls.filter(w => w.is_arc);
+    const straightWalls = layout.walls.filter(w => !w.is_arc);
+    
+    for (const arcWall of arcWalls) {
+      // Check arc wall endpoints against straight wall endpoints
+      for (const straightWall of straightWalls) {
+        // Check arc start against straight endpoints
+        const arcStartToStraightStart = Math.sqrt(
+          Math.pow(arcWall.start_x - straightWall.start_x, 2) +
+          Math.pow(arcWall.start_y - straightWall.start_y, 2)
+        );
+        const arcStartToStraightEnd = Math.sqrt(
+          Math.pow(arcWall.start_x - straightWall.end_x, 2) +
+          Math.pow(arcWall.start_y - straightWall.end_y, 2)
+        );
+        
+        if (arcStartToStraightStart < tolerance) {
+          junctions.push({
+            x: (arcWall.start_x + straightWall.start_x) / 2,
+            y: (arcWall.start_y + straightWall.start_y) / 2,
+            arcWallId: arcWall.wall_id,
+            arcEndpoint: 'start',
+            straightWallId: straightWall.wall_id,
+            straightEndpoint: 'start',
+            arcAngle: arcWall.arc_start_angle
+          });
+        } else if (arcStartToStraightEnd < tolerance) {
+          junctions.push({
+            x: (arcWall.start_x + straightWall.end_x) / 2,
+            y: (arcWall.start_y + straightWall.end_y) / 2,
+            arcWallId: arcWall.wall_id,
+            arcEndpoint: 'start',
+            straightWallId: straightWall.wall_id,
+            straightEndpoint: 'end',
+            arcAngle: arcWall.arc_start_angle
+          });
+        }
+        
+        // Check arc end against straight endpoints
+        const arcEndToStraightStart = Math.sqrt(
+          Math.pow(arcWall.end_x - straightWall.start_x, 2) +
+          Math.pow(arcWall.end_y - straightWall.start_y, 2)
+        );
+        const arcEndToStraightEnd = Math.sqrt(
+          Math.pow(arcWall.end_x - straightWall.end_x, 2) +
+          Math.pow(arcWall.end_y - straightWall.end_y, 2)
+        );
+        
+        if (arcEndToStraightStart < tolerance) {
+          junctions.push({
+            x: (arcWall.end_x + straightWall.start_x) / 2,
+            y: (arcWall.end_y + straightWall.start_y) / 2,
+            arcWallId: arcWall.wall_id,
+            arcEndpoint: 'end',
+            straightWallId: straightWall.wall_id,
+            straightEndpoint: 'start',
+            arcAngle: arcWall.arc_end_angle
+          });
+        } else if (arcEndToStraightEnd < tolerance) {
+          junctions.push({
+            x: (arcWall.end_x + straightWall.end_x) / 2,
+            y: (arcWall.end_y + straightWall.end_y) / 2,
+            arcWallId: arcWall.wall_id,
+            arcEndpoint: 'end',
+            straightWallId: straightWall.wall_id,
+            straightEndpoint: 'end',
+            arcAngle: arcWall.arc_end_angle
+          });
+        }
+      }
+    }
+    
+    return junctions;
+  }, [layout?.walls]);
+
+  // ============================================
   // RECTANGULAR LOOP PARAMETRIC EDITING
   // Detects if a wall is part of a rectangular loop
   // and provides parametric deformation

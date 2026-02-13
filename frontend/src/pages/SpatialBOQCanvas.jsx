@@ -3062,11 +3062,19 @@ export default function SpatialBOQCanvas() {
             </div>
           )}
 
-          {/* Floor Material Panel - Shows when fill tool is active or floor is detected */}
-          {(tool === 'fill' || detectedFloor || manualFloorFill) && (
+          {/* Floor Material Panel - Toggle with icon */}
+          {showFloorMaterialPanel && (tool === 'fill' || detectedFloor || manualFloorFill) && (
             <div className="w-48 bg-white border-r p-2 shrink-0">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-xs font-medium">Floor Material</h4>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-5 w-5 p-0" 
+                  onClick={() => setShowFloorMaterialPanel(false)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
               </div>
               <div className="space-y-1">
                 {Object.entries(FLOOR_MATERIALS).map(([key, mat]) => (

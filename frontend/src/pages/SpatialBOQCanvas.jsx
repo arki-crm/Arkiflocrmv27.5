@@ -5499,7 +5499,7 @@ export default function SpatialBOQCanvas() {
                   
                   const pointsStr = modifiedOutline.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
                   
-                  // Build edge stroke paths, skipping edges at T-junction points
+                  // Build edge stroke paths, skipping edges at T-junction points AND arc-straight junctions
                   const edgeStrokes = [];
                   for (let i = 0; i < modifiedOutline.length; i++) {
                     const p1 = modifiedOutline[i];
@@ -5545,6 +5545,38 @@ export default function SpatialBOQCanvas() {
                       if (distToJunction < halfStemThickness * 2 && edgeLen < halfStemThickness * 3) {
                         skipEdge = true;
                         break;
+                      }
+                    }
+                    
+                    // Also check arc-straight junctions (skip end caps where straight wall meets arc)
+                    if (!skipEdge) {
+                      for (const asj of arcStraightJunctions) {
+                        // Check if this chain contains the straight wall from this junction
+                        if (!wallIds.includes(asj.straightWallId)) continue;
+                        
+                        const straightWall = layout?.walls?.find(w => w.wall_id === asj.straightWallId);
+                        if (!straightWall) continue;
+                        
+                        const straightThickness = straightWall.thickness || DEFAULT_WALL_THICKNESS;
+                        const halfThick = straightThickness / 2;
+                        
+                        // Check if this edge is near the junction point (end cap of straight wall)
+                        const edgeMidX = (p1.x + p2.x) / 2;
+                        const edgeMidY = (p1.y + p2.y) / 2;
+                        const distToJunction = Math.sqrt(
+                          (edgeMidX - asj.x) * (edgeMidX - asj.x) + 
+                          (edgeMidY - asj.y) * (edgeMidY - asj.y)
+                        );
+                        const edgeLen = Math.sqrt(
+                          (p2.x - p1.x) * (p2.x - p1.x) + 
+                          (p2.y - p1.y) * (p2.y - p1.y)
+                        );
+                        
+                        // Skip short edges near arc-straight junction
+                        if (distToJunction < halfThick * 2.5 && edgeLen < halfThick * 3) {
+                          skipEdge = true;
+                          break;
+                        }
                       }
                     }
                     

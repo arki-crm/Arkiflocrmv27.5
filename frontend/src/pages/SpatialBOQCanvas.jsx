@@ -3555,10 +3555,23 @@ export default function SpatialBOQCanvas() {
               </div>
             )}
             
-            {/* Pan/Zoom hint (Item #1 & #2) */}
-            {!selectedItem && !isDrawing && (
+            {/* Pan/Zoom hint */}
+            {!selectedItem && !isDrawing && !wallClickMode && tool === 'select' && (
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
                 <span>Scroll to zoom • Space+drag to pan • ESC to reset tool</span>
+              </div>
+            )}
+
+            {/* Coohom-style Drawing hint */}
+            {(wallClickMode === 'waiting_start' || tool === 'wall') && !wallClickMode && (
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
+                <span>Left click to start • Right click or ESC to end</span>
+              </div>
+            )}
+            
+            {wallClickMode === 'waiting_end' && (
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2">
+                <span>Click to place wall • {orthoMode ? 'Ortho ON' : 'Shift for ortho'} • ESC to cancel</span>
               </div>
             )}
 

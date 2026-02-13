@@ -187,10 +187,12 @@ export default function SpatialBOQCanvas() {
   const [dragEndpoint, setDragEndpoint] = useState(null); // 'start' or 'end' for wall endpoints
   const [activeRectLoop, setActiveRectLoop] = useState(null); // Stores detected rectangular loop at drag start
 
-  // CAD Precision Enhancement State
-  const [snapIndicator, setSnapIndicator] = useState(null); // { x, y, type: 'endpoint'|'midpoint'|'grid' }
-  const [alignmentGuides, setAlignmentGuides] = useState([]); // [{ type: 'horizontal'|'vertical', position, start, end }]
+  // CAD Precision Enhancement State - Coohom-style
+  const [snapIndicator, setSnapIndicator] = useState(null); // { x, y, type: 'endpoint'|'grid' }
+  const [alignmentGuides, setAlignmentGuides] = useState([]); // [{ type: 'horizontal'|'vertical', position }]
   const [shiftKeyHeld, setShiftKeyHeld] = useState(false); // For orthogonal constraint
+  const [orthoMode, setOrthoMode] = useState(true); // Coohom-style ortho mode (default ON)
+  const [drawingDimension, setDrawingDimension] = useState(null); // { length, angle, x, y } - live dimension display
 
   // Elevation view - full screen mode (Item #9)
   const [showElevationModal, setShowElevationModal] = useState(false);

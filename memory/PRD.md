@@ -30,6 +30,10 @@ Implemented curved/arc wall drawing capability with two input methods and full s
 | 10 | **UI Integration** | Arc Wall option in Wall Tool dropdown panel | ✅ |
 | 11 | **Door/Window on Arc** | Doors and windows snap to arc centerline with tangent rotation | ✅ |
 | 12 | **Arc Distance Calculation** | Distance to arc wall for nearby detection | ✅ |
+| 13 | **Move Opening Along Arc** | Doors/windows slide smoothly along curved walls | ✅ |
+| 14 | **Arc Curvature Drag Edit** | Diamond handle at arc midpoint to adjust curvature | ✅ |
+| 15 | **Arc Wall Translation** | Drag to move entire arc wall | ✅ |
+| 16 | **Arc Click Detection** | Click detection works for arc walls | ✅ |
 
 **Arc Wall Technical Details:**
 - Two calculation functions: `calculateArcFromRadius()` and `calculateArcFromChordHeight()`

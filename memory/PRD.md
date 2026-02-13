@@ -9,7 +9,44 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Composer CAD Interaction Fixes COMPLETE ✅
+## Current Status: CAD Precision Enhancements IN PROGRESS 🔄
+**As of February 13, 2026**
+
+### Composer (SpatialBOQCanvas) - CAD Precision Enhancements
+
+Implementing professional CAD-level snapping and constraint behavior for the Composer canvas.
+
+| # | Enhancement | Description | Status |
+|---|-------------|-------------|--------|
+| 1 | **Endpoint Snapping** | Green crosshair indicator when near wall endpoint (150mm threshold) | ✅ Implemented |
+| 2 | **Midpoint Snapping** | Orange diamond indicator when near wall midpoint (120mm threshold) | ✅ Implemented |
+| 3 | **Grid Snapping** | 50mm grid snap with gray indicator | ✅ Working |
+| 4 | **Orthogonal Constraint (Shift-Lock)** | Hold Shift to lock drawing to 0°/90°/180°/270° | ✅ Implemented |
+| 5 | **Smart Alignment Guides** | Blue dashed lines when aligned with existing wall endpoints (50mm threshold) | ✅ Implemented |
+| 6 | **Vertex Auto-Merge** | Auto-merge endpoints when dragged within 150mm of another endpoint | ✅ Implemented |
+| 7 | **Parametric Wall Editing** | Dragging one wall of rectangle deforms room while maintaining closure | ⏳ Code Complete |
+
+**Snap Priority Order:** Endpoint → Midpoint → Grid → Free draw
+
+**Technical Implementation:**
+- `findSnapPoint()` - Priority-based snapping with visual indicator state
+- `findAlignmentGuides()` - Detects H/V alignment with existing wall endpoints
+- `applyOrthogonalConstraint()` - Forces pure horizontal/vertical based on dominant axis
+- `findMergeTarget()` - Detects nearby endpoints for auto-merge during drag
+- `activeRectLoop` state - Stores detected rectangular loop at drag start for parametric editing
+
+**Constants:**
+- `ENDPOINT_SNAP_THRESHOLD = 150mm`
+- `MIDPOINT_SNAP_THRESHOLD = 120mm`
+- `GRID_SNAP_SIZE = 50mm`
+- `ALIGNMENT_THRESHOLD = 50mm`
+- `VERTEX_MERGE_THRESHOLD = 150mm`
+
+**Verification (iteration_68.json):** 75% pass rate - Grid snapping confirmed working, visual indicators need precise cursor positioning.
+
+---
+
+## Previous Status: Composer CAD Interaction Fixes COMPLETE ✅
 **As of February 12, 2026**
 
 ### Composer (SpatialBOQCanvas) - 4 CAD Interaction Bug Fixes

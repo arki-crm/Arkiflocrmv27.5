@@ -2344,10 +2344,19 @@ export default function SpatialBOQCanvas() {
       setCanCloseShape(closePoint);
       setChainStartIndicator(chainStart); // Show blue circle at chain start
       
+      // Log when intersection indicator should show
+      if (closePoint) {
+        console.log('[Intersection] Close point detected at:', closePoint.x, closePoint.y, 'distance:', closePoint.distance);
+      }
+      if (chainStart) {
+        console.log('[ChainStart] Open chain starts at:', chainStart.x, chainStart.y);
+      }
+      
       // LOOP CLOSURE SNAP: If close point is detected, snap cursor to it
       if (closePoint && closePoint.distance < 150) {
         // Strong snap to close point when within 150mm
         endPoint = { x: closePoint.x, y: closePoint.y };
+        console.log('[Intersection] Snapping to close point!');
       }
       
       // Calculate and display real-time dimension (Coohom-style)

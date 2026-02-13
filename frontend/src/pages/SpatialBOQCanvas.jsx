@@ -714,6 +714,7 @@ export default function SpatialBOQCanvas() {
     });
 
     // Process each open chain - create proper miter joins at internal corners
+    // Also add notches at T-junction points for proper merging
     const chainBoundaries = openChains.map(chain => {
       const thickness = walls.find(w => chain.wallIds.includes(w.wall_id))?.thickness || DEFAULT_WALL_THICKNESS;
       const halfThickness = thickness / 2;
@@ -733,6 +734,7 @@ export default function SpatialBOQCanvas() {
     const allBoundaries = [...loopBoundaries, ...chainBoundaries];
     
     // Detect T-junction vertices (vertices with 3 connections)
+    // AND compute the notch geometry for proper merging
     const tJunctions = [];
     for (const [key, vertex] of vertices) {
       if (vertex.walls.length === 3) {
@@ -747,16 +749,38 @@ export default function SpatialBOQCanvas() {
         }
         if (wallPairs.length > 0) {
           const pair = wallPairs[0];
-          // Calculate the through wall direction to determine stem offset
           const throughWall1 = pair.through[0].wall;
           const throughThickness = throughWall1.thickness || DEFAULT_WALL_THICKNESS;
+          const stemWall = pair.stem.wall;
+          const stemThickness = stemWall.thickness || DEFAULT_WALL_THICKNESS;
+          
+          // Calculate stem direction and notch dimensions
+          const stemAtJunctionIsStart = 
+            Math.abs(stemWall.start_x - vertex.x) < 50 && Math.abs(stemWall.start_y - vertex.y) < 50;
+          const stemOtherX = stemAtJunctionIsStart ? stemWall.end_x : stemWall.start_x;
+          const stemOtherY = stemAtJunctionIsStart ? stemWall.end_y : stemWall.start_y;
+          
+          const stemDx = stemOtherX - vertex.x;
+          const stemDy = stemOtherY - vertex.y;
+          const stemLen = Math.sqrt(stemDx * stemDx + stemDy * stemDy);
+          
+          // Through wall direction
+          const tw1Dx = throughWall1.end_x - throughWall1.start_x;
+          const tw1Dy = throughWall1.end_y - throughWall1.start_y;
+          const tw1Len = Math.sqrt(tw1Dx * tw1Dx + tw1Dy * tw1Dy);
           
           tJunctions.push({
             x: vertex.x,
             y: vertex.y,
             throughWalls: pair.through.map(c => c.wall),
-            stemWall: pair.stem.wall,
-            throughThickness: throughThickness
+            throughWallIds: pair.through.map(c => c.wall.wall_id),
+            stemWall: stemWall,
+            throughThickness: throughThickness,
+            stemThickness: stemThickness,
+            stemDirX: stemLen > 0 ? stemDx / stemLen : 0,
+            stemDirY: stemLen > 0 ? stemDy / stemLen : 0,
+            throughDirX: tw1Len > 0 ? tw1Dx / tw1Len : 1,
+            throughDirY: tw1Len > 0 ? tw1Dy / tw1Len : 0
           });
         }
       }

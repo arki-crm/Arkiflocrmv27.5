@@ -4134,10 +4134,10 @@ export default function SpatialBOQCanvas() {
                 })}
 
                 {/* T-Junction and vertex fill patches - closes gaps where walls meet */}
-                {/* MUST render BEFORE wall outlines to be behind them */}
-                {layout?.walls && (() => {
+                {/* Render junction fills BEFORE wall shapes so they're underneath */}
+                {layout?.walls && layout.walls.length > 0 && (() => {
                   // Build vertex map to find all junction points
-                  const tolerance = 15; // mm tolerance for vertex matching
+                  const tolerance = 20; // mm tolerance for vertex matching
                   const coordKey = (x, y) => `${Math.round(x/tolerance)*tolerance}_${Math.round(y/tolerance)*tolerance}`;
                   const vertexMap = new Map();
                   
@@ -4146,35 +4146,32 @@ export default function SpatialBOQCanvas() {
                     const endKey = coordKey(wall.end_x, wall.end_y);
                     
                     if (!vertexMap.has(startKey)) {
-                      vertexMap.set(startKey, { x: wall.start_x, y: wall.start_y, walls: [], thicknesses: [] });
+                      vertexMap.set(startKey, { x: wall.start_x, y: wall.start_y, thicknesses: [] });
                     }
-                    vertexMap.get(startKey).walls.push({ wall, endpoint: 'start' });
                     vertexMap.get(startKey).thicknesses.push(wall.thickness || DEFAULT_WALL_THICKNESS);
                     
                     if (!vertexMap.has(endKey)) {
-                      vertexMap.set(endKey, { x: wall.end_x, y: wall.end_y, walls: [], thicknesses: [] });
+                      vertexMap.set(endKey, { x: wall.end_x, y: wall.end_y, thicknesses: [] });
                     }
-                    vertexMap.get(endKey).walls.push({ wall, endpoint: 'end' });
                     vertexMap.get(endKey).thicknesses.push(wall.thickness || DEFAULT_WALL_THICKNESS);
                   }
                   
-                  // Render fill patches at vertices with 2+ walls (junctions)
+                  // Render fill patches at vertices with 2+ walls (all junctions)
                   const patches = [];
                   for (const [key, vertex] of vertexMap) {
-                    if (vertex.walls.length >= 2) {
-                      // Find the maximum thickness at this junction
+                    if (vertex.thicknesses.length >= 2) {
+                      // This is a junction - render a fill patch
                       const maxThickness = Math.max(...vertex.thicknesses);
-                      // Make patch larger to fully cover the gap - use half thickness + extra margin
-                      const patchRadius = (maxThickness / 2) + 10;
+                      // Make patch radius equal to wall thickness to fully cover any gap
+                      const patchSize = maxThickness / 2 + 5;
                       
-                      // Use a rectangle/polygon for better coverage at T-junctions
                       patches.push(
                         <rect
                           key={`junction-fill-${key}`}
-                          x={(vertex.x - patchRadius) * scale}
-                          y={(vertex.y - patchRadius) * scale}
-                          width={patchRadius * 2 * scale}
-                          height={patchRadius * 2 * scale}
+                          x={(vertex.x - patchSize) * scale}
+                          y={(vertex.y - patchSize) * scale}
+                          width={patchSize * 2 * scale}
+                          height={patchSize * 2 * scale}
                           fill="#B0B0B0"
                           stroke="none"
                         />

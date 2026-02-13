@@ -1918,6 +1918,15 @@ export default function SpatialBOQCanvas() {
     } else if (tool === 'fill') {
       // Manual floor fill tool - click inside room
       handleFillFloor(canvas.x, canvas.y);
+    } else if (tool === 'split') {
+      // Wall split tool - click on wall to split it at the preview point
+      if (splitPreview && splitPreview.wallId) {
+        const success = splitWallAt(splitPreview.wallId, splitPreview.x, splitPreview.y);
+        if (success) {
+          setSplitPreview(null);
+          setTool('select'); // Switch back to select tool after successful split
+        }
+      }
     } else if (tool === 'select') {
       // SELECTION PRIORITY ORDER: Vertex > Module > Door/Window > Wall > Floor
       

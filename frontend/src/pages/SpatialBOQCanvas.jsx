@@ -3160,6 +3160,21 @@ export default function SpatialBOQCanvas() {
               <TooltipContent side="right">Fill Floor (F) - Click to toggle panel</TooltipContent>
             </Tooltip>
 
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={tool === 'split' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className={`w-9 h-9 p-0 ${tool === 'split' ? 'bg-red-100' : ''}`}
+                  onClick={() => setTool('split')}
+                  disabled={!layout?.walls || layout.walls.length === 0}
+                >
+                  <Scissors className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Split Wall (S) - Click on wall to split</TooltipContent>
+            </Tooltip>
+
             <Separator className="my-2 w-6" />
 
             <Tooltip>

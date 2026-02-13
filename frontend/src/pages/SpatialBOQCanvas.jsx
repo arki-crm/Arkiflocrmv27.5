@@ -2282,6 +2282,8 @@ export default function SpatialBOQCanvas() {
     setDrawingDimension(null);
     setPreClickSnap(null);
     setHoveredVertex(null);
+    setConnectionSuggestions([]);
+    setCanCloseShape(null);
   };
 
   // Create wall helper - now includes height (Item #1)

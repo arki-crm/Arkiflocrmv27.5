@@ -2336,11 +2336,12 @@ export default function SpatialBOQCanvas() {
       }
       
       // Find connection suggestions - show guidelines to potential endpoints
-      const { suggestions, closePoint } = findConnectionSuggestions(
+      const { suggestions, closePoint, chainStart } = findConnectionSuggestions(
         drawStart.x, drawStart.y, endPoint.x, endPoint.y
       );
       setConnectionSuggestions(suggestions);
       setCanCloseShape(closePoint);
+      setChainStartIndicator(chainStart); // Show blue circle at chain start
       
       // LOOP CLOSURE SNAP: If close point is detected, snap cursor to it
       if (closePoint && closePoint.distance < 150) {

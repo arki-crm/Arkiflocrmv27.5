@@ -2325,6 +2325,45 @@ export default function SpatialBOQCanvas() {
       }
     }
 
+    // Dragging vertex (junction point) - moves all connected wall endpoints together
+    if (isDragging && dragType === 'vertex' && selectedVertex) {
+      const dx = canvas.x - dragStart.vertexX;
+      const dy = canvas.y - dragStart.vertexY;
+      
+      // Apply snap/constraints
+      let newX = dragStart.vertexX + dx;
+      let newY = dragStart.vertexY + dy;
+      
+      // Apply orthogonal constraint if shift is held
+      if (shiftKeyHeld) {
+        const constrained = applyOrthogonalConstraint(dragStart.vertexX, dragStart.vertexY, newX, newY);
+        newX = constrained.x;
+        newY = constrained.y;
+      }
+      
+      // Check for snap to other vertices or grid
+      const snapResult = findSnapPoint(newX, newY, null);
+      if (snapResult.snapped) {
+        newX = snapResult.x;
+        newY = snapResult.y;
+        setSnapIndicator({ x: newX, y: newY, type: snapResult.type });
+      } else {
+        setSnapIndicator(null);
+      }
+      
+      // Update all connected walls
+      for (const { wall, endpoint } of selectedVertex.walls) {
+        if (endpoint === 'start') {
+          updateWallPosition(wall.wall_id, { start_x: newX, start_y: newY });
+        } else {
+          updateWallPosition(wall.wall_id, { end_x: newX, end_y: newY });
+        }
+      }
+      
+      // Update alignment guides
+      setAlignmentGuides(findAlignmentGuides(newX, newY, null));
+    }
+
     // Dragging entire wall (Item #1) - with parametric editing for rectangular loops
     if (isDragging && dragType === 'wall' && selectedItem?.type === 'wall') {
       const wall = selectedItem.item;

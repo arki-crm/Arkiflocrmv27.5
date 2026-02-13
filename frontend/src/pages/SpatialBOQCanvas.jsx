@@ -1135,12 +1135,7 @@ export default function SpatialBOQCanvas() {
     setManualFloorFill(null);
   }, [detectFloorPolygon]);
 
-  // Auto-collapse right panel when nothing selected
-  useEffect(() => {
-    if (selectedItem) {
-      setRightPanelCollapsed(false);
-    }
-  }, [selectedItem]);
+  // NOTE: Removed auto-expand of right panel on selection - user should manually open/close
 
   // Zoom helper - zoom centered on cursor position (Item #2)
   const zoomAtCursor = useCallback((newScale, cursorX, cursorY) => {

@@ -2460,6 +2460,16 @@ export default function SpatialBOQCanvas() {
         setTempRectWalls({ start: drawStart, end: endPoint });
       } else {
         // Free line mode
+        // Calculate projected intersections with existing walls
+        const intersections = findProjectedIntersections(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
+        setProjectedIntersections(intersections);
+        
+        // Log first intersection for debugging
+        if (intersections.length > 0) {
+          console.log('[ProjectedIntersection] Found', intersections.length, 'intersection(s), nearest at:', 
+            intersections[0].x.toFixed(0), intersections[0].y.toFixed(0));
+        }
+        
         setTempWall({ 
           start: drawStart, 
           end: endPoint, 
@@ -2475,8 +2485,10 @@ export default function SpatialBOQCanvas() {
       // Clear connection suggestions when not drawing
       if (connectionSuggestions.length > 0) setConnectionSuggestions([]);
       if (canCloseShape) setCanCloseShape(null);
+      if (projectedIntersections.length > 0) setProjectedIntersections([]);
       
       // PRE-CLICK SNAP: Show vertex snap indicator BEFORE clicking (when wall tool is active)
+      if (tool === 'wall' && !wallClickMode) {
       if (tool === 'wall' && !wallClickMode) {
         const vertex = findVertexAt(canvas.x, canvas.y);
         if (vertex) {

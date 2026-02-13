@@ -2839,12 +2839,14 @@ export default function SpatialBOQCanvas() {
       const snapResult = findSnapPoint(canvas.x, canvas.y);
       let endPoint = { x: snapResult.x, y: snapResult.y };
       
-      // ALWAYS show alignment guides to help draw straight lines
-      const guides = findAlignmentGuides(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
-      setAlignmentGuides(guides);
+      // ALWAYS show alignment guides to help draw straight lines (except for arc mode)
+      if (wallDrawMode !== 'arc') {
+        const guides = findAlignmentGuides(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
+        setAlignmentGuides(guides);
+      }
       
-      // Apply ortho constraint if enabled (Coohom default behavior)
-      if (orthoMode || shiftKeyHeld) {
+      // Apply ortho constraint if enabled (Coohom default behavior) - NOT for arc mode
+      if ((orthoMode || shiftKeyHeld) && wallDrawMode !== 'arc') {
         const orthoResult = applyOrthogonalConstraint(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
         endPoint = { x: orthoResult.x, y: orthoResult.y };
       }

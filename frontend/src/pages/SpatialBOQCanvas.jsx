@@ -4130,44 +4130,49 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
-                {/* T-Junction fill patches - closes gaps where walls meet at T-junctions */}
-                {unifiedBoundary && unifiedBoundary.tJunctions && unifiedBoundary.tJunctions.map((tJunc, idx) => {
-                  // Create a small fill patch at the T-junction to close the gap
-                  const thickness = tJunc.stemWall?.thickness || DEFAULT_WALL_THICKNESS;
-                  const halfThickness = thickness / 2;
+                {/* T-Junction and vertex fill patches - closes gaps where walls meet */}
+                {layout?.walls && (() => {
+                  // Build vertex map to find all junction points
+                  const coordKey = (x, y) => `${Math.round(x)}_${Math.round(y)}`;
+                  const vertexMap = new Map();
                   
-                  // Get the direction of the "through" wall
-                  const throughWall1 = tJunc.throughWalls[0];
-                  const dx = throughWall1.end_x - throughWall1.start_x;
-                  const dy = throughWall1.end_y - throughWall1.start_y;
-                  const len = Math.sqrt(dx * dx + dy * dy);
+                  for (const wall of layout.walls) {
+                    const startKey = coordKey(wall.start_x, wall.start_y);
+                    const endKey = coordKey(wall.end_x, wall.end_y);
+                    
+                    if (!vertexMap.has(startKey)) {
+                      vertexMap.set(startKey, { x: wall.start_x, y: wall.start_y, walls: [] });
+                    }
+                    vertexMap.get(startKey).walls.push({ wall, endpoint: 'start' });
+                    
+                    if (!vertexMap.has(endKey)) {
+                      vertexMap.set(endKey, { x: wall.end_x, y: wall.end_y, walls: [] });
+                    }
+                    vertexMap.get(endKey).walls.push({ wall, endpoint: 'end' });
+                  }
                   
-                  if (len === 0) return null;
-                  
-                  // Perpendicular direction to through wall
-                  const perpX = -dy / len;
-                  const perpY = dx / len;
-                  
-                  // Create a rectangular patch that fills the gap
-                  const patchSize = halfThickness + 5; // Slightly larger to ensure overlap
-                  const patch = [
-                    { x: tJunc.x - perpX * patchSize - (dx/len) * 5, y: tJunc.y - perpY * patchSize - (dy/len) * 5 },
-                    { x: tJunc.x + perpX * patchSize - (dx/len) * 5, y: tJunc.y + perpY * patchSize - (dy/len) * 5 },
-                    { x: tJunc.x + perpX * patchSize + (dx/len) * 5, y: tJunc.y + perpY * patchSize + (dy/len) * 5 },
-                    { x: tJunc.x - perpX * patchSize + (dx/len) * 5, y: tJunc.y - perpY * patchSize + (dy/len) * 5 }
-                  ];
-                  
-                  const pointsStr = patch.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
-                  
-                  return (
-                    <polygon
-                      key={`t-junction-fill-${idx}`}
-                      points={pointsStr}
-                      fill="#B0B0B0"
-                      stroke="none"
-                    />
-                  );
-                })}
+                  // Render fill patches at vertices with 2+ walls
+                  const patches = [];
+                  for (const [key, vertex] of vertexMap) {
+                    if (vertex.walls.length >= 2) {
+                      // Find the maximum thickness at this junction
+                      const maxThickness = Math.max(...vertex.walls.map(w => w.wall.thickness || DEFAULT_WALL_THICKNESS));
+                      const patchRadius = maxThickness / 2 + 2;
+                      
+                      patches.push(
+                        <circle
+                          key={`junction-fill-${key}`}
+                          cx={vertex.x * scale}
+                          cy={vertex.y * scale}
+                          r={patchRadius * scale}
+                          fill="#B0B0B0"
+                          stroke="none"
+                        />
+                      );
+                    }
+                  }
+                  return patches;
+                })()}
 
                 {/* Temp wall while drawing - Coohom-style thin outline preview */}
                 {tempWall && (() => {

@@ -731,13 +731,39 @@ export default function SpatialBOQCanvas() {
 
     const allBoundaries = [...loopBoundaries, ...chainBoundaries];
     
-    if (allBoundaries.length === 0) {
+    // Detect T-junction vertices (vertices with 3 connections)
+    const tJunctions = [];
+    for (const [key, vertex] of vertices) {
+      if (vertex.walls.length === 3) {
+        // Find which walls form the "through" line and which is the "stem"
+        const wallPairs = [];
+        for (let i = 0; i < vertex.walls.length; i++) {
+          for (let j = i + 1; j < vertex.walls.length; j++) {
+            if (areWallsCollinear(vertex.walls[i].wall, vertex.walls[j].wall, vertex.x, vertex.y)) {
+              wallPairs.push({ through: [vertex.walls[i], vertex.walls[j]], stem: vertex.walls.find((w, k) => k !== i && k !== j) });
+            }
+          }
+        }
+        if (wallPairs.length > 0) {
+          const pair = wallPairs[0];
+          tJunctions.push({
+            x: vertex.x,
+            y: vertex.y,
+            throughWalls: pair.through.map(c => c.wall),
+            stemWall: pair.stem.wall
+          });
+        }
+      }
+    }
+    
+    if (allBoundaries.length === 0 && tJunctions.length === 0) {
       return null;
     }
 
     return {
       loops: loopBoundaries,
       chains: chainBoundaries,
+      tJunctions: tJunctions,
       allWallIds: allBoundaries.flatMap(b => b.wallIds)
     };
   }, [layout?.walls]);

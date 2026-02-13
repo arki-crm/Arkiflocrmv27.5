@@ -2850,14 +2850,16 @@ export default function SpatialBOQCanvas() {
     const canvas = screenToCanvas(e.clientX, e.clientY);
 
     // Coohom-style wall drawing with real-time dimension display
-    // For arc mode, also check tempArcWall since state updates are async
-    const shouldProcessWallDrawing = (wallClickMode === 'waiting_end' || isDrawing || (wallDrawMode === 'arc' && tempArcWall)) && tool === 'wall';
+    // For arc mode, check the ref since state updates are async
+    const isArcDrawing = wallDrawMode === 'arc' && arcDrawingRef.current.isDrawing;
+    const shouldProcessWallDrawing = (wallClickMode === 'waiting_end' || isDrawing || isArcDrawing) && tool === 'wall';
     
-    if (shouldProcessWallDrawing && (drawStart || tempArcWall)) {
-      const effectiveDrawStart = drawStart || (tempArcWall ? { x: tempArcWall.startX, y: tempArcWall.startY } : null);
+    if (shouldProcessWallDrawing) {
+      // Get effective draw start - from state or ref
+      const effectiveDrawStart = drawStart || arcDrawingRef.current.startPoint;
       if (!effectiveDrawStart) return;
       
-      console.log('[ArcDebug] Drawing mode active, wallDrawMode:', wallDrawMode, 'isDrawing:', isDrawing, 'tempArcWall:', !!tempArcWall);
+      console.log('[ArcDebug] Drawing mode active, wallDrawMode:', wallDrawMode, 'isDrawing:', isDrawing, 'isArcDrawing:', isArcDrawing);
       
       // First snap to endpoints, then grid
       const snapResult = findSnapPoint(canvas.x, canvas.y);

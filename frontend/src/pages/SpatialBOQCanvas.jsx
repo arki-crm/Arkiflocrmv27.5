@@ -1627,57 +1627,56 @@ export default function SpatialBOQCanvas() {
 
     const canvas = screenToCanvas(e.clientX, e.clientY);
 
-    // Drawing wall with click-release mode (Item #4) or drag mode
+    // Coohom-style wall drawing with real-time dimension display
     if ((wallClickMode === 'waiting_end' || isDrawing) && tool === 'wall') {
-      // CAD Enhanced: Use priority snapping system
+      // First snap to endpoints, then grid
       const snapResult = findSnapPoint(canvas.x, canvas.y);
-      let endPoint = snapResult.snapped ? { x: snapResult.x, y: snapResult.y } : canvas;
+      let endPoint = { x: snapResult.x, y: snapResult.y };
       
-      // Update alignment guides while drawing
-      const guides = findAlignmentGuides(endPoint.x, endPoint.y);
-      setAlignmentGuides(guides);
+      // Apply ortho constraint if enabled (Coohom default behavior)
+      if (orthoMode || shiftKeyHeld) {
+        const orthoResult = applyOrthogonalConstraint(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
+        endPoint = { x: orthoResult.x, y: orthoResult.y };
+        
+        // Show alignment guides for ortho drawing (green dashed lines like Coohom)
+        const guides = findAlignmentGuides(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
+        setAlignmentGuides(guides);
+      } else {
+        setAlignmentGuides([]);
+      }
+      
+      // Calculate and display real-time dimension (Coohom-style)
+      const length = Math.round(Math.sqrt(
+        Math.pow(endPoint.x - drawStart.x, 2) + Math.pow(endPoint.y - drawStart.y, 2)
+      ));
+      const midX = (drawStart.x + endPoint.x) / 2;
+      const midY = (drawStart.y + endPoint.y) / 2;
+      setDrawingDimension({ length, x: midX, y: midY });
 
       if (wallDrawMode === 'rectangle') {
-        // For rectangle mode, apply Shift constraint if held
-        if (shiftKeyHeld) {
-          const constrained = applyOrthogonalConstraint(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
-          // Make it a proper rectangle by taking the constrained point as one corner
-          const dx = constrained.x - drawStart.x;
-          const dy = constrained.y - drawStart.y;
-          // For rectangle, we need both dimensions - use the larger delta for both if shift is held
-          if (Math.abs(dx) > Math.abs(dy)) {
-            endPoint = { x: constrained.x, y: drawStart.y + Math.sign(canvas.y - drawStart.y) * Math.abs(dx) };
-          } else {
-            endPoint = { x: drawStart.x + Math.sign(canvas.x - drawStart.x) * Math.abs(dy), y: constrained.y };
-          }
-        }
         setTempRectWalls({ start: drawStart, end: endPoint });
       } else if (wallDrawMode === 'square') {
-        // Make it square
         const size = Math.max(Math.abs(endPoint.x - drawStart.x), Math.abs(endPoint.y - drawStart.y));
         const signX = endPoint.x > drawStart.x ? 1 : -1;
         const signY = endPoint.y > drawStart.y ? 1 : -1;
         endPoint = { x: drawStart.x + size * signX, y: drawStart.y + size * signY };
         setTempRectWalls({ start: drawStart, end: endPoint });
       } else {
-        // Free line with auto-straight assistance (Item #2) - enhanced with Shift lock
-        const snapped = snapToStraightLine(drawStart.x, drawStart.y, endPoint.x, endPoint.y, shiftKeyHeld);
-        endPoint = { x: snapped.x, y: snapped.y };
-        
-        const length = Math.sqrt(Math.pow(endPoint.x - drawStart.x, 2) + Math.pow(endPoint.y - drawStart.y, 2));
+        // Free line mode
         setTempWall({ 
           start: drawStart, 
           end: endPoint, 
-          length: Math.round(length),
-          snappedAngle: snapped.snapped ? snapped.angle : null
+          length: length,
+          snappedAngle: null
         });
       }
     } else {
-      // Clear alignment guides when not drawing
+      // Clear visual indicators when not drawing
       if (alignmentGuides.length > 0) setAlignmentGuides([]);
+      if (drawingDimension) setDrawingDimension(null);
     }
 
-    // Dragging wall endpoint (Item #1) - CAD Enhanced with vertex merge
+    // Dragging wall endpoint (Item #1) - with auto-merge on snap
     if (isDragging && dragType === 'wall_endpoint' && selectedItem?.type === 'wall') {
       const wall = selectedItem.item;
       

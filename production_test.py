@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 import uuid
 
 class ProductionMilestoneAPITester:
-    def __init__(self, base_url="https://interior-sketch-1.preview.emergentagent.com"):
+    def __init__(self, base_url="https://interior-designer-9.preview.emergentagent.com"):
         self.base_url = base_url
         self.admin_token = None
         self.designer_token = None

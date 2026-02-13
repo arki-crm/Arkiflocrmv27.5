@@ -1,189 +1,140 @@
 <analysis>**original_problem_statement:**
-The user initially requested a comprehensive audit and bug-fixing session for the finance module, providing a list of 10 specific issues. After these were resolved, the user reported and the agent fixed two new critical workflow breakages:
-1.  A bug preventing leads from being converted into projects, caused by a function name collision.
-2.  A bug in the design approval system where submissions were not being routed to managers for review, caused by missing permissions and then a subsequent timezone-related error.
+The user is iteratively building a sophisticated 2D interior design tool called Composer located at . The development has focused on adding and refining professional CAD-like features.
 
-The current and most urgent problem is a critical financial posting defect in the Purchase -> Payment flow, where credit purchases are being double-counted, leading to incorrect cashbook, daybook, and project finance reports.
+Initial requests included UI color scheme adjustments, fixing wall rendering, and implementing a robust geometry engine for closed rooms. More recently, the focus has shifted to advanced interaction features inspired by professional tools like Coohom, based on user feedback and a provided video analysis.
 
-PRODUCT REQUIREMENTS:
-- Fix the double-posting issue for credit purchases.
-- Ensure credit purchase invoices do not create cashbook entries.
-- Ensure only the final payment creates a cash outflow entry.
-- Ensure vendor liabilities net to zero after payment and do not become negative.
-- Ensure project finance reports reflect the correct actual cost without double-counting.
+The latest user requests have been:
+1.  Fix L-corner miter joins for open wall chains. (Completed)
+2.  Implement four specific UI/UX polishes: guided lines for straight drawing, 'L' key shortcut for line tool, preventing the properties panel from auto-opening, and making the floor material panel a toggle. (Completed)
+3.  Add guideline suggestions to help connect lines and close shapes. (Completed)
+4.  Implement a **wall split** option. (Last working item)
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application is a full-stack workflow management tool for interior design.
-- **Finance Module:** Recently underwent a major overhaul where 10 critical bugs related to data integrity, accounting logic, and UI were fixed. This includes idempotency for invoices/receipts, correct refund/return lifecycles, timezone corrections, and UI enhancements. However, a new double-posting bug for credit purchases is now the main issue.
-- **Lead Conversion:** The workflow for converting a lead into a project is functional again after a bug fix related to a function name collision was resolved.
-- **Design Approval Gate:** The system correctly blocks milestones pending manager approval. The routing of submissions to the manager's review queue is now functional after fixing issues with role permissions and timezone-aware datetime comparisons.
-- **Core Features:** Dashboards, Designer Management, and the Timeline Intelligence Engine remain functional.
+The application has a highly advanced 2D design canvas (Composer) with a robust geometry engine that correctly renders both closed rooms and open wall chains (like L-shapes) with clean, mitered corner joins.
+
+The canvas includes a suite of CAD features inspired by Coohom:
+*   Pre-click endpoint and vertex snapping.
+*   Toggleable ortho-drawing mode (with 'Shift' key override).
+*   Dynamic alignment guides (green dashed lines).
+*   Real-time dimension display during drawing.
+*   Guideline suggestions that show dotted lines to nearby endpoints to help close shapes.
+*   Keyboard shortcuts for tools ('L' for free line, 'W' for wall, 'S' for split).
 
 **Last working item**:
-    - Last item agent was working: The agent was diagnosing and fixing a critical defect where credit purchase invoices were being double-counted in financial reports. The agent identified that project finance and daybook queries were incorrectly including non-cash daybook entries associated with credit purchases. The agent implemented fixes by refining the database queries to explicitly exclude these entries based on the  flag and the . A secondary issue was found where  was miscalculated; a fix was implemented to fetch this value directly from the liabilities collection. The agent was in the process of testing these fixes.
+    - Last item agent was working: Implementing the wall split feature. The agent added a new 'split' tool, a keyboard shortcut ('S'), and the underlying  function. Logic was added to  to show a visual preview marker on the wall where the split will occur.
     - Status: IN PROGRESS
     - Agent Testing Done: N
-    - Which testing method agent to use? both. First, use  commands to manually execute the full test flow (create credit purchase, verify reports, make payment, verify reports again) to confirm the backend logic is sound. After confirmation, use the  to run a full regression test on the finance module.
+    - Which testing method agent to use? manual testing by screenshot tool. The agent needs to activate the split tool ('S'), hover over a wall to see the preview marker, and click to verify the wall is split into two distinct walls.
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  Issue 1:  (P0) Purchase -> Payment Flow Double-Posting Defect
-
+  - Issue 1:  (P0) Complete the Wall Split feature.
+  
   Issues Detail:
-  - Issue 1: **Purchase -> Payment Flow Double-Posting Defect**
-     - Attempted fixes:
-        1. Modified the  query in  to exclude transactions where  is  and also to exclude older transactions by checking .
-        2. Modified the  (daybook) query similarly.
-        3. Modified  to explicitly set  on payment transactions.
-        4. Corrected the calculation of  in  to query the  collection directly instead of calculating from transactions.
-     - Next debug checklist:
-        1. The last test run showed  was still incorrect after a new credit purchase was created. The agent implemented a fix for this but was interrupted before re-testing.
-        2. **Resume the test scenario:** Run the full test script from message #647 again to validate the latest fixes for  and .
-        3. **Test Flow:**
-            - Create a new credit purchase invoice for a project.
-            - Call the  endpoint and verify  is 0 and  equals the invoice amount.
-            - Settle the liability by making a payment.
-            - Call the project finance endpoint again and verify  now equals the payment amount and  is 0.
-        4. If the test passes, call the testing agent for a full regression on the finance module.
-     - Why fix this issue and what will be achieved with the fix? This is a critical accounting bug that causes inflated expense reporting and incorrect liability tracking. Fixing it will restore trust in all financial data.
+  - Issue 1: 
+     - Attempted fixes: The agent has laid the groundwork by creating the  function and the preview marker logic in . However, the implementation is incomplete.
+     - Next debug checklist: 
+        1.  Locate the  function in .
+        2.  Add a condition .
+        3.  Inside the condition, call the  function to perform the split.
+        4.  Ensure the  state is updated correctly by removing the old wall and adding the two new walls.
+        5.  Reset the tool to 'select' after the split is complete.
+     - Why fix this issue and what will be achieved with the fix? This will complete the user's requested feature, allowing designers to easily divide existing walls for more complex layouts.
      - Status:  IN PROGRESS
-     - Is recurring issue? Y (This is related to the initial P0 batch of finance fixes)
-     - Should Test frontend/backend/both after fix? backend
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? Frontend
      - Blocked on other issue: None
 
 **In progress Task List**:
-  - Task 1: (P0) Finalize fix for Purchase -> Payment double-posting defect.
-     - Where to resume: Rerun the comprehensive test scenario that the agent was performing (creating a credit purchase, checking reports, making a payment, and checking reports again) to validate the latest code changes in .
-     - What will be achieved with this? Correct financial posting for the entire credit purchase lifecycle.
+  - Task 1:  Finalize the Wall Split Functionality
+     - Where to resume: , inside the  function.
+     - What will be achieved with this? A fully functional wall-splitting tool.
      - Status:  IN PROGRESS
-     - Should Test frontend/backend/both after fix? backend
+     - Should Test frontend/backend/both after fix? Frontend
      - Blocked on something: None
 
 **Upcoming and Future Tasks**
 Upcoming Tasks:
-- (P1) Implement Phase 2 of Design Approval Gate: Version tracking for design submissions, revision cycles, and a submission history log.
+ - (P1) **T-Junction & Intersection Handling**: The current geometry engine does not correctly render T-junctions (where a wall endpoint meets the middle of another wall). This will be a common scenario after using the wall split tool.
+ - (P2) **Comprehensive CAD Feature Testing**: Now that multiple CAD features are in place (snapping, guides, splitting), run the frontend testing agent to perform a full regression test and ensure all features work together without conflict.
 
 Future Tasks:
-- Data Scoping Refactor: Migrate from role-based checks to a more granular permission-based system.
-- Backend Refactoring: Decompose the monolithic .
-- Historical Data Migration: Strategy for importing running projects and financial balances.
-- Security Hardening: Remove setup endpoints and add Google OAuth domain restrictions.
-- Quotation Builder UI: Build the frontend for the line-item-based quotation builder.
-- Add project count to the designer assignment modal for workload balancing.
+ - **CRITICAL Component Refactoring**: The  file is now over 4,600 lines and is a major source of technical debt, making new features difficult and risky to implement. It must be broken down into smaller custom hooks and components.
+ - **Backend Refactoring**: Decompose the monolithic .
+ - **Data Scoping Refactor**: Migrate from role-based checks to a more granular permission-based system.
 
 **Completed work in this session**
-- **Finance Module Audit (All 10 Bugs Fixed):**
-  - **P0 (Ledger Integrity):** Implemented idempotency for invoices/receipts, fixed refund/purchase return lifecycles, and prevented credit purchases from appearing in the cashbook.
-  - **P1 (Financial Structure):** Prevented duplicate bank account creation, added account archival functionality, and implemented a full status lifecycle for purchase returns.
-  - **P2 (System Accuracy):** Corrected system-wide date/time handling on the frontend and fixed profitability reports to accurately reflect purchase returns.
-  - **P3 (UI Enhancements):** Added 'Box'/'Packet' to unit dropdowns and improved Add Item button placement in the purchase invoice UI.
-- **Lead to Project Conversion Flow (FIXED):** Resolved a critical bug preventing lead conversion caused by a Python function name collision. The agent renamed the conflicting function from  to .
-- **Design Approval Routing (FIXED):** Resolved a multi-layered bug preventing design review requests from appearing for managers.
-    - **Permissions Fix:** Added  &  permissions to the 'DesignManager' role.
-    - **Data Fix:** Created an admin endpoint () to bulk-update existing users with correct default permissions.
-    - **Timezone Fix:** Corrected multiple  bugs in  by making datetime objects timezone-aware before comparison.
-- **Versioning:** Updated the application version in  to .
+- **Coohom-Style CAD Enhancements (Video-Based)**: Analyzed a user-provided video to implement several features matching Coohom's behavior, including green dashed alignment guides, circle snap indicators, and real-time dimension display.
+- **Core CAD Interaction Fixes**: Implemented a pre-click snap lock so the cursor magnetically locks to endpoints *before* a click, and established a clear selection priority (Vertex > Module > Wall).
+- **L-Corner Miter Join Fix**: Re-engineered the geometry engine to correctly render **open wall chains** (e.g., L-shapes) with clean mitered joins, fixing a visual bug with overlapping corners.
+- **Multiple UI/UX Polish Fixes**:
+    - Implemented keyboard shortcuts ('L' for Line, 'W' for Wall).
+    - Prevented the properties panel from auto-opening on selection.
+    - Fixed the floor material panel to be a toggle.
+    - Added guideline suggestions (dotted lines to nearby endpoints) to help users close shapes.
+- **Parametric Wall Editing**: Fixed a bug where dragging a wall of a rectangular room would break the geometry.
 
 **Earlier issues found/mentioned but not fixed**
-   - Issue 1: The backend  file is a monolith, increasing technical debt.
-   - Issue 2: Data-scoping logic still relies on role names in some areas instead of a pure permission-based system.
+   - Issue 1: The  file has become a massive monolith (>4600 lines), which is critical technical debt.
+   - Issue 2: The  file is a monolith.
+   - Issue 3: Data-scoping logic relies on role names instead of a pure permission-based system.
 
 **Known issue recurrence from previous fork**
-  - **Issue recurrence:** The Design Approval flow issue was reported twice.
-  - **Recurrence count:** 2
-  - **Status:** RESOLVED. The first report was fixed by addressing a permissions issue. The second report, with identical symptoms, was traced to a deeper timezone-related  in the backend, which has also been fixed and verified.
+  - **Wall Corner Geometry**: The problem of walls not joining cleanly at corners has been a recurring theme. While it has been fixed for closed loops and L-shapes, the new split feature will create T-junctions, which are not yet handled and will likely cause visual artifacts.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Idempotency:** Implemented  checks for invoice and receipt creation to prevent duplicates.
-- **Timezone-Aware Datetimes:** Fixed multiple bugs by ensuring all datetime objects are timezone-aware () before being stored or compared.
-- **Explicit Cashbook Flag:** Introduced an  boolean flag in the  model to distinguish between actual cash movements and other ledger entries (like credit purchases).
-- **Graceful Data Migration:** Queries were updated to handle both old data (without the  flag) and new data.
-- **Function Name Scoping:** Resolved a critical bug caused by two functions having the same name in the global scope, leading to the wrong one being called.
+- **Computational Geometry for 2D CAD**: Graph traversal to find connected wall chains, vector math for miter joins, polygon offsetting for wall thickness, and point-to-line projection for snapping and splitting.
+- **Advanced React State & Interaction Management**: Complex state management for a real-time interactive canvas, including handling mouse/keyboard events for drawing, dragging, and selecting, and mitigating stale state in closures during drag operations.
+- **Dynamic SVG Rendering**: Using React state to dynamically render complex geometric shapes, guides, and indicators as SVG elements.
 
 **key DB schema**
-  - **** (Modified):
-    - Added .
-    - Added  (to differentiate cash vs. non-cash entries).
-  - ****, **** (Modified):
-    - Added .
-  - **** (Modified):
-    - Added  (default: False).
-  - **** (Modified):
-    - Added  ('initiated', 'pending', 'completed', 'failed').
-  - **** (Modified):
-    - Added a detailed  lifecycle ('Initiated', 'Vendor Accepted', etc.).
-    - Added .
+  - No database changes were made.
 
 **changes in tech stack**
   - None.
 
 **All files of reference**
--  (Primary file for all bug fixes)
--  (Timezone fixes for design approvals)
--  (Added date utilities  and )
--  (Date handling fixes)
--  (Date handling fixes)
--  (Report logic fixes)
--  (UI enhancements)
--  (Version updated to 16.0.0)
-- 
+- : The only file modified, containing all logic for the Composer.
+- : Contains updated product requirements.
 
 **Areas that need refactoring**:
--  remains a critically oversized monolith. The extensive finance bug fixes have further highlighted the need to decompose this file into dedicated routers and service modules (e.g., a finance module).
+- **CRITICAL**:  is severely oversized and must be broken into smaller, manageable custom hooks (e.g., , ) and components.
+-  remains a monolithic technical debt.
 
 **key api endpoints**
-- **New Endpoints Created:**
-  - 
-  - 
-  - 
-  - 
-- **Modified Endpoints:**
-  -  (Added idempotency)
-  -  (Added idempotency)
-  -  (Daybook entry logic modified)
-  -  (Cashbook query logic modified)
-  -  (Cost calculation logic modified)
-  -  (Daybook query logic modified)
-  -  (Timeline generation call fixed)
-  -  (Permissions fixed)
-  -  (Timezone logic fixed)
+- No new APIs were created.
 
 **Critical Info for New Agent**
-- **Your immediate and only priority is to complete the fix for the Purchase -> Payment double-posting defect.**
-- The previous agent has already identified the root causes and implemented fixes in  related to query logic and liability calculation.
-- Your first action should be to resume the test scenario the previous agent was conducting. Validate that the latest fixes correctly calculate  and  throughout the credit purchase lifecycle.
-- Do not move on to any other tasks until this critical financial bug is fully resolved and verified with a regression test.
+- Your immediate task is to complete the **wall split feature**. The groundwork is laid, but you need to wire up the  event to call the  function.
+- The user is very detail-oriented and expects CAD behavior similar to professional tools like Coohom.
+- Be extremely cautious when editing . Its size makes it fragile. Proposing a refactor of this file is a high-priority future task.
+- Test corner cases after implementing the split. Splitting a wall will create a T-junction, which the current rendering engine does not handle correctly. This is the next logical problem to solve.
 
 **documents and test reports created in this job**
-- 
-- 
-- 
-- 
-- 
-- 
--  (Continuously updated)
+  - /app/memory/PRD.md
+  - /app/test_reports/iteration_67.json
+  - /app/test_reports/iteration_68.json
 
-**Last 10 User Messages and any pending HUMAN messages**
-- User reported a critical financial defect: credit purchases are being double-counted. (Status: IN PROGRESS)
-- User reported that the Design Approval submission was not creating a review request. (Status: COMPLETED)
-- User confirmed the Design Approval fix and asked to proceed. (Status: COMPLETED, but another bug was found)
-- User reported the Design Approval flow was still broken. (Status: COMPLETED)
-- User reported the Lead to Project conversion was broken. (Status: COMPLETED)
-- User asked to update the version to v16 and save to GitHub. (Status: COMPLETED)
-- User asked to proceed with P3 fixes. (Status: COMPLETED)
-- User asked to proceed with P2 fixes. (Status: COMPLETED)
-- User provided detailed clarifications and a new priority order for the 10 finance bugs. (Status: COMPLETED)
-- User approved the agent's plan to fix the 10 finance bugs. (Status: COMPLETED)
+**Last 10 User Messages and any pending HUMAN messages** 
+1.  **User**: Requested guideline suggestion to connect line to understand proper intersection to complete the drawing. (Status: COMPLETED)
+2.  **Agent**: Acknowledged and implemented the feature.
+3.  **Agent**: Provided a summary and verified the fix.
+4.  **User**: Requested i need wall spilt option. (Status: IN PROGRESS)
+5.  **Agent**: Acknowledged and started implementing the wall split feature.
+6.  **Agent**: Added the 'S' shortcut and the  function.
+7.  **Agent**: Added preview logic to .
+8.  **Agent**: Started adding the  logic to . The implementation is paused here.
+9.  [No further messages]
 
 **Project Health Check:**
--   **Broken**: The Purchase -> Payment financial flow is critically broken, causing incorrect accounting. This is the top priority.
--   **Mocked**: None.
--   **Technical Debt**: High. The  monolith is a significant liability and complicates debugging and development.
+- **Broken**: The wall split feature is non-functional as it is incomplete.
+- **Mocked**: None.
+- **Technical Debt**: **CRITICAL**. The  component is a >4600-line monolith, severely hampering maintainability and future development.
 
 **3rd Party Integrations**
 - Direct Google Auth
@@ -191,15 +142,14 @@ Future Tasks:
 - apscheduler
 
 **Testing status**
-  - Testing agent used after significant changes: YES
+  - Testing agent used after significant changes: YES (for parametric editing and initial CAD features)
   - Troubleshoot agent used after agent stuck in loop: NO
   - Test files created: []
-  - Known regressions: The double-posting bug in the finance module is a new regression, likely introduced while fixing other related issues.
+  - Known regressions: None from this session, but creating T-junctions with the new split tool will expose a new rendering issue.
 
 **Credentials to test flow:**
 -   **Founder**:  / 
 -   **Admin**:  / 
--   **DesignManager**: No specific credentials, but the role exists and can be assigned to a user.
 
 **What agent forgot to execute**
-- The agent was in the middle of executing a test plan for the double-posting bug. The final validation of the implemented fix needs to be completed.</analysis>
+- The agent was in the middle of implementing the  logic for the  tool. The  is set on mouse hover, but the click action to execute the split is not yet implemented.</analysis>

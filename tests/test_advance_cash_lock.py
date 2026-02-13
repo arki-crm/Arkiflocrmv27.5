@@ -17,7 +17,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://interior-sketch-1.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://interior-designer-9.preview.emergentagent.com').rstrip('/')
 
 # Test credentials
 TEST_EMAIL = "thaha.pakayil@gmail.com"

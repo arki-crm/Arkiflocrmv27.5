@@ -9,7 +9,7 @@ import os
 import json
 from datetime import datetime
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://interior-sketch-1.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://interior-designer-9.preview.emergentagent.com')
 
 # Test credentials
 TEST_EMAIL = "thaha.pakayil@gmail.com"

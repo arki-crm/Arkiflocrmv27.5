@@ -5095,9 +5095,9 @@ export default function SpatialBOQCanvas() {
                         {/* Extended alignment guides at intersection */}
                         {/* Horizontal guide */}
                         <line
-                          x1={0}
+                          x1={-10000}
                           y1={intersection.y * scale}
-                          x2={canvasSize.width}
+                          x2={10000}
                           y2={intersection.y * scale}
                           stroke="#22C55E"
                           strokeWidth="1"
@@ -5107,9 +5107,9 @@ export default function SpatialBOQCanvas() {
                         {/* Vertical guide */}
                         <line
                           x1={intersection.x * scale}
-                          y1={0}
+                          y1={-10000}
                           x2={intersection.x * scale}
-                          y2={canvasSize.height}
+                          y2={10000}
                           stroke="#22C55E"
                           strokeWidth="1"
                           strokeDasharray="6,4"

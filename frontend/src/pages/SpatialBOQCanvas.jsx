@@ -527,69 +527,73 @@ export default function SpatialBOQCanvas() {
     for (const wall of walls) {
       if (processedWalls.has(wall.wall_id)) continue;
       
-      // Start tracing from this wall
+      // Start tracing from this wall - collect all connected walls into one chain
       const chainWallIds = [wall.wall_id];
-      const chainVertices = [];
       processedWalls.add(wall.wall_id);
       
-      // Trace from start endpoint
-      let currentKey = coordKey(wall.start_x, wall.start_y);
-      let startChainVertices = [{ x: wall.start_x, y: wall.start_y }];
-      let prevWallId = wall.wall_id;
+      // Build chain by following connections in both directions from this wall
+      // Direction 1: from wall.start
+      const traceDirection = (startX, startY, excludeWallId) => {
+        const traced = [];
+        let currentKey = coordKey(startX, startY);
+        let prevWallId = excludeWallId;
+        
+        while (true) {
+          const vertex = vertices.get(currentKey);
+          if (!vertex) break;
+          
+          // Find next unprocessed wall at this vertex
+          const nextConn = vertex.walls.find(conn => 
+            conn.wall.wall_id !== prevWallId && !processedWalls.has(conn.wall.wall_id)
+          );
+          
+          if (!nextConn) {
+            // No more connections - this is an endpoint
+            traced.push({ x: vertex.x, y: vertex.y, isEndpoint: true });
+            break;
+          }
+          
+          // Found another wall - add the corner vertex and continue
+          traced.push({ x: vertex.x, y: vertex.y, isEndpoint: false });
+          chainWallIds.push(nextConn.wall.wall_id);
+          processedWalls.add(nextConn.wall.wall_id);
+          prevWallId = nextConn.wall.wall_id;
+          currentKey = nextConn.otherKey;
+        }
+        
+        return traced;
+      };
       
-      while (true) {
-        const vertex = vertices.get(currentKey);
-        if (!vertex || vertex.walls.length !== 2) break;
-        
-        const nextConn = vertex.walls.find(conn => 
-          conn.wall.wall_id !== prevWallId && !processedWalls.has(conn.wall.wall_id)
-        );
-        if (!nextConn) break;
-        
-        startChainVertices.push({ x: vertex.x, y: vertex.y });
-        chainWallIds.unshift(nextConn.wall.wall_id);
-        processedWalls.add(nextConn.wall.wall_id);
-        prevWallId = nextConn.wall.wall_id;
-        
-        // Move to the other end of this new wall
-        currentKey = nextConn.otherKey;
-      }
-      // Add the final endpoint of the chain start
-      const lastStartVertex = vertices.get(currentKey);
-      if (lastStartVertex) {
-        startChainVertices.push({ x: lastStartVertex.x, y: lastStartVertex.y });
-      }
+      // Trace from both ends of the starting wall
+      const startTrace = traceDirection(wall.start_x, wall.start_y, wall.wall_id);
+      const endTrace = traceDirection(wall.end_x, wall.end_y, wall.wall_id);
       
-      // Trace from end endpoint
-      currentKey = coordKey(wall.end_x, wall.end_y);
-      let endChainVertices = [{ x: wall.end_x, y: wall.end_y }];
-      prevWallId = wall.wall_id;
+      // Build the complete vertex chain:
+      // [startTrace reversed (without endpoint)] + [wall.start] + [wall.end] + [endTrace]
+      const chainVertices = [];
       
-      while (true) {
-        const vertex = vertices.get(currentKey);
-        if (!vertex || vertex.walls.length !== 2) break;
-        
-        const nextConn = vertex.walls.find(conn => 
-          conn.wall.wall_id !== prevWallId && !processedWalls.has(conn.wall.wall_id)
-        );
-        if (!nextConn) break;
-        
-        endChainVertices.push({ x: vertex.x, y: vertex.y });
-        chainWallIds.push(nextConn.wall.wall_id);
-        processedWalls.add(nextConn.wall.wall_id);
-        prevWallId = nextConn.wall.wall_id;
-        
-        currentKey = nextConn.otherKey;
-      }
-      // Add the final endpoint of the chain end
-      const lastEndVertex = vertices.get(currentKey);
-      if (lastEndVertex) {
-        endChainVertices.push({ x: lastEndVertex.x, y: lastEndVertex.y });
+      // Add start trace in reverse (from far endpoint to wall.start)
+      for (let i = startTrace.length - 1; i >= 0; i--) {
+        chainVertices.push(startTrace[i]);
       }
       
-      // Combine: reverse start chain, add original wall's endpoints, add end chain
-      startChainVertices.reverse();
-      chainVertices.push(...startChainVertices.slice(0, -1), ...endChainVertices);
+      // Add the original wall endpoints if not already added
+      if (chainVertices.length === 0 || 
+          (chainVertices[chainVertices.length-1].x !== wall.start_x || 
+           chainVertices[chainVertices.length-1].y !== wall.start_y)) {
+        chainVertices.push({ x: wall.start_x, y: wall.start_y, isEndpoint: startTrace.length === 0 });
+      }
+      
+      chainVertices.push({ x: wall.end_x, y: wall.end_y, isEndpoint: endTrace.length === 0 });
+      
+      // Add end trace
+      for (const v of endTrace) {
+        if (v.x !== wall.end_x || v.y !== wall.end_y) {
+          chainVertices.push(v);
+        }
+      }
+      
+      console.log('[OpenChain] Built chain with', chainVertices.length, 'vertices from', chainWallIds.length, 'walls');
       
       if (chainVertices.length >= 2) {
         openChains.push({

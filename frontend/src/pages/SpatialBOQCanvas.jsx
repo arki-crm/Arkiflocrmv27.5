@@ -1541,6 +1541,7 @@ export default function SpatialBOQCanvas() {
           setWallClickMode(null);
           setTempWall(null);
           setTempRectWalls(null);
+          setTempArcWall(null);
           setDrawStart(null);
         }
         // Cancel inline dimension editing

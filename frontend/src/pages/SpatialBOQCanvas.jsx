@@ -443,7 +443,36 @@ export default function SpatialBOQCanvas() {
   // Detects closed wall loops AND open wall chains, generates unified boundary polygons
   // with proper miter joins at all corners (no overlap)
   // Handles multiple separate groups in the same layout
+  // Also handles T-junctions where one wall meets the middle of another
   // ============================================
+  
+  // Helper: Check if two walls are collinear (same direction) at a shared vertex
+  const areWallsCollinear = (wall1, wall2, sharedX, sharedY, angleTolerance = 15) => {
+    // Get directions of both walls FROM the shared point
+    const getWallDirection = (wall, fromX, fromY) => {
+      const isStart = Math.abs(wall.start_x - fromX) < 10 && Math.abs(wall.start_y - fromY) < 10;
+      if (isStart) {
+        return { dx: wall.end_x - wall.start_x, dy: wall.end_y - wall.start_y };
+      } else {
+        return { dx: wall.start_x - wall.end_x, dy: wall.start_y - wall.end_y };
+      }
+    };
+    
+    const dir1 = getWallDirection(wall1, sharedX, sharedY);
+    const dir2 = getWallDirection(wall2, sharedX, sharedY);
+    
+    // Calculate angle between the two directions
+    const dot = dir1.dx * dir2.dx + dir1.dy * dir2.dy;
+    const len1 = Math.sqrt(dir1.dx * dir1.dx + dir1.dy * dir1.dy);
+    const len2 = Math.sqrt(dir2.dx * dir2.dx + dir2.dy * dir2.dy);
+    
+    if (len1 === 0 || len2 === 0) return false;
+    
+    const cosAngle = dot / (len1 * len2);
+    // Collinear means angle is ~180° (walls go in opposite directions from shared point)
+    // or ~0° (walls continue in same direction - but this shouldn't happen at same vertex)
+    return Math.abs(cosAngle + 1) < Math.cos((180 - angleTolerance) * Math.PI / 180) + 1;
+  };
   
   const computeUnifiedWallBoundary = useCallback(() => {
     if (!layout?.walls || layout.walls.length === 0) {

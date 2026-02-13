@@ -5209,6 +5209,59 @@ export default function SpatialBOQCanvas() {
                 })}
 
                 {/* ============================================
+                    ARC-STRAIGHT WALL JUNCTION MARKERS
+                    Shows connection points where arc walls meet straight walls
+                   ============================================ */}
+                {arcStraightJunctions.map((junction, idx) => {
+                  const arcWall = layout?.walls?.find(w => w.wall_id === junction.arcWallId);
+                  const straightWall = layout?.walls?.find(w => w.wall_id === junction.straightWallId);
+                  if (!arcWall || !straightWall) return null;
+                  
+                  const jx = junction.x;
+                  const jy = junction.y;
+                  const arcThickness = arcWall.thickness || DEFAULT_WALL_THICKNESS;
+                  const straightThickness = straightWall.thickness || DEFAULT_WALL_THICKNESS;
+                  
+                  // Calculate arc tangent at junction point
+                  const arcTangentAngle = junction.arcAngle + Math.PI / 2;
+                  
+                  // Calculate straight wall angle
+                  const straightDx = straightWall.end_x - straightWall.start_x;
+                  const straightDy = straightWall.end_y - straightWall.start_y;
+                  const straightAngle = Math.atan2(straightDy, straightDx);
+                  
+                  // Fill polygon to merge the junction
+                  const halfArcThick = arcThickness / 2;
+                  const halfStraightThick = straightThickness / 2;
+                  
+                  // Create a small polygon to fill the corner gap
+                  const arcPerpX = Math.cos(arcTangentAngle);
+                  const arcPerpY = Math.sin(arcTangentAngle);
+                  const straightPerpX = -Math.sin(straightAngle);
+                  const straightPerpY = Math.cos(straightAngle);
+                  
+                  const fillPoints = [
+                    { x: jx + arcPerpX * halfArcThick, y: jy + arcPerpY * halfArcThick },
+                    { x: jx + straightPerpX * halfStraightThick, y: jy + straightPerpY * halfStraightThick },
+                    { x: jx - arcPerpX * halfArcThick, y: jy - arcPerpY * halfArcThick },
+                    { x: jx - straightPerpX * halfStraightThick, y: jy - straightPerpY * halfStraightThick },
+                  ];
+                  
+                  const pointsStr = fillPoints.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
+                  
+                  return (
+                    <g key={`arc-straight-junction-${idx}`}>
+                      {/* Junction fill polygon */}
+                      <polygon
+                        points={pointsStr}
+                        fill="#B0B0B0"
+                        stroke="none"
+                      />
+                    </g>
+                  );
+                })}
+
+                {/* ============================================
                     OPEN WALL CHAIN RENDERING
                     Renders connected walls with proper miter joins
                     WITH NOTCHES at T-junction points for proper merging

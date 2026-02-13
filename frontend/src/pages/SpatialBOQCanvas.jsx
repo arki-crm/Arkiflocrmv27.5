@@ -2603,8 +2603,6 @@ export default function SpatialBOQCanvas() {
 
   // Handle mouse down
   const handleMouseDown = (e) => {
-    console.log('[MouseDown] Button:', e.button, 'Tool:', tool, 'WallDrawMode:', wallDrawMode, 'IsDrawing:', isDrawing);
-    
     // Middle mouse button for pan (Item #1)
     if (e.button === 1) {
       e.preventDefault();

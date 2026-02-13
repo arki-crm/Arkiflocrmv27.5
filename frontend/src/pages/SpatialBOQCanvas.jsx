@@ -2016,6 +2016,13 @@ export default function SpatialBOQCanvas() {
         endPoint = { x: orthoResult.x, y: orthoResult.y };
       }
       
+      // Find connection suggestions - show guidelines to potential endpoints
+      const { suggestions, closePoint } = findConnectionSuggestions(
+        drawStart.x, drawStart.y, endPoint.x, endPoint.y
+      );
+      setConnectionSuggestions(suggestions);
+      setCanCloseShape(closePoint);
+      
       // Calculate and display real-time dimension (Coohom-style)
       const length = Math.round(Math.sqrt(
         Math.pow(endPoint.x - drawStart.x, 2) + Math.pow(endPoint.y - drawStart.y, 2)

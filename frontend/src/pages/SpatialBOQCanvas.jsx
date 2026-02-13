@@ -3338,8 +3338,55 @@ export default function SpatialBOQCanvas() {
     return nearest;
   };
 
-  // Distance to wall
+  // Distance to wall (supports both straight and arc walls)
   const distanceToWall = (x, y, wall) => {
+    if (wall.is_arc) {
+      // Arc wall: calculate distance to arc centerline
+      const dx = x - wall.arc_center_x;
+      const dy = y - wall.arc_center_y;
+      const distToCenter = Math.sqrt(dx * dx + dy * dy);
+      
+      // Distance to arc curve is |distToCenter - radius|
+      const distToArc = Math.abs(distToCenter - wall.arc_radius);
+      
+      // Also check if point is within the arc's angle range
+      const angle = Math.atan2(dy, dx);
+      let startAngle = wall.arc_start_angle;
+      let endAngle = wall.arc_end_angle;
+      
+      // Normalize angles for comparison
+      const normalizeAngle = (a) => {
+        while (a < -Math.PI) a += 2 * Math.PI;
+        while (a > Math.PI) a -= 2 * Math.PI;
+        return a;
+      };
+      
+      const normAngle = normalizeAngle(angle);
+      const normStart = normalizeAngle(startAngle);
+      const normEnd = normalizeAngle(endAngle);
+      
+      // Check if angle is within arc span (accounting for direction)
+      let inRange = false;
+      if (wall.arc_bulge_direction > 0) {
+        // Counter-clockwise arc
+        if (normStart > normEnd) {
+          inRange = normAngle >= normEnd && normAngle <= normStart;
+        } else {
+          inRange = normAngle >= normStart || normAngle <= normEnd;
+        }
+      } else {
+        // Clockwise arc
+        if (normStart < normEnd) {
+          inRange = normAngle >= normStart && normAngle <= normEnd;
+        } else {
+          inRange = normAngle >= normStart || normAngle <= normEnd;
+        }
+      }
+      
+      return inRange ? distToArc : Infinity;
+    }
+    
+    // Straight wall: original logic
     const dx = wall.end_x - wall.start_x;
     const dy = wall.end_y - wall.start_y;
     const length = Math.sqrt(dx * dx + dy * dy);
@@ -3352,32 +3399,67 @@ export default function SpatialBOQCanvas() {
     return Math.sqrt((x - nearestX) ** 2 + (y - nearestY) ** 2);
   };
 
-  // Add module with wall snap (Item #7)
-  const addModule = (x, y) => {
-    if (!selectedModuleType || !moduleLibrary.module_types) return;
-    saveToHistory();
-
-    const moduleType = moduleLibrary.module_types[selectedModuleType];
-    if (!moduleType) return;
-
-    // Snap to nearest wall
-    const snapped = snapModuleToWall(x, y, moduleType.default_width, moduleType.default_depth);
-
-    const newModule = {
-      module_id: `mod_${Date.now().toString(36)}`,
-      module_type: selectedModuleType,
-      wall_id: snapped.wall_id,
-      position_on_wall: 0,
-      x: Math.round(snapped.x),
-      y: Math.round(snapped.y),
-      width: moduleType.default_width,
-      height: moduleType.default_height,
-      depth: moduleType.default_depth,
-      rotation: 0,
-      finish_type: 'laminate',
-      shutter_type: 'flat',
-      carcass_material: 'plywood_710',
-      carcass_finish: 'laminate', // NEW (Item #8)
+  // Snap opening to wall (supports arc walls)
+  const snapOpeningToWall = (x, y, width, depth, wall) => {
+    if (wall.is_arc) {
+      // Arc wall: snap to arc centerline with tangent rotation
+      const dx = x - wall.arc_center_x;
+      const dy = y - wall.arc_center_y;
+      const distToCenter = Math.sqrt(dx * dx + dy * dy);
+      
+      // Project point onto arc centerline
+      const angle = Math.atan2(dy, dx);
+      const snapX = wall.arc_center_x + wall.arc_radius * Math.cos(angle);
+      const snapY = wall.arc_center_y + wall.arc_radius * Math.sin(angle);
+      
+      // Calculate tangent angle at this point (perpendicular to radius)
+      const tangentAngle = angle + Math.PI / 2;
+      const rotationDegrees = tangentAngle * (180 / Math.PI);
+      
+      // Calculate position ratio along arc (0-1)
+      let angleDiff = wall.arc_end_angle - wall.arc_start_angle;
+      if (wall.arc_bulge_direction > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+      if (wall.arc_bulge_direction < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+      
+      let positionAngleDiff = angle - wall.arc_start_angle;
+      if (wall.arc_bulge_direction > 0 && positionAngleDiff > 0) positionAngleDiff -= 2 * Math.PI;
+      if (wall.arc_bulge_direction < 0 && positionAngleDiff < 0) positionAngleDiff += 2 * Math.PI;
+      
+      const positionRatio = Math.abs(angleDiff) > 0 ? Math.abs(positionAngleDiff / angleDiff) : 0;
+      const clampedRatio = Math.max(0, Math.min(1, positionRatio));
+      
+      return {
+        x: snapX - width / 2,
+        y: snapY - depth / 2,
+        rotation: rotationDegrees,
+        arc_position_ratio: clampedRatio,
+        is_on_arc: true
+      };
+    }
+    
+    // Straight wall: original logic
+    const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+    if (isHorizontal) {
+      // Constrain X to wall bounds
+      const minX = Math.min(wall.start_x, wall.end_x);
+      const maxX = Math.max(wall.start_x, wall.end_x) - width;
+      return {
+        x: Math.max(minX, Math.min(maxX, x)),
+        y: wall.start_y - depth / 2,
+        rotation: 0,
+        is_on_arc: false
+      };
+    } else {
+      const minY = Math.min(wall.start_y, wall.end_y);
+      const maxY = Math.max(wall.start_y, wall.end_y) - depth;
+      return {
+        x: wall.start_x - width / 2,
+        y: Math.max(minY, Math.min(maxY, y)),
+        rotation: 90,
+        is_on_arc: false
+      };
+    }
+  };
       custom_name: null,
       notes: null
     };

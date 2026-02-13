@@ -1677,6 +1677,24 @@ export default function SpatialBOQCanvas() {
       // Clear visual indicators when not drawing
       if (alignmentGuides.length > 0) setAlignmentGuides([]);
       if (drawingDimension) setDrawingDimension(null);
+      
+      // PRE-CLICK SNAP: Show vertex snap indicator BEFORE clicking (when wall tool is active)
+      if (tool === 'wall' && !wallClickMode) {
+        const vertex = findVertexAt(canvas.x, canvas.y);
+        if (vertex) {
+          setPreClickSnap({ x: vertex.x, y: vertex.y, type: 'vertex' });
+          setHoveredVertex(vertex);
+        } else {
+          // Show grid snap point
+          const gridX = Math.round(canvas.x / GRID_SNAP_SIZE) * GRID_SNAP_SIZE;
+          const gridY = Math.round(canvas.y / GRID_SNAP_SIZE) * GRID_SNAP_SIZE;
+          setPreClickSnap({ x: gridX, y: gridY, type: 'grid' });
+          setHoveredVertex(null);
+        }
+      } else if (!wallClickMode && !isDragging) {
+        setPreClickSnap(null);
+        setHoveredVertex(null);
+      }
     }
 
     // Dragging wall endpoint (Item #1) - with auto-merge on snap

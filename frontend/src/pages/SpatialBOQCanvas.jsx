@@ -1190,84 +1190,79 @@ export default function SpatialBOQCanvas() {
     };
   };
 
-  // CAD Enhanced Snapping System with Priority Order: Endpoint → Midpoint → Grid → Free
+  // Coohom-style Snapping System - Simple endpoint and grid snap with small circle indicators
   const findSnapPoint = useCallback((x, y, excludeWallId = null) => {
-    if (!layout?.walls?.length) {
-      setSnapIndicator(null);
-      return { x, y, snapped: false, type: null };
-    }
-
     let bestSnap = null;
     let minDist = Infinity;
 
-    // Priority 1: Endpoint snapping (highest priority)
-    for (const wall of layout.walls) {
-      if (wall.wall_id === excludeWallId) continue;
-      
-      const distStart = Math.sqrt(Math.pow(x - wall.start_x, 2) + Math.pow(y - wall.start_y, 2));
-      if (distStart < ENDPOINT_SNAP_THRESHOLD && distStart < minDist) {
-        minDist = distStart;
-        bestSnap = { x: wall.start_x, y: wall.start_y, snapped: true, type: 'endpoint' };
-      }
-      
-      const distEnd = Math.sqrt(Math.pow(x - wall.end_x, 2) + Math.pow(y - wall.end_y, 2));
-      if (distEnd < ENDPOINT_SNAP_THRESHOLD && distEnd < minDist) {
-        minDist = distEnd;
-        bestSnap = { x: wall.end_x, y: wall.end_y, snapped: true, type: 'endpoint' };
+    // Priority 1: Endpoint snapping - snap to existing wall endpoints
+    if (layout?.walls?.length) {
+      for (const wall of layout.walls) {
+        if (wall.wall_id === excludeWallId) continue;
+        
+        // Check start point
+        const distStart = Math.sqrt(Math.pow(x - wall.start_x, 2) + Math.pow(y - wall.start_y, 2));
+        if (distStart < ENDPOINT_SNAP_THRESHOLD && distStart < minDist) {
+          minDist = distStart;
+          bestSnap = { x: wall.start_x, y: wall.start_y, snapped: true, type: 'endpoint' };
+        }
+        
+        // Check end point
+        const distEnd = Math.sqrt(Math.pow(x - wall.end_x, 2) + Math.pow(y - wall.end_y, 2));
+        if (distEnd < ENDPOINT_SNAP_THRESHOLD && distEnd < minDist) {
+          minDist = distEnd;
+          bestSnap = { x: wall.end_x, y: wall.end_y, snapped: true, type: 'endpoint' };
+        }
       }
     }
 
-    // If endpoint found, use it (highest priority)
-    if (bestSnap && bestSnap.type === 'endpoint') {
+    // If endpoint found, use it
+    if (bestSnap) {
       setSnapIndicator({ x: bestSnap.x, y: bestSnap.y, type: 'endpoint' });
       return bestSnap;
     }
 
-    // Priority 2: Midpoint snapping
-    for (const wall of layout.walls) {
-      if (wall.wall_id === excludeWallId) continue;
-      
-      const midX = (wall.start_x + wall.end_x) / 2;
-      const midY = (wall.start_y + wall.end_y) / 2;
-      const distMid = Math.sqrt(Math.pow(x - midX, 2) + Math.pow(y - midY, 2));
-      
-      if (distMid < MIDPOINT_SNAP_THRESHOLD && distMid < minDist) {
-        minDist = distMid;
-        bestSnap = { x: midX, y: midY, snapped: true, type: 'midpoint' };
-      }
-    }
-
-    if (bestSnap && bestSnap.type === 'midpoint') {
-      setSnapIndicator({ x: bestSnap.x, y: bestSnap.y, type: 'midpoint' });
-      return bestSnap;
-    }
-
-    // Priority 3: Grid snapping
+    // Priority 2: Grid snapping (always active like Coohom)
     const gridX = Math.round(x / GRID_SNAP_SIZE) * GRID_SNAP_SIZE;
     const gridY = Math.round(y / GRID_SNAP_SIZE) * GRID_SNAP_SIZE;
-    const distGrid = Math.sqrt(Math.pow(x - gridX, 2) + Math.pow(y - gridY, 2));
-    
-    if (distGrid < GRID_SNAP_SIZE / 2) {
-      setSnapIndicator({ x: gridX, y: gridY, type: 'grid' });
-      return { x: gridX, y: gridY, snapped: true, type: 'grid' };
-    }
-
-    // Priority 4: Free draw (no snap)
-    setSnapIndicator(null);
-    return { x, y, snapped: false, type: null };
+    setSnapIndicator({ x: gridX, y: gridY, type: 'grid' });
+    return { x: gridX, y: gridY, snapped: true, type: 'grid' };
   }, [layout?.walls]);
 
-  // Legacy findNearestCorner for backward compatibility - now uses enhanced snapping
+  // Legacy findNearestCorner for backward compatibility
   const findNearestCorner = (x, y) => {
     const snap = findSnapPoint(x, y);
     return snap.snapped ? { x: snap.x, y: snap.y } : null;
   };
 
-  // Find alignment guides for current position
-  const findAlignmentGuides = useCallback((x, y, excludeWallId = null) => {
-    if (!layout?.walls?.length) return [];
-    
+  // Coohom-style alignment guides - green dashed lines when drawing horizontally/vertically
+  const findAlignmentGuides = useCallback((startX, startY, endX, endY) => {
     const guides = [];
+    const dx = endX - startX;
+    const dy = endY - startY;
+    
+    // Show horizontal guide when drawing mostly horizontal (within 5 degrees)
+    if (Math.abs(dy) < Math.abs(dx) * 0.1 || Math.abs(dy) < 50) {
+      guides.push({ 
+        type: 'horizontal', 
+        y: startY,
+        x1: Math.min(startX, endX) - 500,
+        x2: Math.max(startX, endX) + 500
+      });
+    }
+    
+    // Show vertical guide when drawing mostly vertical (within 5 degrees)
+    if (Math.abs(dx) < Math.abs(dy) * 0.1 || Math.abs(dx) < 50) {
+      guides.push({ 
+        type: 'vertical', 
+        x: startX,
+        y1: Math.min(startY, endY) - 500,
+        y2: Math.max(startY, endY) + 500
+      });
+    }
+    
+    return guides;
+  }, []);
     const canvasWidth = 10000; // Large canvas extent for guides
     
     for (const wall of layout.walls) {

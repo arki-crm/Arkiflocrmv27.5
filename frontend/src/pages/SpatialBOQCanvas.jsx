@@ -1508,6 +1508,124 @@ export default function SpatialBOQCanvas() {
     return guides;
   }, []);
 
+  // Find connection suggestions - endpoints that the user might want to connect to
+  // Shows dotted guidelines to help complete shapes
+  const findConnectionSuggestions = useCallback((fromX, fromY, currentEndX, currentEndY) => {
+    if (!layout?.walls?.length) return { suggestions: [], closePoint: null };
+    
+    const suggestions = [];
+    let closePoint = null;
+    const maxDistance = 3000; // mm - max distance to show suggestions
+    const closeThreshold = 300; // mm - distance to show "close shape" indicator
+    
+    // Build a set of unique endpoints
+    const endpoints = new Map();
+    for (const wall of layout.walls) {
+      const startKey = `${Math.round(wall.start_x)},${Math.round(wall.start_y)}`;
+      const endKey = `${Math.round(wall.end_x)},${Math.round(wall.end_y)}`;
+      
+      if (!endpoints.has(startKey)) {
+        endpoints.set(startKey, { x: wall.start_x, y: wall.start_y, connections: 0 });
+      }
+      endpoints.get(startKey).connections++;
+      
+      if (!endpoints.has(endKey)) {
+        endpoints.set(endKey, { x: wall.end_x, y: wall.end_y, connections: 0 });
+      }
+      endpoints.get(endKey).connections++;
+    }
+    
+    // Find the starting point of the current drawing chain (if drawing from an endpoint)
+    let chainStartPoint = null;
+    const fromKey = `${Math.round(fromX)},${Math.round(fromY)}`;
+    if (endpoints.has(fromKey)) {
+      // We're drawing from an existing endpoint - find the other end of the chain
+      // to see if we can close the shape
+      const visited = new Set([fromKey]);
+      let currentKey = fromKey;
+      
+      // Trace the chain to find where it started
+      for (let i = 0; i < layout.walls.length; i++) {
+        const currentEndpoint = endpoints.get(currentKey);
+        if (!currentEndpoint || currentEndpoint.connections !== 2) {
+          // Found an endpoint with only 1 connection (start of chain) or T-junction
+          if (currentEndpoint && currentEndpoint.connections === 1 && currentKey !== fromKey) {
+            chainStartPoint = { x: currentEndpoint.x, y: currentEndpoint.y };
+          }
+          break;
+        }
+        
+        // Find the next connected endpoint
+        let foundNext = false;
+        for (const wall of layout.walls) {
+          const wallStartKey = `${Math.round(wall.start_x)},${Math.round(wall.start_y)}`;
+          const wallEndKey = `${Math.round(wall.end_x)},${Math.round(wall.end_y)}`;
+          
+          if (wallStartKey === currentKey && !visited.has(wallEndKey)) {
+            visited.add(wallEndKey);
+            currentKey = wallEndKey;
+            foundNext = true;
+            break;
+          }
+          if (wallEndKey === currentKey && !visited.has(wallStartKey)) {
+            visited.add(wallStartKey);
+            currentKey = wallStartKey;
+            foundNext = true;
+            break;
+          }
+        }
+        if (!foundNext) break;
+      }
+    }
+    
+    // Find endpoints to suggest connecting to
+    for (const [key, endpoint] of endpoints) {
+      // Skip the point we're drawing from
+      if (Math.abs(endpoint.x - fromX) < 10 && Math.abs(endpoint.y - fromY) < 10) continue;
+      
+      const distFromCursor = Math.sqrt(
+        Math.pow(currentEndX - endpoint.x, 2) + Math.pow(currentEndY - endpoint.y, 2)
+      );
+      
+      // Only suggest endpoints with 1 connection (open ends) or check if it can close shape
+      if (endpoint.connections === 1 && distFromCursor < maxDistance) {
+        const isAligned = 
+          Math.abs(endpoint.x - fromX) < 50 || // Vertically aligned with start
+          Math.abs(endpoint.y - fromY) < 50 || // Horizontally aligned with start
+          Math.abs(endpoint.x - currentEndX) < 100 || // Close to cursor X
+          Math.abs(endpoint.y - currentEndY) < 100;   // Close to cursor Y
+        
+        suggestions.push({
+          x: endpoint.x,
+          y: endpoint.y,
+          distance: distFromCursor,
+          isAligned,
+          canClose: chainStartPoint && 
+            Math.abs(endpoint.x - chainStartPoint.x) < 10 && 
+            Math.abs(endpoint.y - chainStartPoint.y) < 10
+        });
+      }
+    }
+    
+    // Check if current cursor position can close the shape
+    if (chainStartPoint) {
+      const distToClose = Math.sqrt(
+        Math.pow(currentEndX - chainStartPoint.x, 2) + Math.pow(currentEndY - chainStartPoint.y, 2)
+      );
+      if (distToClose < closeThreshold) {
+        closePoint = { x: chainStartPoint.x, y: chainStartPoint.y, distance: distToClose };
+      }
+    }
+    
+    // Sort by distance and take top 3
+    suggestions.sort((a, b) => a.distance - b.distance);
+    
+    return { 
+      suggestions: suggestions.slice(0, 3), 
+      closePoint 
+    };
+  }, [layout?.walls]);
+
   // Coohom-style orthogonal constraint - snaps to pure horizontal or vertical
   const applyOrthogonalConstraint = (startX, startY, endX, endY) => {
     const dx = endX - startX;

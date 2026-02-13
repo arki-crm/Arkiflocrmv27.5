@@ -40,11 +40,11 @@ const ANGLE_SNAP_TOLERANCE = 8; // degrees - Item #2 - Auto straight line assist
 const CLOSURE_TOLERANCE = 200; // mm - tolerance for auto-sealing room closure gaps
 
 // CAD Precision Enhancement Constants
-const ENDPOINT_SNAP_THRESHOLD = 80; // mm - high priority endpoint snap
-const MIDPOINT_SNAP_THRESHOLD = 60; // mm - midpoint snap threshold
+const ENDPOINT_SNAP_THRESHOLD = 150; // mm - high priority endpoint snap (increased for better UX)
+const MIDPOINT_SNAP_THRESHOLD = 120; // mm - midpoint snap threshold (increased for better UX)
 const GRID_SNAP_SIZE = 50; // mm - grid snap increment
-const ALIGNMENT_THRESHOLD = 30; // mm - alignment guide threshold
-const VERTEX_MERGE_THRESHOLD = 100; // mm - auto-merge vertices when dragged close
+const ALIGNMENT_THRESHOLD = 50; // mm - alignment guide threshold (increased)
+const VERTEX_MERGE_THRESHOLD = 150; // mm - auto-merge vertices when dragged close (increased)
 
 // Module colors
 const MODULE_COLORS = {

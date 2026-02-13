@@ -2523,8 +2523,8 @@ export default function SpatialBOQCanvas() {
       
       // Log for debugging
       if (closureProjection) {
-        console.log('[LoopClosureProjection] Trajectory aligns with room start! Perp dist:', 
-          closureProjection.perpDistance.toFixed(0), 'Strength:', closureProjection.alignmentStrength.toFixed(2));
+        console.log('[LoopClosureProjection] Intersection found! Wall 4 length:', 
+          closureProjection.wall4Length.toFixed(0), 'mm, Cursor distance:', closureProjection.cursorDistance.toFixed(0), 'mm');
       }
       
       // LOOP CLOSURE SNAP: If close point is detected, snap cursor to it

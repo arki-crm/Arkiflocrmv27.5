@@ -1267,6 +1267,28 @@ export default function SpatialBOQCanvas() {
           }
           return;
         }
+        // L key - Free line drawing mode
+        if (e.key === 'l' || e.key === 'L') {
+          e.preventDefault();
+          setTool('wall');
+          setWallDrawMode('free');
+          setShowWallModePanel(true);
+          return;
+        }
+        // W key - Wall tool (rectangle mode by default)
+        if (e.key === 'w' || e.key === 'W') {
+          e.preventDefault();
+          setTool('wall');
+          setWallDrawMode('rectangle');
+          setShowWallModePanel(true);
+          return;
+        }
+        // V key - Select tool
+        if (e.key === 'v' || e.key === 'V') {
+          e.preventDefault();
+          setTool('select');
+          return;
+        }
       }
 
       if (!selectedItem) return;

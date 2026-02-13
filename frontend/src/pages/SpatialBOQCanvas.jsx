@@ -2864,6 +2864,115 @@ export default function SpatialBOQCanvas() {
     if (isDragging && dragType === 'wall_endpoint' && selectedItem?.type === 'wall') {
       const wall = selectedItem.item;
       
+      // Handle arc wall endpoint dragging
+      if (wall.is_arc) {
+        // Use enhanced snapping for the new endpoint position
+        const snapResult = findSnapPoint(canvas.x, canvas.y, wall.wall_id);
+        const newPos = snapResult.snapped ? { x: snapResult.x, y: snapResult.y } : canvas;
+        
+        // Apply Shift constraint for orthogonal movement
+        let finalPos = newPos;
+        if (shiftKeyHeld) {
+          const refX = dragEndpoint === 'start' ? wall.end_x : wall.start_x;
+          const refY = dragEndpoint === 'start' ? wall.end_y : wall.start_y;
+          finalPos = applyOrthogonalConstraint(refX, refY, newPos.x, newPos.y);
+        }
+        
+        // Calculate new arc with updated endpoint
+        let newStartX, newStartY, newEndX, newEndY;
+        if (dragEndpoint === 'start') {
+          newStartX = finalPos.x;
+          newStartY = finalPos.y;
+          newEndX = wall.end_x;
+          newEndY = wall.end_y;
+        } else {
+          newStartX = wall.start_x;
+          newStartY = wall.start_y;
+          newEndX = finalPos.x;
+          newEndY = finalPos.y;
+        }
+        
+        // Recalculate arc parameters maintaining the chord height ratio
+        // This keeps the arc's "bulge" proportionally similar
+        const oldChordLength = Math.sqrt(
+          Math.pow(wall.end_x - wall.start_x, 2) + 
+          Math.pow(wall.end_y - wall.start_y, 2)
+        );
+        const newChordLength = Math.sqrt(
+          Math.pow(newEndX - newStartX, 2) + 
+          Math.pow(newEndY - newStartY, 2)
+        );
+        
+        // Scale chord height proportionally
+        const chordHeightRatio = wall.arc_chord_height / oldChordLength;
+        const newChordHeight = Math.max(50, newChordLength * chordHeightRatio);
+        
+        // Calculate new arc parameters
+        const newArcParams = calculateArcFromChordHeight(
+          newStartX, newStartY,
+          newEndX, newEndY,
+          newChordHeight,
+          wall.arc_bulge_direction
+        );
+        
+        // Update the arc wall
+        setLayout(prev => ({
+          ...prev,
+          walls: prev.walls.map(w => {
+            if (w.wall_id !== wall.wall_id) return w;
+            return {
+              ...w,
+              start_x: newStartX,
+              start_y: newStartY,
+              end_x: newEndX,
+              end_y: newEndY,
+              arc_radius: newArcParams.radius,
+              arc_chord_length: newArcParams.chordLength,
+              arc_chord_height: newArcParams.chordHeight,
+              arc_center_x: newArcParams.centerX,
+              arc_center_y: newArcParams.centerY,
+              arc_start_angle: newArcParams.startAngle,
+              arc_end_angle: newArcParams.endAngle,
+              arc_sweep_flag: newArcParams.sweepFlag,
+              arc_large_arc_flag: newArcParams.largeArcFlag,
+              length: Math.round(newArcParams.arcLength)
+            };
+          })
+        }));
+        setHasChanges(true);
+        
+        // Update selected item
+        setSelectedItem(prev => ({
+          ...prev,
+          item: {
+            ...prev.item,
+            start_x: newStartX,
+            start_y: newStartY,
+            end_x: newEndX,
+            end_y: newEndY,
+            arc_radius: newArcParams.radius,
+            arc_chord_length: newArcParams.chordLength,
+            arc_chord_height: newArcParams.chordHeight,
+            arc_center_x: newArcParams.centerX,
+            arc_center_y: newArcParams.centerY,
+            arc_start_angle: newArcParams.startAngle,
+            arc_end_angle: newArcParams.endAngle,
+            arc_sweep_flag: newArcParams.sweepFlag,
+            arc_large_arc_flag: newArcParams.largeArcFlag,
+            length: Math.round(newArcParams.arcLength)
+          }
+        }));
+        
+        // Show snap indicator if snapped
+        if (snapResult.snapped) {
+          setSnapIndicator({ x: finalPos.x, y: finalPos.y, type: snapResult.type });
+        } else {
+          setSnapIndicator(null);
+        }
+        
+        return; // Exit early for arc walls
+      }
+      
       // CAD Enhanced: Check for vertex merge target (endpoint or T-junction)
       const mergeTarget = findMergeTarget(canvas.x, canvas.y, wall.wall_id, dragEndpoint);
       if (mergeTarget) {

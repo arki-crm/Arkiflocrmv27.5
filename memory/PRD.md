@@ -28,6 +28,8 @@ Implemented curved/arc wall drawing capability with two input methods and full s
 | 8 | **Arc Dimension Display** | Shows R:XXXmm and Arc:XXXmm while drawing | ✅ |
 | 9 | **Endpoint Snapping** | Arc endpoints snap to grid and existing vertices | ✅ |
 | 10 | **UI Integration** | Arc Wall option in Wall Tool dropdown panel | ✅ |
+| 11 | **Door/Window on Arc** | Doors and windows snap to arc centerline with tangent rotation | ✅ |
+| 12 | **Arc Distance Calculation** | Distance to arc wall for nearby detection | ✅ |
 
 **Arc Wall Technical Details:**
 - Two calculation functions: `calculateArcFromRadius()` and `calculateArcFromChordHeight()`

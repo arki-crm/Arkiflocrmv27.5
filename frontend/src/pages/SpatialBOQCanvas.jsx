@@ -1877,6 +1877,69 @@ export default function SpatialBOQCanvas() {
   }, [layout?.walls]);
 
   // ============================================
+  // LOOP CLOSURE PROJECTION DETECTION
+  // Detects if the cursor trajectory would pass near the room start point
+  // Shows guidance BEFORE drawing the final wall (while drawing 3rd wall)
+  // ============================================
+  const findLoopClosureProjection = useCallback((startX, startY, endX, endY, chainStart) => {
+    if (!chainStart) return null;
+    
+    // Direction of the line being drawn
+    const drawDx = endX - startX;
+    const drawDy = endY - startY;
+    const drawLen = Math.sqrt(drawDx * drawDx + drawDy * drawDy);
+    
+    if (drawLen < 50) return null;
+    
+    // Normalize direction
+    const drawDirX = drawDx / drawLen;
+    const drawDirY = drawDy / drawLen;
+    
+    // Vector from draw start to chain start
+    const toChainStartX = chainStart.x - startX;
+    const toChainStartY = chainStart.y - startY;
+    
+    // Project chain start onto the drawing line
+    // t = (toChainStart · drawDir)
+    const t = toChainStartX * drawDirX + toChainStartY * drawDirY;
+    
+    // If t <= 0, chain start is behind the draw start - not useful
+    if (t <= 0) return null;
+    
+    // Closest point on the projected line to chain start
+    const closestX = startX + t * drawDirX;
+    const closestY = startY + t * drawDirY;
+    
+    // Distance from chain start to the projected line (perpendicular distance)
+    const perpDistX = chainStart.x - closestX;
+    const perpDistY = chainStart.y - closestY;
+    const perpDist = Math.sqrt(perpDistX * perpDistX + perpDistY * perpDistY);
+    
+    // If perpendicular distance is small, trajectory aligns with chain start
+    // Use a generous threshold (300mm) for early detection
+    const ALIGNMENT_THRESHOLD = 300;
+    
+    if (perpDist < ALIGNMENT_THRESHOLD) {
+      // Distance from current cursor to the chain start point
+      const cursorToChainDist = Math.sqrt(
+        (endX - chainStart.x) * (endX - chainStart.x) + 
+        (endY - chainStart.y) * (endY - chainStart.y)
+      );
+      
+      return {
+        x: chainStart.x,
+        y: chainStart.y,
+        perpDistance: perpDist,
+        projectionDistance: t, // Distance along draw direction
+        cursorDistance: cursorToChainDist,
+        alignmentStrength: 1 - (perpDist / ALIGNMENT_THRESHOLD) // 1 = perfect alignment, 0 = at threshold
+      };
+    }
+    
+    return null;
+  }, []);
+
+  // ============================================
   // PREDICTIVE INTERSECTION DETECTION
   // Calculates where the wall being drawn will intersect existing walls
   // Shows snap marker BEFORE cursor reaches the intersection

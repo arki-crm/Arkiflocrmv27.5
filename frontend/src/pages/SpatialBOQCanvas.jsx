@@ -3533,7 +3533,57 @@ export default function SpatialBOQCanvas() {
                   />
                 ))}
 
-                {/* Coohom-style: Simple circle snap indicator */}
+                {/* PRE-CLICK SNAP INDICATOR - Shows BEFORE clicking when wall tool active */}
+                {preClickSnap && tool === 'wall' && !wallClickMode && (
+                  <g>
+                    {/* Outer ring - larger hitbox visualization */}
+                    <circle
+                      cx={preClickSnap.x * scale}
+                      cy={preClickSnap.y * scale}
+                      r={preClickSnap.type === 'vertex' ? 12 : 6}
+                      fill="none"
+                      stroke={preClickSnap.type === 'vertex' ? '#22C55E' : '#94A3B8'}
+                      strokeWidth="2"
+                      strokeDasharray={preClickSnap.type === 'vertex' ? '0' : '4,2'}
+                      strokeOpacity="0.7"
+                    />
+                    {/* Inner filled circle */}
+                    <circle
+                      cx={preClickSnap.x * scale}
+                      cy={preClickSnap.y * scale}
+                      r={preClickSnap.type === 'vertex' ? 6 : 3}
+                      fill={preClickSnap.type === 'vertex' ? '#22C55E' : '#94A3B8'}
+                      fillOpacity="0.9"
+                    />
+                    {/* Crosshair for vertex snap */}
+                    {preClickSnap.type === 'vertex' && (
+                      <>
+                        <line
+                          x1={preClickSnap.x * scale - 16} y1={preClickSnap.y * scale}
+                          x2={preClickSnap.x * scale - 8} y2={preClickSnap.y * scale}
+                          stroke="#22C55E" strokeWidth="2"
+                        />
+                        <line
+                          x1={preClickSnap.x * scale + 8} y1={preClickSnap.y * scale}
+                          x2={preClickSnap.x * scale + 16} y2={preClickSnap.y * scale}
+                          stroke="#22C55E" strokeWidth="2"
+                        />
+                        <line
+                          x1={preClickSnap.x * scale} y1={preClickSnap.y * scale - 16}
+                          x2={preClickSnap.x * scale} y2={preClickSnap.y * scale - 8}
+                          stroke="#22C55E" strokeWidth="2"
+                        />
+                        <line
+                          x1={preClickSnap.x * scale} y1={preClickSnap.y * scale + 8}
+                          x2={preClickSnap.x * scale} y2={preClickSnap.y * scale + 16}
+                          stroke="#22C55E" strokeWidth="2"
+                        />
+                      </>
+                    )}
+                  </g>
+                )}
+
+                {/* Snap indicator during drawing/dragging */}
                 {snapIndicator && (
                   <circle
                     cx={snapIndicator.x * scale}
@@ -3546,7 +3596,7 @@ export default function SpatialBOQCanvas() {
                   />
                 )}
 
-                {/* Coohom-style: Real-time dimension display while drawing */}
+                {/* Real-time dimension display while drawing */}
                 {drawingDimension && (wallClickMode === 'waiting_end' || isDrawing) && (
                   <g>
                     {/* Background box */}
@@ -3574,7 +3624,7 @@ export default function SpatialBOQCanvas() {
                   </g>
                 )}
 
-                {/* Coohom-style: Ortho mode indicator */}
+                {/* Ortho mode indicator */}
                 {(orthoMode || shiftKeyHeld) && (wallClickMode === 'waiting_end' || isDrawing) && (
                   <g>
                     <rect

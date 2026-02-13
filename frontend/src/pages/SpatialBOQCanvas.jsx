@@ -3466,6 +3466,14 @@ export default function SpatialBOQCanvas() {
     if (!layout?.walls) return null;
     return layout.walls.find(w => {
       const thickness = w.thickness || DEFAULT_WALL_THICKNESS;
+      
+      // Arc wall detection
+      if (w.is_arc) {
+        const dist = distanceToWall(x, y, w);
+        return dist <= thickness / 2 + 20; // 20mm tolerance for clicking
+      }
+      
+      // Straight wall detection (bounding box)
       const minX = Math.min(w.start_x, w.end_x) - thickness / 2;
       const maxX = Math.max(w.start_x, w.end_x) + thickness / 2;
       const minY = Math.min(w.start_y, w.end_y) - thickness / 2;

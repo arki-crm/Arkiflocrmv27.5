@@ -4133,54 +4133,6 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
-                {/* T-Junction and vertex fill patches - closes gaps where walls meet */}
-                {/* Render junction fills BEFORE wall shapes so they're underneath */}
-                {layout?.walls && layout.walls.length > 0 && (() => {
-                  // Build vertex map to find all junction points
-                  const tolerance = 20; // mm tolerance for vertex matching
-                  const coordKey = (x, y) => `${Math.round(x/tolerance)*tolerance}_${Math.round(y/tolerance)*tolerance}`;
-                  const vertexMap = new Map();
-                  
-                  for (const wall of layout.walls) {
-                    const startKey = coordKey(wall.start_x, wall.start_y);
-                    const endKey = coordKey(wall.end_x, wall.end_y);
-                    
-                    if (!vertexMap.has(startKey)) {
-                      vertexMap.set(startKey, { x: wall.start_x, y: wall.start_y, thicknesses: [] });
-                    }
-                    vertexMap.get(startKey).thicknesses.push(wall.thickness || DEFAULT_WALL_THICKNESS);
-                    
-                    if (!vertexMap.has(endKey)) {
-                      vertexMap.set(endKey, { x: wall.end_x, y: wall.end_y, thicknesses: [] });
-                    }
-                    vertexMap.get(endKey).thicknesses.push(wall.thickness || DEFAULT_WALL_THICKNESS);
-                  }
-                  
-                  // Render fill patches at vertices with 2+ walls (all junctions)
-                  const patches = [];
-                  for (const [key, vertex] of vertexMap) {
-                    if (vertex.thicknesses.length >= 2) {
-                      // This is a junction - render a fill patch
-                      const maxThickness = Math.max(...vertex.thicknesses);
-                      // Make patch radius equal to wall thickness to fully cover any gap
-                      const patchSize = maxThickness / 2 + 5;
-                      
-                      patches.push(
-                        <rect
-                          key={`junction-fill-${key}`}
-                          x={(vertex.x - patchSize) * scale}
-                          y={(vertex.y - patchSize) * scale}
-                          width={patchSize * 2 * scale}
-                          height={patchSize * 2 * scale}
-                          fill="#B0B0B0"
-                          stroke="none"
-                        />
-                      );
-                    }
-                  }
-                  return patches;
-                })()}
-
                 {/* Temp wall while drawing - Coohom-style thin outline preview */}
                 {tempWall && (() => {
                   const dx = tempWall.end.x - tempWall.start.x;

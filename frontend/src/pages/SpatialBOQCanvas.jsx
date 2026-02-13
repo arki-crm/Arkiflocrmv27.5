@@ -789,6 +789,14 @@ export default function SpatialBOQCanvas() {
     if (allBoundaries.length === 0 && tJunctions.length === 0) {
       return null;
     }
+    
+    // Debug: Log T-junction detection
+    if (tJunctions.length > 0) {
+      console.log('[T-Junction] Detected', tJunctions.length, 'T-junction(s)');
+      tJunctions.forEach((tj, i) => {
+        console.log(`  T-Junction ${i}: at (${tj.x}, ${tj.y}), stem wall: ${tj.stemWall?.wall_id}, through thickness: ${tj.throughThickness}`);
+      });
+    }
 
     return {
       loops: loopBoundaries,

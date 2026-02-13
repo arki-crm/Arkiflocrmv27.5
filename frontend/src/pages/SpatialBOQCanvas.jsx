@@ -179,13 +179,20 @@ export default function SpatialBOQCanvas() {
   };
 
   // Wall drawing state - Click-Release mode (Item #4)
-  const [wallDrawMode, setWallDrawMode] = useState('free'); // rectangle, square, free
+  const [wallDrawMode, setWallDrawMode] = useState('free'); // rectangle, square, free, arc
   const [showWallModePanel, setShowWallModePanel] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
   const [tempWall, setTempWall] = useState(null);
   const [tempRectWalls, setTempRectWalls] = useState(null);
   const [wallClickMode, setWallClickMode] = useState(null); // 'waiting_end' for click-release mode
+
+  // Arc wall state
+  const [arcInputMethod, setArcInputMethod] = useState('radius'); // 'radius' or 'chordHeight'
+  const [arcRadiusInput, setArcRadiusInput] = useState('1000'); // Default radius in mm
+  const [arcChordHeightInput, setArcChordHeightInput] = useState('500'); // Default chord height in mm
+  const [tempArcWall, setTempArcWall] = useState(null); // { start, end, radius, chordHeight, bulgeDirection, centerX, centerY, startAngle, endAngle, sweepFlag }
+  const [arcBulgeDirection, setArcBulgeDirection] = useState(1); // 1 or -1 for left/right bulge
 
   // Module-to-Wall distance editing (Item #8)
   const [editingModuleDistance, setEditingModuleDistance] = useState(null);

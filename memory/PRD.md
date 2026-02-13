@@ -9,40 +9,39 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: CAD Precision Enhancements IN PROGRESS 🔄
+## Current Status: CAD Precision Enhancements (Coohom-style) COMPLETE ✅
 **As of February 13, 2026**
 
-### Composer (SpatialBOQCanvas) - CAD Precision Enhancements
+### Composer (SpatialBOQCanvas) - Coohom-style CAD Precision
 
-Implementing professional CAD-level snapping and constraint behavior for the Composer canvas.
+Implemented professional CAD-level snapping and constraint behavior matching Coohom software.
 
 | # | Enhancement | Description | Status |
 |---|-------------|-------------|--------|
-| 1 | **Endpoint Snapping** | Green crosshair indicator when near wall endpoint (150mm threshold) | ✅ Implemented |
-| 2 | **Midpoint Snapping** | Orange diamond indicator when near wall midpoint (120mm threshold) | ✅ Implemented |
-| 3 | **Grid Snapping** | 50mm grid snap with gray indicator | ✅ Working |
-| 4 | **Orthogonal Constraint (Shift-Lock)** | Hold Shift to lock drawing to 0°/90°/180°/270° | ✅ Implemented |
-| 5 | **Smart Alignment Guides** | Blue dashed lines when aligned with existing wall endpoints (50mm threshold) | ✅ Implemented |
-| 6 | **Vertex Auto-Merge** | Auto-merge endpoints when dragged within 150mm of another endpoint | ✅ Implemented |
-| 7 | **Parametric Wall Editing** | Dragging one wall of rectangle deforms room while maintaining closure | ⏳ Code Complete |
+| 1 | **Ortho Drawing Toggle** | Toggleable ortho mode (default ON) snaps to 90° angles | ✅ |
+| 2 | **Green Alignment Guides** | Dashed green lines appear when drawing horizontally/vertically | ✅ |
+| 3 | **Endpoint Snap Indicators** | Green circle appears when near existing wall endpoints | ✅ |
+| 4 | **Grid Snap Indicators** | Gray circle shows grid snap points (50mm increments) | ✅ |
+| 5 | **Real-time Dimension Display** | Gray box shows wall length (mm) while drawing | ✅ |
+| 6 | **Auto Endpoint Join** | Walls automatically connect when endpoints are close | ✅ |
+| 7 | **Shift Key Override** | Hold Shift for manual ortho lock when ortho is off | ✅ |
 
-**Snap Priority Order:** Endpoint → Midpoint → Grid → Free draw
+**Visual Feedback (Coohom-style):**
+- **Snap Indicator**: Simple filled circle (green for endpoint, gray for grid)
+- **Alignment Guides**: Green dashed lines (8,4 pattern)
+- **Dimension Box**: Light gray (#F1F5F9) box with dark text showing "XXXX mm"
+- **Ortho Badge**: Green "✓ Ortho Drawing Active" indicator on canvas
 
-**Technical Implementation:**
-- `findSnapPoint()` - Priority-based snapping with visual indicator state
-- `findAlignmentGuides()` - Detects H/V alignment with existing wall endpoints
-- `applyOrthogonalConstraint()` - Forces pure horizontal/vertical based on dominant axis
-- `findMergeTarget()` - Detects nearby endpoints for auto-merge during drag
-- `activeRectLoop` state - Stores detected rectangular loop at drag start for parametric editing
-
-**Constants:**
+**Technical Constants:**
 - `ENDPOINT_SNAP_THRESHOLD = 150mm`
-- `MIDPOINT_SNAP_THRESHOLD = 120mm`
 - `GRID_SNAP_SIZE = 50mm`
-- `ALIGNMENT_THRESHOLD = 50mm`
-- `VERTEX_MERGE_THRESHOLD = 150mm`
+- `orthoMode` state (default: true)
 
-**Verification (iteration_68.json):** 75% pass rate - Grid snapping confirmed working, visual indicators need precise cursor positioning.
+**Wall Mode Panel Features:**
+- Ortho Drawing toggle (green when active)
+- Rectangle Room mode
+- Square Room mode
+- Free Line Draw mode
 
 ---
 

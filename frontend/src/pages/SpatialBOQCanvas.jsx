@@ -2340,6 +2340,12 @@ export default function SpatialBOQCanvas() {
       setConnectionSuggestions(suggestions);
       setCanCloseShape(closePoint);
       
+      // LOOP CLOSURE SNAP: If close point is detected, snap cursor to it
+      if (closePoint && closePoint.distance < 150) {
+        // Strong snap to close point when within 150mm
+        endPoint = { x: closePoint.x, y: closePoint.y };
+      }
+      
       // Calculate and display real-time dimension (Coohom-style)
       const length = Math.round(Math.sqrt(
         Math.pow(endPoint.x - drawStart.x, 2) + Math.pow(endPoint.y - drawStart.y, 2)

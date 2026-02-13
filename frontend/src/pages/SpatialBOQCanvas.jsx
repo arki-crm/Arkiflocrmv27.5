@@ -506,9 +506,30 @@ export default function SpatialBOQCanvas() {
     const closedLoops = [];
     const processedWalls = new Set();
 
+    // Helper: At a T-junction vertex, find the wall that continues collinearly with the incoming wall
+    const findCollinearContinuation = (vertex, incomingWallId) => {
+      if (vertex.walls.length !== 3) return null;
+      
+      const incomingConn = vertex.walls.find(c => c.wall.wall_id === incomingWallId);
+      if (!incomingConn) return null;
+      
+      // Find which of the other two walls is collinear with the incoming wall
+      const otherConns = vertex.walls.filter(c => c.wall.wall_id !== incomingWallId);
+      for (const conn of otherConns) {
+        if (areWallsCollinear(incomingConn.wall, conn.wall, vertex.x, vertex.y)) {
+          return conn;
+        }
+      }
+      return null;
+    };
+
     // Start from vertices that have exactly 2 connections (potential loop members)
+    // Also handle T-junctions by treating collinear walls as connected
     for (const [startKey, startVertex] of vertices) {
-      if (startVertex.walls.length !== 2) continue;
+      // Skip vertices with 1 or 4+ connections
+      if (startVertex.walls.length < 2 || startVertex.walls.length > 3) continue;
+      // For 3-connection vertices (T-junctions), we start loops from 2-connection vertices
+      if (startVertex.walls.length === 3) continue;
       
       const unprocessedWall = startVertex.walls.find(conn => !processedWalls.has(conn.wall.wall_id));
       if (!unprocessedWall) continue;
@@ -526,20 +547,38 @@ export default function SpatialBOQCanvas() {
       while (iterations < maxIterations) {
         iterations++;
         const vertex = vertices.get(currentKey);
-        if (!vertex || vertex.walls.length !== 2) break;
+        if (!vertex) break;
         
-        loopVertices.push({ x: vertex.x, y: vertex.y });
-        
-        const nextConn = vertex.walls.find(conn => 
-          conn.wall.wall_id !== prevWallId && !localVisited.has(conn.wall.wall_id)
-        );
-        
-        if (!nextConn) break;
-        
-        localVisited.add(nextConn.wall.wall_id);
-        loopWallIds.push(nextConn.wall.wall_id);
-        prevWallId = nextConn.wall.wall_id;
-        currentKey = nextConn.otherKey;
+        // Handle different vertex types
+        if (vertex.walls.length === 2) {
+          // Normal corner - continue as before
+          loopVertices.push({ x: vertex.x, y: vertex.y });
+          
+          const nextConn = vertex.walls.find(conn => 
+            conn.wall.wall_id !== prevWallId && !localVisited.has(conn.wall.wall_id)
+          );
+          
+          if (!nextConn) break;
+          
+          localVisited.add(nextConn.wall.wall_id);
+          loopWallIds.push(nextConn.wall.wall_id);
+          prevWallId = nextConn.wall.wall_id;
+          currentKey = nextConn.otherKey;
+        } else if (vertex.walls.length === 3 && prevWallId) {
+          // T-junction - try to continue along collinear wall
+          const collinearConn = findCollinearContinuation(vertex, prevWallId);
+          if (collinearConn && !localVisited.has(collinearConn.wall.wall_id)) {
+            loopVertices.push({ x: vertex.x, y: vertex.y });
+            localVisited.add(collinearConn.wall.wall_id);
+            loopWallIds.push(collinearConn.wall.wall_id);
+            prevWallId = collinearConn.wall.wall_id;
+            currentKey = collinearConn.otherKey;
+          } else {
+            break; // No collinear continuation, end the chain
+          }
+        } else {
+          break; // Other vertex types not supported
+        }
         
         if (currentKey === startKey && loopVertices.length >= 3) {
           loopWallIds.forEach(wid => processedWalls.add(wid));

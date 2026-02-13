@@ -4214,6 +4214,75 @@ export default function SpatialBOQCanvas() {
                   </button>
                 ))}
               </div>
+              
+              {/* Arc Wall Options - shown when arc mode is selected */}
+              {wallDrawMode === 'arc' && (
+                <div className="mt-3 pt-3 border-t border-slate-200">
+                  <h5 className="text-[10px] text-slate-400 uppercase tracking-wide mb-2">Arc Input Method</h5>
+                  
+                  {/* Method Selection */}
+                  <div className="space-y-1 mb-3">
+                    <button
+                      onClick={() => setArcInputMethod('radius')}
+                      className={`w-full text-left p-2 rounded text-xs transition-colors ${
+                        arcInputMethod === 'radius' ? 'bg-purple-100 border-purple-300 border' : 'hover:bg-slate-100'
+                      }`}
+                    >
+                      <span className="font-medium">Radius</span>
+                    </button>
+                    <button
+                      onClick={() => setArcInputMethod('chordHeight')}
+                      className={`w-full text-left p-2 rounded text-xs transition-colors ${
+                        arcInputMethod === 'chordHeight' ? 'bg-purple-100 border-purple-300 border' : 'hover:bg-slate-100'
+                      }`}
+                    >
+                      <span className="font-medium">Chord Height (String Height)</span>
+                    </button>
+                  </div>
+                  
+                  {/* Input Field based on method */}
+                  {arcInputMethod === 'radius' ? (
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-slate-500">Radius (mm)</Label>
+                      <Input
+                        type="number"
+                        value={arcRadiusInput}
+                        onChange={(e) => setArcRadiusInput(e.target.value)}
+                        className="h-8 text-xs"
+                        min="100"
+                        step="50"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-slate-500">Chord Height (mm)</Label>
+                      <Input
+                        type="number"
+                        value={arcChordHeightInput}
+                        onChange={(e) => setArcChordHeightInput(e.target.value)}
+                        className="h-8 text-xs"
+                        min="10"
+                        step="10"
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Flip Arc Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2 text-xs h-8"
+                    onClick={() => setArcBulgeDirection(prev => prev * -1)}
+                  >
+                    <FlipHorizontal className="h-3 w-3 mr-1" />
+                    Flip Arc Direction
+                  </Button>
+                  
+                  <p className="text-[10px] text-slate-400 mt-2 text-center">
+                    Mouse position determines arc bulge
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

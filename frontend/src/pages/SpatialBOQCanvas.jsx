@@ -2390,6 +2390,71 @@ export default function SpatialBOQCanvas() {
       return;
     }
 
+    // Handle T-junction creation when dragging wall endpoint
+    if (isDragging && dragType === 'wall_endpoint' && selectedItem?.type === 'wall' && snapIndicator?.type === 'tjunction') {
+      const targetWall = layout.walls.find(w => w.wall_id === snapIndicator.target.wallId);
+      if (targetWall) {
+        // Split the target wall at the T-junction point
+        const dx = targetWall.end_x - targetWall.start_x;
+        const dy = targetWall.end_y - targetWall.start_y;
+        const wallAngle = Math.atan2(dy, dx);
+        
+        // Calculate wall segment lengths
+        const length1 = Math.round(Math.sqrt(
+          Math.pow(snapIndicator.x - targetWall.start_x, 2) + 
+          Math.pow(snapIndicator.y - targetWall.start_y, 2)
+        ));
+        const length2 = Math.round(Math.sqrt(
+          Math.pow(targetWall.end_x - snapIndicator.x, 2) + 
+          Math.pow(targetWall.end_y - snapIndicator.y, 2)
+        ));
+        
+        if (length1 >= 100 && length2 >= 100) {
+          saveToHistory();
+          
+          // Create two new walls from the split
+          const wall1 = {
+            wall_id: `wall_${Date.now()}_t1`,
+            start_x: targetWall.start_x,
+            start_y: targetWall.start_y,
+            end_x: snapIndicator.x,
+            end_y: snapIndicator.y,
+            length: length1,
+            thickness: targetWall.thickness || DEFAULT_WALL_THICKNESS,
+            height: targetWall.height || DEFAULT_WALL_HEIGHT
+          };
+          
+          const wall2 = {
+            wall_id: `wall_${Date.now()}_t2`,
+            start_x: snapIndicator.x,
+            start_y: snapIndicator.y,
+            end_x: targetWall.end_x,
+            end_y: targetWall.end_y,
+            length: length2,
+            thickness: targetWall.thickness || DEFAULT_WALL_THICKNESS,
+            height: targetWall.height || DEFAULT_WALL_HEIGHT
+          };
+          
+          // Add T-junction marker
+          setSplitMarkers(prev => [...prev, {
+            x: snapIndicator.x,
+            y: snapIndicator.y,
+            angle: wallAngle + Math.PI / 2,
+            thickness: targetWall.thickness || DEFAULT_WALL_THICKNESS
+          }]);
+          
+          // Update layout: remove old wall, add two new walls
+          setLayout(prev => ({
+            ...prev,
+            walls: [...prev.walls.filter(w => w.wall_id !== targetWall.wall_id), wall1, wall2]
+          }));
+          
+          setHasChanges(true);
+          toast.success('T-junction created');
+        }
+      }
+    }
+
     if (isDrawing && tool === 'wall') {
       saveToHistory();
       if (wallDrawMode === 'rectangle' || wallDrawMode === 'square') {

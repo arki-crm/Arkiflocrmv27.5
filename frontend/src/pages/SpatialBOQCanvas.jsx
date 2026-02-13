@@ -2925,6 +2925,23 @@ export default function SpatialBOQCanvas() {
     if (isDragging && dragType === 'wall' && selectedItem?.type === 'wall') {
       const wall = selectedItem.item;
       
+      // Handle arc wall dragging differently
+      if (wall.is_arc) {
+        // For arc walls, dragging moves the whole arc (translate)
+        const totalDx = canvas.x - dragStart.x;
+        const totalDy = canvas.y - dragStart.y;
+        
+        updateArcWallPosition(wall.wall_id, {
+          start_x: dragStart.wall_start_x + totalDx,
+          start_y: dragStart.wall_start_y + totalDy,
+          end_x: dragStart.wall_end_x + totalDx,
+          end_y: dragStart.wall_end_y + totalDy,
+          arc_center_x: dragStart.arc_center_x + totalDx,
+          arc_center_y: dragStart.arc_center_y + totalDy
+        });
+        return;
+      }
+      
       // Calculate incremental delta from last position (not from drag start)
       // This is crucial for parametric editing where state updates async
       const lastX = dragStart.lastX ?? dragStart.x;
@@ -2948,6 +2965,46 @@ export default function SpatialBOQCanvas() {
           end_y: dragStart.wall_end_y + totalDy
         });
       }
+    }
+    
+    // Arc wall curvature dragging (adjust radius by dragging arc midpoint)
+    if (isDragging && dragType === 'arc_curvature' && selectedItem?.type === 'wall' && selectedItem.item.is_arc) {
+      const wall = selectedItem.item;
+      
+      // Calculate new chord height based on mouse position
+      const midChordX = (wall.start_x + wall.end_x) / 2;
+      const midChordY = (wall.start_y + wall.end_y) / 2;
+      
+      // Vector from mid-chord to mouse
+      const toMouseX = canvas.x - midChordX;
+      const toMouseY = canvas.y - midChordY;
+      
+      // Chord direction
+      const chordDx = wall.end_x - wall.start_x;
+      const chordDy = wall.end_y - wall.start_y;
+      const chordLen = Math.sqrt(chordDx * chordDx + chordDy * chordDy);
+      
+      // Perpendicular to chord (normalized)
+      const perpX = -chordDy / chordLen;
+      const perpY = chordDx / chordLen;
+      
+      // Project mouse onto perpendicular to get new chord height
+      const newChordHeight = toMouseX * perpX + toMouseY * perpY;
+      
+      // Determine bulge direction from sign
+      const newBulgeDirection = newChordHeight >= 0 ? 1 : -1;
+      const absChordHeight = Math.max(50, Math.abs(newChordHeight)); // Min 50mm
+      
+      // Calculate new arc parameters
+      const newArcParams = calculateArcFromChordHeight(
+        wall.start_x, wall.start_y,
+        wall.end_x, wall.end_y,
+        absChordHeight,
+        newBulgeDirection
+      );
+      
+      // Update the arc wall
+      updateArcWall(wall.wall_id, newArcParams);
     }
 
     // Dragging module with magnetic snap (Item #2)

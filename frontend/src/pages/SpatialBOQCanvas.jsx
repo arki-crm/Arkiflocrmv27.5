@@ -1661,10 +1661,28 @@ export default function SpatialBOQCanvas() {
 
     // Drawing wall with click-release mode (Item #4) or drag mode
     if ((wallClickMode === 'waiting_end' || isDrawing) && tool === 'wall') {
-      // Snap end point to nearest corner if close
-      let endPoint = findNearestCorner(canvas.x, canvas.y) || canvas;
+      // CAD Enhanced: Use priority snapping system
+      const snapResult = findSnapPoint(canvas.x, canvas.y);
+      let endPoint = snapResult.snapped ? { x: snapResult.x, y: snapResult.y } : canvas;
+      
+      // Update alignment guides while drawing
+      const guides = findAlignmentGuides(endPoint.x, endPoint.y);
+      setAlignmentGuides(guides);
 
       if (wallDrawMode === 'rectangle') {
+        // For rectangle mode, apply Shift constraint if held
+        if (shiftKeyHeld) {
+          const constrained = applyOrthogonalConstraint(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
+          // Make it a proper rectangle by taking the constrained point as one corner
+          const dx = constrained.x - drawStart.x;
+          const dy = constrained.y - drawStart.y;
+          // For rectangle, we need both dimensions - use the larger delta for both if shift is held
+          if (Math.abs(dx) > Math.abs(dy)) {
+            endPoint = { x: constrained.x, y: drawStart.y + Math.sign(canvas.y - drawStart.y) * Math.abs(dx) };
+          } else {
+            endPoint = { x: drawStart.x + Math.sign(canvas.x - drawStart.x) * Math.abs(dy), y: constrained.y };
+          }
+        }
         setTempRectWalls({ start: drawStart, end: endPoint });
       } else if (wallDrawMode === 'square') {
         // Make it square
@@ -1674,8 +1692,8 @@ export default function SpatialBOQCanvas() {
         endPoint = { x: drawStart.x + size * signX, y: drawStart.y + size * signY };
         setTempRectWalls({ start: drawStart, end: endPoint });
       } else {
-        // Free line with auto-straight assistance (Item #2)
-        const snapped = snapToStraightLine(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
+        // Free line with auto-straight assistance (Item #2) - enhanced with Shift lock
+        const snapped = snapToStraightLine(drawStart.x, drawStart.y, endPoint.x, endPoint.y, shiftKeyHeld);
         endPoint = { x: snapped.x, y: snapped.y };
         
         const length = Math.sqrt(Math.pow(endPoint.x - drawStart.x, 2) + Math.pow(endPoint.y - drawStart.y, 2));
@@ -1686,19 +1704,48 @@ export default function SpatialBOQCanvas() {
           snappedAngle: snapped.snapped ? snapped.angle : null
         });
       }
+    } else {
+      // Clear alignment guides when not drawing
+      if (alignmentGuides.length > 0) setAlignmentGuides([]);
     }
 
-    // Dragging wall endpoint (Item #1)
+    // Dragging wall endpoint (Item #1) - CAD Enhanced with vertex merge
     if (isDragging && dragType === 'wall_endpoint' && selectedItem?.type === 'wall') {
       const wall = selectedItem.item;
-      const snapped = findNearestCorner(canvas.x, canvas.y);
-      const newPos = snapped || canvas;
       
-      if (dragEndpoint === 'start') {
-        updateWallPosition(wall.wall_id, { start_x: newPos.x, start_y: newPos.y });
+      // CAD Enhanced: Check for vertex merge target first
+      const mergeTarget = findMergeTarget(canvas.x, canvas.y, wall.wall_id, dragEndpoint);
+      if (mergeTarget) {
+        // Snap to merge target - show endpoint indicator
+        setSnapIndicator({ x: mergeTarget.x, y: mergeTarget.y, type: 'endpoint' });
+        if (dragEndpoint === 'start') {
+          updateWallPosition(wall.wall_id, { start_x: mergeTarget.x, start_y: mergeTarget.y });
+        } else {
+          updateWallPosition(wall.wall_id, { end_x: mergeTarget.x, end_y: mergeTarget.y });
+        }
       } else {
-        updateWallPosition(wall.wall_id, { end_x: newPos.x, end_y: newPos.y });
+        // Use enhanced snapping
+        const snapResult = findSnapPoint(canvas.x, canvas.y, wall.wall_id);
+        const newPos = snapResult.snapped ? { x: snapResult.x, y: snapResult.y } : canvas;
+        
+        // Apply Shift constraint for orthogonal movement
+        let finalPos = newPos;
+        if (shiftKeyHeld) {
+          const refX = dragEndpoint === 'start' ? wall.end_x : wall.start_x;
+          const refY = dragEndpoint === 'start' ? wall.end_y : wall.start_y;
+          finalPos = applyOrthogonalConstraint(refX, refY, newPos.x, newPos.y);
+        }
+        
+        // Update alignment guides
+        setAlignmentGuides(findAlignmentGuides(finalPos.x, finalPos.y, wall.wall_id));
+        
+        if (dragEndpoint === 'start') {
+          updateWallPosition(wall.wall_id, { start_x: finalPos.x, start_y: finalPos.y });
+        } else {
+          updateWallPosition(wall.wall_id, { end_x: finalPos.x, end_y: finalPos.y });
+        }
       }
+    }
     }
 
     // Dragging entire wall (Item #1) - with parametric editing for rectangular loops

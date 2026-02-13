@@ -2997,8 +2997,44 @@ export default function SpatialBOQCanvas() {
     }
   };
 
-  // Snap opening to wall
+  // Snap opening to wall (supports arc walls)
   const snapOpeningToWall = (x, y, width, depth, wall) => {
+    if (wall.is_arc) {
+      // Arc wall: snap to arc centerline with tangent rotation
+      const dx = x - wall.arc_center_x;
+      const dy = y - wall.arc_center_y;
+      
+      // Project point onto arc centerline
+      const angle = Math.atan2(dy, dx);
+      const snapX = wall.arc_center_x + wall.arc_radius * Math.cos(angle);
+      const snapY = wall.arc_center_y + wall.arc_radius * Math.sin(angle);
+      
+      // Calculate tangent angle at this point (perpendicular to radius)
+      const tangentAngle = angle + Math.PI / 2;
+      const rotationDegrees = tangentAngle * (180 / Math.PI);
+      
+      // Calculate position ratio along arc (0-1)
+      let angleDiff = wall.arc_end_angle - wall.arc_start_angle;
+      if (wall.arc_bulge_direction > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+      if (wall.arc_bulge_direction < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+      
+      let positionAngleDiff = angle - wall.arc_start_angle;
+      if (wall.arc_bulge_direction > 0 && positionAngleDiff > 0) positionAngleDiff -= 2 * Math.PI;
+      if (wall.arc_bulge_direction < 0 && positionAngleDiff < 0) positionAngleDiff += 2 * Math.PI;
+      
+      const positionRatio = Math.abs(angleDiff) > 0 ? Math.abs(positionAngleDiff / angleDiff) : 0;
+      const clampedRatio = Math.max(0, Math.min(1, positionRatio));
+      
+      return {
+        x: snapX - width / 2,
+        y: snapY - depth / 2,
+        rotation: rotationDegrees,
+        arc_position_ratio: clampedRatio,
+        is_on_arc: true
+      };
+    }
+    
+    // Straight wall: original logic
     const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
     if (isHorizontal) {
       // Constrain X to wall bounds
@@ -3006,14 +3042,18 @@ export default function SpatialBOQCanvas() {
       const maxX = Math.max(wall.start_x, wall.end_x) - width;
       return {
         x: Math.max(minX, Math.min(maxX, x)),
-        y: wall.start_y - depth / 2
+        y: wall.start_y - depth / 2,
+        rotation: 0,
+        is_on_arc: false
       };
     } else {
       const minY = Math.min(wall.start_y, wall.end_y);
       const maxY = Math.max(wall.start_y, wall.end_y) - depth;
       return {
         x: wall.start_x - width / 2,
-        y: Math.max(minY, Math.min(maxY, y))
+        y: Math.max(minY, Math.min(maxY, y)),
+        rotation: 90,
+        is_on_arc: false
       };
     }
   };

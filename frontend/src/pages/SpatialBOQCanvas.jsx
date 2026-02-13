@@ -3562,7 +3562,7 @@ export default function SpatialBOQCanvas() {
                 )}
 
                 {/* CAD Enhancement: Shift-lock indicator */}
-                {shiftKeyHeld && (isDrawing || isDragging) && (
+                {shiftKeyHeld && (isDrawing || isDragging || wallClickMode === 'waiting_end') && (
                   <text
                     x="50"
                     y="30"

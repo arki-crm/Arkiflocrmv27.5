@@ -4641,15 +4641,50 @@ export default function SpatialBOQCanvas() {
 
                 {/* Snap indicator during drawing/dragging */}
                 {snapIndicator && (
-                  <circle
-                    cx={snapIndicator.x * scale}
-                    cy={snapIndicator.y * scale}
-                    r={snapIndicator.type === 'endpoint' ? 8 : 5}
-                    fill={snapIndicator.type === 'endpoint' ? '#22C55E' : '#94A3B8'}
-                    fillOpacity="0.8"
-                    stroke={snapIndicator.type === 'endpoint' ? '#16A34A' : '#64748B'}
-                    strokeWidth="2"
-                  />
+                  <g>
+                    <circle
+                      cx={snapIndicator.x * scale}
+                      cy={snapIndicator.y * scale}
+                      r={snapIndicator.type === 'endpoint' ? 8 : snapIndicator.type === 'tjunction' ? 10 : 5}
+                      fill={snapIndicator.type === 'endpoint' ? '#22C55E' : snapIndicator.type === 'tjunction' ? '#F59E0B' : '#94A3B8'}
+                      fillOpacity="0.8"
+                      stroke={snapIndicator.type === 'endpoint' ? '#16A34A' : snapIndicator.type === 'tjunction' ? '#D97706' : '#64748B'}
+                      strokeWidth="2"
+                    />
+                    {/* T-junction indicator - show "T" symbol */}
+                    {snapIndicator.type === 'tjunction' && (
+                      <>
+                        <text
+                          x={snapIndicator.x * scale}
+                          y={snapIndicator.y * scale + 4}
+                          fontSize="10"
+                          fill="white"
+                          textAnchor="middle"
+                          fontWeight="bold"
+                        >
+                          T
+                        </text>
+                        <rect
+                          x={snapIndicator.x * scale - 25}
+                          y={snapIndicator.y * scale + 14}
+                          width="50"
+                          height="14"
+                          rx="2"
+                          fill="#F59E0B"
+                        />
+                        <text
+                          x={snapIndicator.x * scale}
+                          y={snapIndicator.y * scale + 24}
+                          fontSize="8"
+                          fill="white"
+                          textAnchor="middle"
+                          fontWeight="500"
+                        >
+                          T-Junction
+                        </text>
+                      </>
+                    )}
+                  </g>
                 )}
 
                 {/* Real-time dimension display while drawing */}

@@ -39,6 +39,13 @@ const MAX_HISTORY_SIZE = 50; // Undo/Redo history limit
 const ANGLE_SNAP_TOLERANCE = 8; // degrees - Item #2 - Auto straight line assistance
 const CLOSURE_TOLERANCE = 200; // mm - tolerance for auto-sealing room closure gaps
 
+// CAD Precision Enhancement Constants
+const ENDPOINT_SNAP_THRESHOLD = 80; // mm - high priority endpoint snap
+const MIDPOINT_SNAP_THRESHOLD = 60; // mm - midpoint snap threshold
+const GRID_SNAP_SIZE = 50; // mm - grid snap increment
+const ALIGNMENT_THRESHOLD = 30; // mm - alignment guide threshold
+const VERTEX_MERGE_THRESHOLD = 100; // mm - auto-merge vertices when dragged close
+
 // Module colors
 const MODULE_COLORS = {
   base_cabinet: '#8B5CF6',

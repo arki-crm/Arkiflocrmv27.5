@@ -2692,6 +2692,123 @@ export default function SpatialBOQCanvas() {
     setHasChanges(true);
   };
 
+  // Split wall at a specific point - creates two walls from one
+  const splitWallAt = (wallId, splitX, splitY) => {
+    const wall = layout?.walls?.find(w => w.wall_id === wallId);
+    if (!wall) return false;
+    
+    saveToHistory();
+    
+    // Calculate the split point projected onto the wall line
+    const dx = wall.end_x - wall.start_x;
+    const dy = wall.end_y - wall.start_y;
+    const wallLength = Math.sqrt(dx * dx + dy * dy);
+    
+    if (wallLength < 100) return false; // Wall too short to split
+    
+    // Project the click point onto the wall line
+    const t = Math.max(0.1, Math.min(0.9, 
+      ((splitX - wall.start_x) * dx + (splitY - wall.start_y) * dy) / (wallLength * wallLength)
+    ));
+    
+    const splitPointX = wall.start_x + t * dx;
+    const splitPointY = wall.start_y + t * dy;
+    
+    // Calculate lengths of the two new walls
+    const length1 = Math.round(Math.sqrt(
+      Math.pow(splitPointX - wall.start_x, 2) + Math.pow(splitPointY - wall.start_y, 2)
+    ));
+    const length2 = Math.round(Math.sqrt(
+      Math.pow(wall.end_x - splitPointX, 2) + Math.pow(wall.end_y - splitPointY, 2)
+    ));
+    
+    // Don't split if either segment would be too short
+    if (length1 < 100 || length2 < 100) {
+      toast.error('Split point too close to wall endpoint');
+      return false;
+    }
+    
+    // Create two new walls
+    const wall1 = {
+      wall_id: `wall_${Date.now()}_1`,
+      start_x: wall.start_x,
+      start_y: wall.start_y,
+      end_x: Math.round(splitPointX),
+      end_y: Math.round(splitPointY),
+      length: length1,
+      thickness: wall.thickness || DEFAULT_WALL_THICKNESS,
+      height: wall.height || DEFAULT_WALL_HEIGHT
+    };
+    
+    const wall2 = {
+      wall_id: `wall_${Date.now()}_2`,
+      start_x: Math.round(splitPointX),
+      start_y: Math.round(splitPointY),
+      end_x: wall.end_x,
+      end_y: wall.end_y,
+      length: length2,
+      thickness: wall.thickness || DEFAULT_WALL_THICKNESS,
+      height: wall.height || DEFAULT_WALL_HEIGHT
+    };
+    
+    // Replace the original wall with two new walls
+    setLayout(prev => ({
+      ...prev,
+      walls: [...prev.walls.filter(w => w.wall_id !== wallId), wall1, wall2]
+    }));
+    
+    setHasChanges(true);
+    toast.success(`Wall split into ${length1}mm and ${length2}mm segments`);
+    
+    return true;
+  };
+
+  // Find the nearest point on a wall from cursor position (for split preview)
+  const findSplitPointOnWall = (x, y) => {
+    if (!layout?.walls?.length) return null;
+    
+    let bestWall = null;
+    let bestPoint = null;
+    let minDist = 50 / scale; // 50px threshold
+    
+    for (const wall of layout.walls) {
+      const dx = wall.end_x - wall.start_x;
+      const dy = wall.end_y - wall.start_y;
+      const wallLength = Math.sqrt(dx * dx + dy * dy);
+      
+      if (wallLength < 100) continue;
+      
+      // Project point onto wall line
+      const t = ((x - wall.start_x) * dx + (y - wall.start_y) * dy) / (wallLength * wallLength);
+      
+      // Only consider points along the wall (not at endpoints)
+      if (t < 0.1 || t > 0.9) continue;
+      
+      const projX = wall.start_x + t * dx;
+      const projY = wall.start_y + t * dy;
+      
+      // Distance from cursor to projected point
+      const dist = Math.sqrt(Math.pow(x - projX, 2) + Math.pow(y - projY, 2));
+      
+      if (dist < minDist) {
+        minDist = dist;
+        bestWall = wall;
+        bestPoint = { x: projX, y: projY, t };
+      }
+    }
+    
+    if (bestWall && bestPoint) {
+      return {
+        wallId: bestWall.wall_id,
+        x: bestPoint.x,
+        y: bestPoint.y,
+        wall: bestWall
+      };
+    }
+    
+    return null;
+  };
+
   // Save layout
   const handleSave = async () => {
     if (!layout) return;

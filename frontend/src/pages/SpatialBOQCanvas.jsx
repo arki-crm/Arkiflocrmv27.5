@@ -2053,6 +2053,10 @@ export default function SpatialBOQCanvas() {
       if (alignmentGuides.length > 0) setAlignmentGuides([]);
       if (drawingDimension) setDrawingDimension(null);
       
+      // Clear connection suggestions when not drawing
+      if (connectionSuggestions.length > 0) setConnectionSuggestions([]);
+      if (canCloseShape) setCanCloseShape(null);
+      
       // PRE-CLICK SNAP: Show vertex snap indicator BEFORE clicking (when wall tool is active)
       if (tool === 'wall' && !wallClickMode) {
         const vertex = findVertexAt(canvas.x, canvas.y);

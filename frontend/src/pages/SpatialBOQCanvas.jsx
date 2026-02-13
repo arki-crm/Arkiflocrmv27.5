@@ -3187,7 +3187,34 @@ export default function SpatialBOQCanvas() {
       end_y: endY,
       length: Math.round(length),
       thickness: DEFAULT_WALL_THICKNESS,
-      height: DEFAULT_WALL_HEIGHT  // Item #1 - Wall height
+      height: DEFAULT_WALL_HEIGHT,  // Item #1 - Wall height
+      is_arc: false
+    };
+  };
+
+  // Create arc wall helper
+  const createArcWall = (arcParams) => {
+    return {
+      wall_id: `arc_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 4)}`,
+      start_x: arcParams.startX,
+      start_y: arcParams.startY,
+      end_x: arcParams.endX,
+      end_y: arcParams.endY,
+      length: Math.round(arcParams.arcLength), // Arc length for BOQ
+      thickness: DEFAULT_WALL_THICKNESS,
+      height: DEFAULT_WALL_HEIGHT,
+      is_arc: true,
+      // Arc-specific properties
+      arc_radius: arcParams.radius,
+      arc_chord_length: arcParams.chordLength,
+      arc_chord_height: arcParams.chordHeight,
+      arc_center_x: arcParams.centerX,
+      arc_center_y: arcParams.centerY,
+      arc_start_angle: arcParams.startAngle,
+      arc_end_angle: arcParams.endAngle,
+      arc_sweep_flag: arcParams.sweepFlag,
+      arc_large_arc_flag: arcParams.largeArcFlag,
+      arc_bulge_direction: arcParams.bulgeDirection
     };
   };
 

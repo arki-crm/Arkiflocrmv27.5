@@ -200,6 +200,9 @@ export default function SpatialBOQCanvas() {
   // Elevation view - full screen mode (Item #9)
   const [showElevationModal, setShowElevationModal] = useState(false);
 
+  // Floor material panel toggle
+  const [showFloorMaterialPanel, setShowFloorMaterialPanel] = useState(true);
+
   // Door/Window library panel (Item #5)
   const [showDoorLibrary, setShowDoorLibrary] = useState(false);
   const [showWindowLibrary, setShowWindowLibrary] = useState(false);

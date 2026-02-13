@@ -2765,8 +2765,31 @@ export default function SpatialBOQCanvas() {
         const signY = endPoint.y > drawStart.y ? 1 : -1;
         endPoint = { x: drawStart.x + size * signX, y: drawStart.y + size * signY };
         setTempRectWalls({ start: drawStart, end: endPoint });
+      } else if (wallDrawMode === 'arc') {
+        // Arc wall mode - calculate arc based on input method
+        const bulgeDir = calculateBulgeDirection(drawStart.x, drawStart.y, endPoint.x, endPoint.y, canvas.x, canvas.y);
+        setArcBulgeDirection(bulgeDir);
+        
+        let arcParams;
+        if (arcInputMethod === 'radius') {
+          const radiusValue = parseFloat(arcRadiusInput) || 1000;
+          arcParams = calculateArcFromRadius(drawStart.x, drawStart.y, endPoint.x, endPoint.y, radiusValue, bulgeDir);
+        } else {
+          const chordHeightValue = parseFloat(arcChordHeightInput) || 500;
+          arcParams = calculateArcFromChordHeight(drawStart.x, drawStart.y, endPoint.x, endPoint.y, chordHeightValue, bulgeDir);
+        }
+        
+        setTempArcWall(arcParams);
+        setDrawingDimension({ 
+          length: Math.round(arcParams.arcLength), 
+          x: midX, 
+          y: midY,
+          isArc: true,
+          radius: Math.round(arcParams.radius),
+          chordHeight: Math.round(arcParams.chordHeight)
+        });
       } else {
-        // Free line mode
+        // Free line mode (straight wall)
         // Calculate projected intersections with existing walls
         const intersections = findProjectedIntersections(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
         setProjectedIntersections(intersections);

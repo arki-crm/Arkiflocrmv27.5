@@ -2213,15 +2213,18 @@ export default function SpatialBOQCanvas() {
       }
     }
 
-    // Dragging wall endpoint (Item #1) - with auto-merge on snap
+    // Dragging wall endpoint (Item #1) - with auto-merge on snap and T-junction support
     if (isDragging && dragType === 'wall_endpoint' && selectedItem?.type === 'wall') {
       const wall = selectedItem.item;
       
-      // CAD Enhanced: Check for vertex merge target first
+      // CAD Enhanced: Check for vertex merge target (endpoint or T-junction)
       const mergeTarget = findMergeTarget(canvas.x, canvas.y, wall.wall_id, dragEndpoint);
       if (mergeTarget) {
-        // Snap to merge target - show endpoint indicator
-        setSnapIndicator({ x: mergeTarget.x, y: mergeTarget.y, type: 'endpoint' });
+        // Show indicator based on merge type
+        const indicatorType = mergeTarget.type === 'tjunction' ? 'tjunction' : 'endpoint';
+        setSnapIndicator({ x: mergeTarget.x, y: mergeTarget.y, type: indicatorType, target: mergeTarget });
+        
+        // Snap wall endpoint to the target
         if (dragEndpoint === 'start') {
           updateWallPosition(wall.wall_id, { start_x: mergeTarget.x, start_y: mergeTarget.y });
         } else {

@@ -3844,6 +3844,53 @@ export default function SpatialBOQCanvas() {
                 })()}
 
                 {/* ============================================
+                   T-JUNCTION FILL PATCHES
+                   Renders fill rectangles at all junction points BEFORE walls
+                   to close gaps where walls meet
+                   ============================================ */}
+                {layout?.walls && layout.walls.length > 0 && (() => {
+                  const tolerance = 20;
+                  const coordKey = (x, y) => `${Math.round(x/tolerance)*tolerance}_${Math.round(y/tolerance)*tolerance}`;
+                  const vertexMap = new Map();
+                  
+                  for (const wall of layout.walls) {
+                    const startKey = coordKey(wall.start_x, wall.start_y);
+                    const endKey = coordKey(wall.end_x, wall.end_y);
+                    
+                    if (!vertexMap.has(startKey)) {
+                      vertexMap.set(startKey, { x: wall.start_x, y: wall.start_y, thicknesses: [] });
+                    }
+                    vertexMap.get(startKey).thicknesses.push(wall.thickness || DEFAULT_WALL_THICKNESS);
+                    
+                    if (!vertexMap.has(endKey)) {
+                      vertexMap.set(endKey, { x: wall.end_x, y: wall.end_y, thicknesses: [] });
+                    }
+                    vertexMap.get(endKey).thicknesses.push(wall.thickness || DEFAULT_WALL_THICKNESS);
+                  }
+                  
+                  const patches = [];
+                  for (const [key, vertex] of vertexMap) {
+                    if (vertex.thicknesses.length >= 2) {
+                      const maxThickness = Math.max(...vertex.thicknesses);
+                      const patchSize = maxThickness / 2 + 5;
+                      
+                      patches.push(
+                        <rect
+                          key={`junction-fill-${key}`}
+                          x={(vertex.x - patchSize) * scale}
+                          y={(vertex.y - patchSize) * scale}
+                          width={patchSize * 2 * scale}
+                          height={patchSize * 2 * scale}
+                          fill="#B0B0B0"
+                          stroke="none"
+                        />
+                      );
+                    }
+                  }
+                  return patches;
+                })()}
+
+                {/* ============================================
                     UNIFIED WALL BOUNDARY RENDERING ENGINE
                     Renders closed wall loops as unified polygons
                     with proper miter joins at all corners

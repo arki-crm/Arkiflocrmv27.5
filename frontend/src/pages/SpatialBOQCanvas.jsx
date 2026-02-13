@@ -3985,6 +3985,108 @@ export default function SpatialBOQCanvas() {
                   />
                 ))}
 
+                {/* CONNECTION SUGGESTIONS - Shows guidelines to potential endpoints while drawing */}
+                {(wallClickMode === 'waiting_end' || isDrawing) && connectionSuggestions.map((suggestion, index) => (
+                  <g key={`suggestion-${index}`}>
+                    {/* Dotted line from cursor to suggested endpoint */}
+                    <line
+                      x1={tempWall?.end?.x * scale || tempRectWalls?.end?.x * scale || 0}
+                      y1={tempWall?.end?.y * scale || tempRectWalls?.end?.y * scale || 0}
+                      x2={suggestion.x * scale}
+                      y2={suggestion.y * scale}
+                      stroke={suggestion.canClose ? '#22C55E' : '#60A5FA'}
+                      strokeWidth="1"
+                      strokeDasharray="6,4"
+                      strokeOpacity="0.6"
+                    />
+                    {/* Target endpoint marker */}
+                    <circle
+                      cx={suggestion.x * scale}
+                      cy={suggestion.y * scale}
+                      r={suggestion.canClose ? 10 : 7}
+                      fill="none"
+                      stroke={suggestion.canClose ? '#22C55E' : '#60A5FA'}
+                      strokeWidth={suggestion.canClose ? 2 : 1.5}
+                      strokeDasharray={suggestion.canClose ? '0' : '4,2'}
+                    />
+                    <circle
+                      cx={suggestion.x * scale}
+                      cy={suggestion.y * scale}
+                      r={3}
+                      fill={suggestion.canClose ? '#22C55E' : '#60A5FA'}
+                    />
+                    {/* Distance label */}
+                    <text
+                      x={suggestion.x * scale + 15}
+                      y={suggestion.y * scale - 10}
+                      fontSize="9"
+                      fill={suggestion.canClose ? '#16A34A' : '#3B82F6'}
+                      fontWeight="500"
+                    >
+                      {Math.round(suggestion.distance)}mm
+                    </text>
+                  </g>
+                ))}
+
+                {/* CLOSE SHAPE INDICATOR - Shows when cursor is near the start point to close shape */}
+                {canCloseShape && (wallClickMode === 'waiting_end' || isDrawing) && (
+                  <g>
+                    {/* Pulsing ring effect */}
+                    <circle
+                      cx={canCloseShape.x * scale}
+                      cy={canCloseShape.y * scale}
+                      r={18}
+                      fill="none"
+                      stroke="#22C55E"
+                      strokeWidth="2"
+                      strokeOpacity="0.4"
+                    >
+                      <animate attributeName="r" from="12" to="22" dur="1s" repeatCount="indefinite" />
+                      <animate attributeName="stroke-opacity" from="0.6" to="0" dur="1s" repeatCount="indefinite" />
+                    </circle>
+                    {/* Solid indicator */}
+                    <circle
+                      cx={canCloseShape.x * scale}
+                      cy={canCloseShape.y * scale}
+                      r={12}
+                      fill="#22C55E"
+                      fillOpacity="0.2"
+                      stroke="#22C55E"
+                      strokeWidth="2"
+                    />
+                    {/* Close icon (checkmark) */}
+                    <path
+                      d={`M ${canCloseShape.x * scale - 5} ${canCloseShape.y * scale} 
+                          L ${canCloseShape.x * scale - 1} ${canCloseShape.y * scale + 4} 
+                          L ${canCloseShape.x * scale + 6} ${canCloseShape.y * scale - 4}`}
+                      fill="none"
+                      stroke="#16A34A"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    {/* Label */}
+                    <rect
+                      x={canCloseShape.x * scale - 35}
+                      y={canCloseShape.y * scale - 35}
+                      width="70"
+                      height="18"
+                      rx="3"
+                      fill="#22C55E"
+                    />
+                    <text
+                      x={canCloseShape.x * scale}
+                      y={canCloseShape.y * scale - 23}
+                      fontSize="10"
+                      fill="white"
+                      textAnchor="middle"
+                      fontWeight="600"
+                    >
+                      CLOSE SHAPE
+                    </text>
+                  </g>
+                )}
+
                 {/* PRE-CLICK SNAP INDICATOR - Shows BEFORE clicking when wall tool active */}
                 {preClickSnap && tool === 'wall' && !wallClickMode && (
                   <g>

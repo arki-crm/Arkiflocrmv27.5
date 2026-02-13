@@ -2855,6 +2855,11 @@ export default function SpatialBOQCanvas() {
     const isArcDrawing = wallDrawMode === 'arc' && arcDrawingRef.current.isDrawing;
     const shouldProcessWallDrawing = (wallClickMode === 'waiting_end' || isDrawing || isArcDrawing) && tool === 'wall';
     
+    // Debug: Log when arc drawing should be processed
+    if (wallDrawMode === 'arc' && tool === 'wall') {
+      console.log('[ArcMove] isArcDrawing:', isArcDrawing, 'arcDrawingRef:', arcDrawingRef.current, 'shouldProcess:', shouldProcessWallDrawing);
+    }
+    
     if (shouldProcessWallDrawing) {
       // Get effective draw start - from state or ref
       const effectiveDrawStart = drawStart || arcDrawingRef.current.startPoint;

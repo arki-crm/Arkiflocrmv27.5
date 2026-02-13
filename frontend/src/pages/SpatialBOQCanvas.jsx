@@ -202,6 +202,7 @@ export default function SpatialBOQCanvas() {
   const [hoveredVertex, setHoveredVertex] = useState(null); // { x, y, wallIds } - vertex being hovered
   const [connectionSuggestions, setConnectionSuggestions] = useState([]); // Suggested endpoints to connect to
   const [canCloseShape, setCanCloseShape] = useState(null); // { x, y } - if current line can close a shape
+  const [chainStartIndicator, setChainStartIndicator] = useState(null); // { x, y } - start point of open chain for visual
 
   // Elevation view - full screen mode (Item #9)
   const [showElevationModal, setShowElevationModal] = useState(false);

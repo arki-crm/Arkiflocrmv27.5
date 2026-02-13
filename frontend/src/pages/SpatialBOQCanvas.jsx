@@ -2195,6 +2195,7 @@ export default function SpatialBOQCanvas() {
         setDrawStart(null);
         setPreClickSnap(null);
         setCanCloseShape(null);
+        setChainStartIndicator(null);
         return;
       }
 

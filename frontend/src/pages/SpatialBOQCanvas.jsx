@@ -2248,10 +2248,20 @@ export default function SpatialBOQCanvas() {
         
         // AUTO-SNAP TO CLOSE POINT: If canCloseShape is active, snap to it
         let finalEndPoint = tempWall ? tempWall.end : canvas;
+        
+        // Priority 1: Snap to close point for room closure
         if (canCloseShape) {
-          // Snap to the close point for perfect room closure
           finalEndPoint = { x: canCloseShape.x, y: canCloseShape.y };
           console.log('[LoopClosure] Auto-snapping to close point:', canCloseShape.x, canCloseShape.y);
+        }
+        // Priority 2: Snap to projected intersection if cursor is near it
+        else if (projectedIntersections.length > 0) {
+          const nearestIntersection = projectedIntersections[0];
+          // Snap if cursor is within 100mm of the projected intersection
+          if (nearestIntersection.distanceFromCursor < 100) {
+            finalEndPoint = { x: nearestIntersection.x, y: nearestIntersection.y };
+            console.log('[ProjectedIntersection] Snapping to intersection at:', nearestIntersection.x.toFixed(0), nearestIntersection.y.toFixed(0));
+          }
         }
         
         if (tempWall && tempWall.start) {
@@ -2279,6 +2289,7 @@ export default function SpatialBOQCanvas() {
         setPreClickSnap(null);
         setCanCloseShape(null);
         setChainStartIndicator(null);
+        setProjectedIntersections([]);
         return;
       }
 

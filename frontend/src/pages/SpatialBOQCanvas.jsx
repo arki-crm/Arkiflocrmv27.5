@@ -2830,6 +2830,9 @@ export default function SpatialBOQCanvas() {
       return false;
     }
     
+    // Calculate wall angle for the split marker
+    const wallAngle = Math.atan2(dy, dx);
+    
     // Create two new walls
     const wall1 = {
       wall_id: `wall_${Date.now()}_1`,
@@ -2852,6 +2855,14 @@ export default function SpatialBOQCanvas() {
       thickness: wall.thickness || DEFAULT_WALL_THICKNESS,
       height: wall.height || DEFAULT_WALL_HEIGHT
     };
+    
+    // Add split marker to show dotted line at split point
+    setSplitMarkers(prev => [...prev, {
+      x: Math.round(splitPointX),
+      y: Math.round(splitPointY),
+      angle: wallAngle + Math.PI / 2, // Perpendicular to wall
+      thickness: wall.thickness || DEFAULT_WALL_THICKNESS
+    }]);
     
     // Replace the original wall with two new walls
     setLayout(prev => ({

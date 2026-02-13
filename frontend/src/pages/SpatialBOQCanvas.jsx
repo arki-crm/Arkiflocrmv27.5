@@ -4184,12 +4184,22 @@ export default function SpatialBOQCanvas() {
                   // If so, skip rendering here as T-junction render handles it
                   const tJunctionStemWallIds = (unifiedBoundary.tJunctions || []).map(tj => tj.stemWall?.wall_id).filter(Boolean);
                   const isOnlyStemWalls = wallIds.every(wid => tJunctionStemWallIds.includes(wid));
-                  if (isOnlyStemWalls) return null;
+                  if (isOnlyStemWalls) {
+                    console.log(`[Chain ${chainIndex}] Skipping - only contains stem walls:`, wallIds);
+                    return null;
+                  }
                   
                   // Find T-junctions that affect this chain (where this chain is the "through" wall)
-                  const affectingTJunctions = (unifiedBoundary.tJunctions || []).filter(tj => 
-                    tj.throughWallIds && tj.throughWallIds.some(twid => wallIds.includes(twid))
-                  );
+                  // For mid-span T-junctions, throughWall is singular; for vertex T-junctions, throughWallIds is array
+                  const affectingTJunctions = (unifiedBoundary.tJunctions || []).filter(tj => {
+                    // Check both throughWallIds (array) and throughWall (singular)
+                    const throughIds = tj.throughWallIds || (tj.throughWall ? [tj.throughWall.wall_id] : []);
+                    return throughIds.some(twid => wallIds.includes(twid));
+                  });
+                  
+                  if (affectingTJunctions.length > 0) {
+                    console.log(`[Chain ${chainIndex}] Has ${affectingTJunctions.length} affecting T-junctions`);
+                  }
                   
                   // If this chain has T-junctions, we need to modify the outline to add notches
                   let modifiedOutline = outline;

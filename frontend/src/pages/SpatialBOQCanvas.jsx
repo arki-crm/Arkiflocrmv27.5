@@ -1875,6 +1875,88 @@ export default function SpatialBOQCanvas() {
     };
   }, [layout?.walls]);
 
+  // ============================================
+  // PREDICTIVE INTERSECTION DETECTION
+  // Calculates where the wall being drawn will intersect existing walls
+  // Shows snap marker BEFORE cursor reaches the intersection
+  // ============================================
+  const findProjectedIntersections = useCallback((startX, startY, endX, endY) => {
+    if (!layout?.walls?.length) return [];
+    
+    const intersections = [];
+    
+    // Direction vector of the line being drawn
+    const drawDx = endX - startX;
+    const drawDy = endY - startY;
+    const drawLen = Math.sqrt(drawDx * drawDx + drawDy * drawDy);
+    
+    if (drawLen < 10) return [];
+    
+    // Normalized direction
+    const drawDirX = drawDx / drawLen;
+    const drawDirY = drawDy / drawLen;
+    
+    for (const wall of layout.walls) {
+      // Wall centerline
+      const wallDx = wall.end_x - wall.start_x;
+      const wallDy = wall.end_y - wall.start_y;
+      const wallLen = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
+      
+      if (wallLen < 10) continue;
+      
+      // Line-line intersection using parametric form
+      // Line 1: P1 + t * D1 (drawing line, extended infinitely in direction of draw)
+      // Line 2: P2 + s * D2 (wall centerline segment)
+      
+      // Cross product to check if lines are parallel
+      const cross = drawDx * wallDy - drawDy * wallDx;
+      
+      if (Math.abs(cross) < 0.001) continue; // Lines are parallel
+      
+      // Calculate intersection parameters
+      const t = ((wall.start_x - startX) * wallDy - (wall.start_y - startY) * wallDx) / cross;
+      const s = ((wall.start_x - startX) * drawDy - (wall.start_y - startY) * drawDx) / cross;
+      
+      // t > 0 means intersection is in front of draw start (in draw direction)
+      // s between 0 and 1 means intersection is on the wall segment
+      if (t > 0.1 && s > 0.05 && s < 0.95) {
+        // Calculate intersection point
+        const intersectX = startX + t * drawDx;
+        const intersectY = startY + t * drawDy;
+        
+        // Distance from current cursor to intersection
+        const distFromCursor = Math.sqrt(
+          (intersectX - endX) * (intersectX - endX) + 
+          (intersectY - endY) * (intersectY - endY)
+        );
+        
+        // Distance from draw start to intersection
+        const distFromStart = t * drawLen;
+        
+        // Only show intersections that are:
+        // 1. Ahead of the cursor (in draw direction)
+        // 2. Within reasonable range (not too far)
+        const cursorToIntersectDot = (intersectX - endX) * drawDirX + (intersectY - endY) * drawDirY;
+        
+        if (cursorToIntersectDot > -50 && distFromStart < 5000) {
+          intersections.push({
+            x: intersectX,
+            y: intersectY,
+            wallId: wall.wall_id,
+            distanceFromStart: distFromStart,
+            distanceFromCursor: distFromCursor,
+            isAhead: cursorToIntersectDot > 0 // True if intersection is ahead of cursor
+          });
+        }
+      }
+    }
+    
+    // Sort by distance from start point
+    intersections.sort((a, b) => a.distanceFromStart - b.distanceFromStart);
+    
+    return intersections;
+  }, [layout?.walls]);
+
   // Coohom-style orthogonal constraint - snaps to pure horizontal or vertical
   const applyOrthogonalConstraint = (startX, startY, endX, endY) => {
     const dx = endX - startX;

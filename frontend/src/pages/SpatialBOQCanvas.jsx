@@ -1794,18 +1794,44 @@ export default function SpatialBOQCanvas() {
       const visited = new Set([fromKey]);
       let currentKey = fromKey;
       
-      // Trace the chain to find where it started
+      // FIRST: Check if we need to trace from an endpoint with 1 connection
+      // This handles the case where we start from the END of an open chain
+      const startEndpoint = endpoints.get(fromKey);
+      if (startEndpoint && startEndpoint.connections === 1) {
+        // We're at an open end - trace to find the OTHER open end
+        // First, find the wall connected to this endpoint
+        for (const wall of layout.walls) {
+          const wallStartKey = `${Math.round(wall.start_x)},${Math.round(wall.start_y)}`;
+          const wallEndKey = `${Math.round(wall.end_x)},${Math.round(wall.end_y)}`;
+          
+          if (wallStartKey === fromKey && !visited.has(wallEndKey)) {
+            visited.add(wallEndKey);
+            currentKey = wallEndKey;
+            break;
+          }
+          if (wallEndKey === fromKey && !visited.has(wallStartKey)) {
+            visited.add(wallStartKey);
+            currentKey = wallStartKey;
+            break;
+          }
+        }
+      }
+      
+      // Trace the chain to find where it started (other open end)
       for (let i = 0; i < layout.walls.length; i++) {
         const currentEndpoint = endpoints.get(currentKey);
-        if (!currentEndpoint || currentEndpoint.connections !== 2) {
-          // Found an endpoint with only 1 connection (start of chain) or T-junction
-          if (currentEndpoint && currentEndpoint.connections === 1 && currentKey !== fromKey) {
-            chainStartPoint = { x: currentEndpoint.x, y: currentEndpoint.y };
-          }
+        if (!currentEndpoint) break;
+        
+        // Found an endpoint with only 1 connection = other end of chain
+        if (currentEndpoint.connections === 1 && currentKey !== fromKey) {
+          chainStartPoint = { x: currentEndpoint.x, y: currentEndpoint.y };
           break;
         }
         
-        // Find the next connected endpoint
+        // If this is a T-junction (3+ connections), stop tracing
+        if (currentEndpoint.connections > 2) break;
+        
+        // Find the next connected endpoint (for endpoints with 2 connections)
         let foundNext = false;
         for (const wall of layout.walls) {
           const wallStartKey = `${Math.round(wall.start_x)},${Math.round(wall.start_y)}`;

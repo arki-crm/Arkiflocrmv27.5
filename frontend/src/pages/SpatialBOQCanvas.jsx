@@ -2283,7 +2283,7 @@ export default function SpatialBOQCanvas() {
       }
     }
 
-    // Dragging vertex (junction point) - moves all connected wall endpoints together
+    // Dragging vertex (junction point) - moves connected wall endpoints OR creates auto walls
     if (isDragging && dragType === 'vertex' && selectedVertex) {
       const dx = canvas.x - dragStart.vertexX;
       const dy = canvas.y - dragStart.vertexY;
@@ -2309,7 +2309,7 @@ export default function SpatialBOQCanvas() {
         setSnapIndicator(null);
       }
       
-      // Update all connected walls
+      // Update all connected walls - they stretch to follow the junction
       for (const { wall, endpoint } of selectedVertex.walls) {
         if (endpoint === 'start') {
           updateWallPosition(wall.wall_id, { start_x: newX, start_y: newY });
@@ -2317,6 +2317,9 @@ export default function SpatialBOQCanvas() {
           updateWallPosition(wall.wall_id, { end_x: newX, end_y: newY });
         }
       }
+      
+      // Update the selectedVertex position for rendering
+      setSelectedVertex(prev => prev ? { ...prev, x: newX, y: newY } : null);
       
       // Update alignment guides
       setAlignmentGuides(findAlignmentGuides(newX, newY, null));

@@ -2507,12 +2507,17 @@ export default function SpatialBOQCanvas() {
       setCanCloseShape(closePoint);
       setChainStartIndicator(chainStart); // Show blue circle at chain start
       
-      // Log when intersection indicator should show
-      if (closePoint) {
-        console.log('[Intersection] Close point detected at:', closePoint.x, closePoint.y, 'distance:', closePoint.distance);
-      }
-      if (chainStart) {
-        console.log('[ChainStart] Open chain starts at:', chainStart.x, chainStart.y);
+      // LOOP CLOSURE PROJECTION: Detect if trajectory aligns with room start
+      // This shows guidance WHILE drawing 3rd wall (before final wall)
+      const closureProjection = findLoopClosureProjection(
+        drawStart.x, drawStart.y, endPoint.x, endPoint.y, chainStart
+      );
+      setLoopClosureProjection(closureProjection);
+      
+      // Log for debugging
+      if (closureProjection) {
+        console.log('[LoopClosureProjection] Trajectory aligns with room start! Perp dist:', 
+          closureProjection.perpDistance.toFixed(0), 'Strength:', closureProjection.alignmentStrength.toFixed(2));
       }
       
       // LOOP CLOSURE SNAP: If close point is detected, snap cursor to it

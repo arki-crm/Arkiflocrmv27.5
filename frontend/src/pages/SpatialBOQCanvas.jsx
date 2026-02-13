@@ -3518,14 +3518,21 @@ export default function SpatialBOQCanvas() {
       width: typeInfo.width,
       height: typeInfo.height,
       depth: wallThickness,
-      rotation: 0,
-      flipped: false
+      rotation: snappedPos.rotation || 0,
+      flipped: false,
+      // Arc wall specific properties
+      is_on_arc: snappedPos.is_on_arc || false,
+      arc_position_ratio: snappedPos.arc_position_ratio || null
     };
 
     const key = type === 'door' ? 'doors' : 'windows';
     setLayout(prev => ({ ...prev, [key]: [...(prev[key] || []), opening] }));
     setHasChanges(true);
     setSelectedItem({ type, item: opening });
+    
+    if (nearestWall.is_arc) {
+      toast.success(`${type === 'door' ? 'Door' : 'Window'} placed on arc wall (rotation: ${Math.round(snappedPos.rotation)}°)`);
+    }
   };
 
   // Update module

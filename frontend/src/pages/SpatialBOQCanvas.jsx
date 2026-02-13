@@ -193,6 +193,9 @@ export default function SpatialBOQCanvas() {
   const [arcChordHeightInput, setArcChordHeightInput] = useState('500'); // Default chord height in mm
   const [tempArcWall, setTempArcWall] = useState(null); // { start, end, radius, chordHeight, bulgeDirection, centerX, centerY, startAngle, endAngle, sweepFlag }
   const [arcBulgeDirection, setArcBulgeDirection] = useState(1); // 1 or -1 for left/right bulge
+  
+  // Ref for synchronous arc drawing state (to bypass React's async state batching)
+  const arcDrawingRef = useRef({ isDrawing: false, startPoint: null });
 
   // Module-to-Wall distance editing (Item #8)
   const [editingModuleDistance, setEditingModuleDistance] = useState(null);

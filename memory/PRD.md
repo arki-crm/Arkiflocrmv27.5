@@ -9,12 +9,12 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: T-Junction Geometry Engine COMPLETE ✅
+## Current Status: T-Junction Seamless Rendering COMPLETE ✅
 **As of February 13, 2026**
 
-### Composer (SpatialBOQCanvas) - T-Junction Rendering
+### Composer (SpatialBOQCanvas) - Seamless T-Junction Rendering
 
-Implemented proper T-junction detection and seamless geometry rendering (Coohom-style).
+Implemented Coohom-style unified wall boundary rendering with no internal seam lines at junctions.
 
 | # | Feature | Description | Status |
 |---|---------|-------------|--------|
@@ -24,20 +24,22 @@ Implemented proper T-junction detection and seamless geometry rendering (Coohom-
 | 4 | **Seamless Junction Strokes** | Stem wall has no stroke at junction edge (blends with through-wall) | ✅ |
 | 5 | **Stem Chain Skipping** | Stem walls in T-junctions skip normal chain rendering (no double render) | ✅ |
 | 6 | **Through-Wall Chain Detection** | Chains detect when they have affecting T-junctions | ✅ |
+| 7 | **Unified Boundary Rendering** | Chain polygons render with fill-only, edges stroked separately | ✅ |
+| 8 | **Junction Edge Skipping** | Edges at T-junction points are not stroked (no internal seam lines) | ✅ |
 
-**T-Junction Technical Details:**
-- Mid-span detection uses point-to-line projection with 50mm threshold
-- Stem polygon starts at through-wall outer edge (halfThroughThickness offset)
-- Stem rendered with fill only (no stroke at junction edge)
-- Outer edges (left, far end, right) have proper black strokes
-- Chain renderer skips walls that are T-junction stems
+**T-Junction Rendering Technical Details:**
+- Chain polygon rendered with `stroke="none"` to prevent internal seams
+- Each edge rendered as separate `<line>` element  
+- Edge-skipping logic detects edges near T-junction points
+- Edges within `halfStemThickness * 2` distance and shorter than `halfStemThickness * 3` are skipped
+- Result: Unified wall appearance like Coohom - no visible seam lines at junctions
 
 ---
 
-## Previous Status: Wall Split & T-Junction Handling COMPLETE ✅
+## Previous Status: T-Junction Geometry Engine COMPLETE ✅
 **As of February 13, 2026**
 
-### Composer (SpatialBOQCanvas) - Wall Split Tool v2
+### Composer (SpatialBOQCanvas) - T-Junction Detection
 
 Implemented professional wall split functionality with improved UX and T-junction auto-merge.
 

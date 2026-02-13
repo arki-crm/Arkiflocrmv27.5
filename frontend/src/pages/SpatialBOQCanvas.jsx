@@ -1263,51 +1263,22 @@ export default function SpatialBOQCanvas() {
     
     return guides;
   }, []);
-    const canvasWidth = 10000; // Large canvas extent for guides
-    
-    for (const wall of layout.walls) {
-      if (wall.wall_id === excludeWallId) continue;
-      
-      // Check horizontal alignment with wall endpoints
-      if (Math.abs(y - wall.start_y) < ALIGNMENT_THRESHOLD) {
-        guides.push({ type: 'horizontal', position: wall.start_y, start: 0, end: canvasWidth });
-      }
-      if (Math.abs(y - wall.end_y) < ALIGNMENT_THRESHOLD && wall.end_y !== wall.start_y) {
-        guides.push({ type: 'horizontal', position: wall.end_y, start: 0, end: canvasWidth });
-      }
-      
-      // Check vertical alignment with wall endpoints  
-      if (Math.abs(x - wall.start_x) < ALIGNMENT_THRESHOLD) {
-        guides.push({ type: 'vertical', position: wall.start_x, start: 0, end: canvasWidth });
-      }
-      if (Math.abs(x - wall.end_x) < ALIGNMENT_THRESHOLD && wall.end_x !== wall.start_x) {
-        guides.push({ type: 'vertical', position: wall.end_x, start: 0, end: canvasWidth });
-      }
-    }
-    
-    // Deduplicate guides
-    const uniqueGuides = guides.filter((guide, index, self) =>
-      index === self.findIndex(g => g.type === guide.type && Math.abs(g.position - guide.position) < 10)
-    );
-    
-    return uniqueGuides;
-  }, [layout?.walls]);
 
-  // Enhanced orthogonal constraint (Shift-lock) - forces 0°/90°/180°/270°
+  // Coohom-style orthogonal constraint - snaps to pure horizontal or vertical
   const applyOrthogonalConstraint = (startX, startY, endX, endY) => {
     const dx = endX - startX;
     const dy = endY - startY;
     const length = Math.sqrt(dx * dx + dy * dy);
     
-    if (length < 10) return { x: endX, y: endY }; // Too short, no constraint
+    if (length < 10) return { x: endX, y: endY, isOrtho: false };
     
-    // Determine dominant axis
-    if (Math.abs(dx) > Math.abs(dy)) {
-      // Horizontal dominant - snap to pure horizontal
-      return { x: startX + (dx > 0 ? length : -length), y: startY };
+    // Determine dominant axis and snap to it
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      // Horizontal - snap to pure horizontal
+      return { x: startX + (dx >= 0 ? length : -length), y: startY, isOrtho: true, angle: dx >= 0 ? 0 : 180 };
     } else {
-      // Vertical dominant - snap to pure vertical
-      return { x: startX, y: startY + (dy > 0 ? length : -length) };
+      // Vertical - snap to pure vertical  
+      return { x: startX, y: startY + (dy >= 0 ? length : -length), isOrtho: true, angle: dy >= 0 ? 90 : -90 };
     }
   };
 

@@ -4071,12 +4071,11 @@ export default function SpatialBOQCanvas() {
                   return (
                     <g key={`tjunction-stem-${tjIndex}`}>
                       {/* Stem wall - connects exactly to through-wall outer edge */}
+                      {/* No stroke so it blends seamlessly with through-wall */}
                       <polygon
                         points={stemPointsStr}
                         fill={fillColor}
-                        stroke="#000000"
-                        strokeWidth="0.5"
-                        strokeLinejoin="miter"
+                        stroke="none"
                       />
                     </g>
                   );

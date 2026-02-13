@@ -2678,7 +2678,23 @@ export default function SpatialBOQCanvas() {
           setSelectedItem({ type: 'wall', item: clickedWall });
           setIsDragging(true);
           setDragType('wall');
-          setDragStart({ x: canvas.x, y: canvas.y, wall_start_x: clickedWall.start_x, wall_start_y: clickedWall.start_y, wall_end_x: clickedWall.end_x, wall_end_y: clickedWall.end_y });
+          
+          // Store arc-specific data if this is an arc wall
+          const dragStartData = { 
+            x: canvas.x, 
+            y: canvas.y, 
+            wall_start_x: clickedWall.start_x, 
+            wall_start_y: clickedWall.start_y, 
+            wall_end_x: clickedWall.end_x, 
+            wall_end_y: clickedWall.end_y 
+          };
+          
+          if (clickedWall.is_arc) {
+            dragStartData.arc_center_x = clickedWall.arc_center_x;
+            dragStartData.arc_center_y = clickedWall.arc_center_y;
+          }
+          
+          setDragStart(dragStartData);
           
           // Detect rectangular loop at drag start - store for parametric editing
           const detectedLoop = detectRectangularLoop(clickedWall.wall_id);

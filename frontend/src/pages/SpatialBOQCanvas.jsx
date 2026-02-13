@@ -4106,6 +4106,12 @@ export default function SpatialBOQCanvas() {
                     return null;
                   }
                   
+                  // Skip if this wall is a stem wall in a T-junction (handled separately)
+                  const tJunctionStemWallIds = (unifiedBoundary?.tJunctions || []).map(tj => tj.stemWall?.wall_id).filter(Boolean);
+                  if (tJunctionStemWallIds.includes(wall.wall_id)) {
+                    return null;
+                  }
+                  
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === wall.wall_id;
                   const thickness = wall.thickness || DEFAULT_WALL_THICKNESS;
                   

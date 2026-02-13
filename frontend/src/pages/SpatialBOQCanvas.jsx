@@ -1886,7 +1886,7 @@ export default function SpatialBOQCanvas() {
     
     const intersections = [];
     
-    // Direction vector of the line being drawn
+    // Direction vector of the line being drawn (from start toward cursor)
     const drawDx = endX - startX;
     const drawDy = endY - startY;
     const drawLen = Math.sqrt(drawDx * drawDx + drawDy * drawDy);
@@ -1906,21 +1906,23 @@ export default function SpatialBOQCanvas() {
       if (wallLen < 10) continue;
       
       // Line-line intersection using parametric form
-      // Line 1: P1 + t * D1 (drawing line, extended infinitely in direction of draw)
+      // Line 1: P1 + t * D1 (drawing line, extended infinitely in draw direction)
       // Line 2: P2 + s * D2 (wall centerline segment)
       
       // Cross product to check if lines are parallel
       const cross = drawDx * wallDy - drawDy * wallDx;
       
-      if (Math.abs(cross) < 0.001) continue; // Lines are parallel
+      if (Math.abs(cross) < 0.0001) continue; // Lines are parallel
       
       // Calculate intersection parameters
       const t = ((wall.start_x - startX) * wallDy - (wall.start_y - startY) * wallDx) / cross;
       const s = ((wall.start_x - startX) * drawDy - (wall.start_y - startY) * drawDx) / cross;
       
-      // t > 0 means intersection is in front of draw start (in draw direction)
-      // s between 0 and 1 means intersection is on the wall segment
-      if (t > 0.1 && s > 0.05 && s < 0.95) {
+      // RELAXED FILTERS for better visibility:
+      // t > 0 means intersection is ahead of draw start point (in draw direction)
+      // s between 0 and 1 means intersection is ON the wall segment
+      // Allow intersections anywhere on the wall (s from 0 to 1, inclusive with small margin)
+      if (t > 0 && s >= -0.01 && s <= 1.01) {
         // Calculate intersection point
         const intersectX = startX + t * drawDx;
         const intersectY = startY + t * drawDy;
@@ -1934,26 +1936,29 @@ export default function SpatialBOQCanvas() {
         // Distance from draw start to intersection
         const distFromStart = t * drawLen;
         
-        // Only show intersections that are:
-        // 1. Ahead of the cursor (in draw direction)
-        // 2. Within reasonable range (not too far)
+        // Check if intersection is ahead of cursor (in draw direction)
         const cursorToIntersectDot = (intersectX - endX) * drawDirX + (intersectY - endY) * drawDirY;
         
-        if (cursorToIntersectDot > -50 && distFromStart < 5000) {
-          intersections.push({
-            x: intersectX,
-            y: intersectY,
-            wallId: wall.wall_id,
-            distanceFromStart: distFromStart,
-            distanceFromCursor: distFromCursor,
-            isAhead: cursorToIntersectDot > 0 // True if intersection is ahead of cursor
-          });
-        }
+        intersections.push({
+          x: intersectX,
+          y: intersectY,
+          wallId: wall.wall_id,
+          distanceFromStart: distFromStart,
+          distanceFromCursor: distFromCursor,
+          isAhead: cursorToIntersectDot > 0, // True if intersection is ahead of cursor
+          t: t, // Parameter along draw line
+          s: s  // Parameter along wall (0=start, 1=end)
+        });
       }
     }
     
-    // Sort by distance from start point
+    // Sort by distance from draw start point (closest first)
     intersections.sort((a, b) => a.distanceFromStart - b.distanceFromStart);
+    
+    // Log for debugging
+    if (intersections.length > 0) {
+      console.log('[ProjectedIntersection] Found', intersections.length, 'intersection(s)');
+    }
     
     return intersections;
   }, [layout?.walls]);

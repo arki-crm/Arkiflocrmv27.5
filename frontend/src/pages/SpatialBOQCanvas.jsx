@@ -1877,16 +1877,14 @@ export default function SpatialBOQCanvas() {
       const snapResult = findSnapPoint(canvas.x, canvas.y);
       let endPoint = { x: snapResult.x, y: snapResult.y };
       
+      // ALWAYS show alignment guides to help draw straight lines
+      const guides = findAlignmentGuides(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
+      setAlignmentGuides(guides);
+      
       // Apply ortho constraint if enabled (Coohom default behavior)
       if (orthoMode || shiftKeyHeld) {
         const orthoResult = applyOrthogonalConstraint(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
         endPoint = { x: orthoResult.x, y: orthoResult.y };
-        
-        // Show alignment guides for ortho drawing (green dashed lines like Coohom)
-        const guides = findAlignmentGuides(drawStart.x, drawStart.y, endPoint.x, endPoint.y);
-        setAlignmentGuides(guides);
-      } else {
-        setAlignmentGuides([]);
       }
       
       // Calculate and display real-time dimension (Coohom-style)

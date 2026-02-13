@@ -3460,6 +3460,33 @@ export default function SpatialBOQCanvas() {
       };
     }
   };
+
+  // Add module with wall snap (Item #7)
+  const addModule = (x, y) => {
+    if (!selectedModuleType || !moduleLibrary.module_types) return;
+    saveToHistory();
+
+    const moduleType = moduleLibrary.module_types[selectedModuleType];
+    if (!moduleType) return;
+
+    // Snap to nearest wall
+    const snapped = snapModuleToWall(x, y, moduleType.default_width, moduleType.default_depth);
+
+    const newModule = {
+      module_id: `mod_${Date.now().toString(36)}`,
+      module_type: selectedModuleType,
+      wall_id: snapped.wall_id,
+      position_on_wall: 0,
+      x: Math.round(snapped.x),
+      y: Math.round(snapped.y),
+      width: moduleType.default_width,
+      height: moduleType.default_height,
+      depth: moduleType.default_depth,
+      rotation: 0,
+      finish_type: 'laminate',
+      shutter_type: 'flat',
+      carcass_material: 'plywood_710',
+      carcass_finish: 'laminate',
       custom_name: null,
       notes: null
     };

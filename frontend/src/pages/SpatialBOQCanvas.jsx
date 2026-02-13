@@ -187,6 +187,11 @@ export default function SpatialBOQCanvas() {
   const [dragEndpoint, setDragEndpoint] = useState(null); // 'start' or 'end' for wall endpoints
   const [activeRectLoop, setActiveRectLoop] = useState(null); // Stores detected rectangular loop at drag start
 
+  // CAD Precision Enhancement State
+  const [snapIndicator, setSnapIndicator] = useState(null); // { x, y, type: 'endpoint'|'midpoint'|'grid' }
+  const [alignmentGuides, setAlignmentGuides] = useState([]); // [{ type: 'horizontal'|'vertical', position, start, end }]
+  const [shiftKeyHeld, setShiftKeyHeld] = useState(false); // For orthogonal constraint
+
   // Elevation view - full screen mode (Item #9)
   const [showElevationModal, setShowElevationModal] = useState(false);
 

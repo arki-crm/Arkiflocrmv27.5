@@ -12,29 +12,33 @@ Build a full-stack CRM application for an interior design company, managing the 
 ## Current Status: Wall Split & T-Junction Handling COMPLETE ✅
 **As of February 13, 2026**
 
-### Composer (SpatialBOQCanvas) - Wall Split Tool
+### Composer (SpatialBOQCanvas) - Wall Split Tool v2
 
-Implemented professional wall split functionality and T-junction handling for complex layouts.
+Implemented professional wall split functionality with improved UX and T-junction auto-merge.
 
 | # | Feature | Description | Status |
 |---|---------|-------------|--------|
-| 1 | **Wall Split Tool** | New scissors icon in toolbar, click on wall to split into two | ✅ |
+| 1 | **Slice Icon** | Small black knife/slice icon in toolbar (cleaner look) | ✅ |
 | 2 | **Keyboard Shortcut** | Press 'S' to activate split tool | ✅ |
-| 3 | **Split Preview** | Red circle marker with "Click to Split" label appears on hover | ✅ |
-| 4 | **T-Junction Detection** | Detects vertices with 3 walls where 2 are collinear | ✅ |
-| 5 | **T-Junction Handling** | Loop/chain tracing continues through T-junctions along collinear walls | ✅ |
+| 3 | **Split Preview with Measurements** | Shows distance to both endpoints while hovering | ✅ |
+| 4 | **Perpendicular Cut Line** | Dotted line shows where cut will occur | ✅ |
+| 5 | **Split Markers** | Gray dotted lines persist at split points after cutting | ✅ |
+| 6 | **T-Junction Detection** | Detects when wall endpoint is dragged near another wall's middle | ✅ |
+| 7 | **T-Junction Auto-Merge** | Automatically splits target wall and creates T-junction | ✅ |
+| 8 | **T-Junction Indicator** | Orange circle with "T" shows T-junction snap target | ✅ |
 
 **Split Tool Features:**
-- Scissors icon in toolbar (red highlight when active)
-- Crosshair cursor when split tool is active
-- Toast notification showing "Wall split into XXXmm and XXXmm segments"
-- Auto-switches back to select tool after successful split
-- Minimum split distance of 100mm from endpoints
+- Slice icon in toolbar (slate gray when active)
+- Shows distances: "XXXmm" labels at midpoints to both endpoints
+- Black perpendicular dotted line shows cut position
+- Compact "Click to Cut" label below cursor
+- Toast notification: "Wall split into XXXmm and XXXmm segments"
 
-**T-Junction Geometry:**
-- `areWallsCollinear()` - Detects if two walls form a straight line at a vertex
-- `findCollinearContinuation()` - Finds the wall that continues collinearly at T-junction
-- Modified `computeUnifiedWallBoundary()` to handle 3-connection vertices
+**T-Junction Features:**
+- Orange "T" indicator appears when dragging near wall middle
+- 80mm threshold for T-junction detection
+- Automatic wall splitting on mouse release
+- Creates proper T-junction geometry for room detection
 
 ---
 

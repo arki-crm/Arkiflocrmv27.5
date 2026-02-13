@@ -3249,14 +3249,14 @@ export default function SpatialBOQCanvas() {
                 <Button
                   variant={tool === 'split' ? 'secondary' : 'ghost'}
                   size="sm"
-                  className={`w-9 h-9 p-0 ${tool === 'split' ? 'bg-red-100' : ''}`}
+                  className={`w-9 h-9 p-0 ${tool === 'split' ? 'bg-slate-200' : ''}`}
                   onClick={() => setTool('split')}
                   disabled={!layout?.walls || layout.walls.length === 0}
                 >
-                  <Scissors className="h-4 w-4" />
+                  <Slice className="h-3.5 w-3.5 text-slate-700" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="right">Split Wall (S) - Click on wall to split</TooltipContent>
+              <TooltipContent side="right">Split Wall (S) - Click on wall to cut</TooltipContent>
             </Tooltip>
 
             <Separator className="my-2 w-6" />

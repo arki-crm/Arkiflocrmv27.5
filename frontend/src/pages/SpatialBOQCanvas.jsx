@@ -5065,6 +5065,62 @@ export default function SpatialBOQCanvas() {
                 ))}
 
                 {/* ============================================
+                   PROJECTED INTERSECTION INDICATOR
+                   Shows where the wall being drawn will intersect existing walls
+                   BEFORE the cursor reaches the intersection point
+                   ============================================ */}
+                {(wallClickMode === 'waiting_end' || isDrawing) && projectedIntersections.length > 0 && (
+                  <g>
+                    {projectedIntersections.slice(0, 3).map((intersection, idx) => (
+                      <g key={`proj-intersection-${idx}`}>
+                        {/* Green dashed crosshair at intersection point */}
+                        {/* Horizontal crosshair line */}
+                        <line
+                          x1={intersection.x * scale - 15}
+                          y1={intersection.y * scale}
+                          x2={intersection.x * scale + 15}
+                          y2={intersection.y * scale}
+                          stroke="#22C55E"
+                          strokeWidth="2"
+                          strokeOpacity={idx === 0 ? 1 : 0.5}
+                        />
+                        {/* Vertical crosshair line */}
+                        <line
+                          x1={intersection.x * scale}
+                          y1={intersection.y * scale - 15}
+                          x2={intersection.x * scale}
+                          y2={intersection.y * scale + 15}
+                          stroke="#22C55E"
+                          strokeWidth="2"
+                          strokeOpacity={idx === 0 ? 1 : 0.5}
+                        />
+                        {/* Center target dot */}
+                        <circle
+                          cx={intersection.x * scale}
+                          cy={intersection.y * scale}
+                          r={idx === 0 ? 5 : 3}
+                          fill="#22C55E"
+                          fillOpacity={idx === 0 ? 1 : 0.6}
+                        />
+                        {/* "Intersection" label for the nearest one */}
+                        {idx === 0 && (
+                          <text
+                            x={intersection.x * scale}
+                            y={intersection.y * scale + 25}
+                            fontSize="11"
+                            fill="#22C55E"
+                            textAnchor="middle"
+                            fontWeight="500"
+                          >
+                            Intersection
+                          </text>
+                        )}
+                      </g>
+                    ))}
+                  </g>
+                )}
+
+                {/* ============================================
                    COOHOM-STYLE INTERSECTION INDICATOR
                    Shows when cursor is near the start point to close room
                    ============================================ */}

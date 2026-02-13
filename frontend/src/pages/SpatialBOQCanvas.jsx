@@ -4312,24 +4312,6 @@ export default function SpatialBOQCanvas() {
                     // Reconstruct the outline
                     modifiedOutline = [...modifiedLeft, ...modifiedRight.reverse()];
                   }
-                                  newSide.push({ x: notchEndX, y: notchEndY });
-                                  newSide.push({ x: notchStartX, y: notchStartY });
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                      
-                      return newSide;
-                    };
-                    
-                    const modifiedLeft = insertNotchPoints(leftSide, true);
-                    const modifiedRight = insertNotchPoints(rightSide, false);
-                    
-                    // Reconstruct the outline
-                    modifiedOutline = [...modifiedLeft, ...modifiedRight.reverse()];
-                  }
                   
                   const isAnyWallSelected = wallIds.some(wid => 
                     selectedItem?.type === 'wall' && selectedItem.item.wall_id === wid

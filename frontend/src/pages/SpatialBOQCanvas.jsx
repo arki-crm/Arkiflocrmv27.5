@@ -2187,6 +2187,14 @@ export default function SpatialBOQCanvas() {
         updateOpening('window', win.window_id, { x: Math.round(newX), y: Math.round(newY) });
       }
     }
+
+    // Split tool - show preview of split point on wall
+    if (tool === 'split') {
+      const splitPoint = findSplitPointOnWall(canvas.x, canvas.y);
+      setSplitPreview(splitPoint);
+    } else if (splitPreview) {
+      setSplitPreview(null);
+    }
   };
 
   // Snap opening to wall

@@ -5378,6 +5378,67 @@ export default function SpatialBOQCanvas() {
                               strokeWidth="1.5"
                               strokeDasharray="3,3"
                             />
+                            {/* Curvature drag handle at arc midpoint */}
+                            {(() => {
+                              // Calculate arc midpoint
+                              const midAngle = (wall.arc_start_angle + wall.arc_end_angle) / 2;
+                              // Adjust for bulge direction
+                              let adjustedMidAngle = midAngle;
+                              if (wall.arc_bulge_direction > 0) {
+                                const angleDiff = wall.arc_end_angle - wall.arc_start_angle;
+                                if (angleDiff > 0) adjustedMidAngle = wall.arc_start_angle + (angleDiff - 2 * Math.PI) / 2;
+                              } else {
+                                const angleDiff = wall.arc_end_angle - wall.arc_start_angle;
+                                if (angleDiff < 0) adjustedMidAngle = wall.arc_start_angle + (angleDiff + 2 * Math.PI) / 2;
+                              }
+                              const midX = wall.arc_center_x + wall.arc_radius * Math.cos(adjustedMidAngle);
+                              const midY = wall.arc_center_y + wall.arc_radius * Math.sin(adjustedMidAngle);
+                              
+                              return (
+                                <g>
+                                  {/* Line from center to midpoint */}
+                                  <line
+                                    x1={wall.arc_center_x * scale}
+                                    y1={wall.arc_center_y * scale}
+                                    x2={midX * scale}
+                                    y2={midY * scale}
+                                    stroke="#9333ea"
+                                    strokeWidth="1"
+                                    strokeDasharray="4,2"
+                                  />
+                                  {/* Curvature handle (diamond shape) */}
+                                  <rect
+                                    x={(midX * scale) - 8}
+                                    y={(midY * scale) - 8}
+                                    width={16}
+                                    height={16}
+                                    fill="#9333ea"
+                                    stroke="#7c3aed"
+                                    strokeWidth="2"
+                                    transform={`rotate(45, ${midX * scale}, ${midY * scale})`}
+                                    style={{ cursor: 'ns-resize' }}
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation();
+                                      saveToHistory();
+                                      setIsDragging(true);
+                                      setDragType('arc_curvature');
+                                      setDragStart({ x: midX, y: midY });
+                                    }}
+                                  />
+                                  {/* Curvature label */}
+                                  <text
+                                    x={midX * scale}
+                                    y={(midY * scale) + 22}
+                                    fontSize="9"
+                                    fill="#9333ea"
+                                    textAnchor="middle"
+                                    fontWeight="600"
+                                  >
+                                    Drag to curve
+                                  </text>
+                                </g>
+                              );
+                            })()}
                           </>
                         )}
                       </g>

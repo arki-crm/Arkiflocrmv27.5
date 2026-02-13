@@ -5019,6 +5019,27 @@ export default function SpatialBOQCanvas() {
                   </g>
                 )}
 
+                {/* CHAIN START INDICATOR - Blue circle at the starting point of the wall chain (Coohom-style) */}
+                {chainStartIndicator && (wallClickMode === 'waiting_end' || isDrawing) && !canCloseShape && (
+                  <g>
+                    {/* Blue circle at chain start point */}
+                    <circle
+                      cx={chainStartIndicator.x * scale}
+                      cy={chainStartIndicator.y * scale}
+                      r={8}
+                      fill="none"
+                      stroke="#3B82F6"
+                      strokeWidth="2"
+                    />
+                    <circle
+                      cx={chainStartIndicator.x * scale}
+                      cy={chainStartIndicator.y * scale}
+                      r={3}
+                      fill="#3B82F6"
+                    />
+                  </g>
+                )}
+
                 {/* PRE-CLICK SNAP INDICATOR - Shows BEFORE clicking when wall tool active */}
                 {preClickSnap && tool === 'wall' && !wallClickMode && (
                   <g>

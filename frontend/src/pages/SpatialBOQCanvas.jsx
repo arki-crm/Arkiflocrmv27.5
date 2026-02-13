@@ -5318,52 +5318,29 @@ export default function SpatialBOQCanvas() {
                 })}
 
                 {/* ============================================
-                    ARC-STRAIGHT WALL JUNCTION MARKERS
-                    Shows connection points where arc walls meet straight walls
+                    ARC-STRAIGHT WALL JUNCTION FILL
+                    Renders seamless fill polygons where arc walls meet straight walls
+                    Uses computed fillPolygon geometry for proper corner merging
                    ============================================ */}
                 {arcStraightJunctions.map((junction, idx) => {
                   const arcWall = layout?.walls?.find(w => w.wall_id === junction.arcWallId);
                   const straightWall = layout?.walls?.find(w => w.wall_id === junction.straightWallId);
-                  if (!arcWall || !straightWall) return null;
+                  if (!arcWall || !straightWall || !junction.fillPolygon) return null;
                   
-                  const jx = junction.x;
-                  const jy = junction.y;
-                  const arcThickness = arcWall.thickness || DEFAULT_WALL_THICKNESS;
-                  const straightThickness = straightWall.thickness || DEFAULT_WALL_THICKNESS;
+                  // Check if either wall is selected for fill color
+                  const isArcSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === arcWall.wall_id;
+                  const isStraightSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === straightWall.wall_id;
+                  const fillColor = (isArcSelected || isStraightSelected) ? '#93c5fd' : '#B0B0B0';
                   
-                  // Calculate arc tangent at junction point
-                  const arcTangentAngle = junction.arcAngle + Math.PI / 2;
-                  
-                  // Calculate straight wall angle
-                  const straightDx = straightWall.end_x - straightWall.start_x;
-                  const straightDy = straightWall.end_y - straightWall.start_y;
-                  const straightAngle = Math.atan2(straightDy, straightDx);
-                  
-                  // Fill polygon to merge the junction
-                  const halfArcThick = arcThickness / 2;
-                  const halfStraightThick = straightThickness / 2;
-                  
-                  // Create a small polygon to fill the corner gap
-                  const arcPerpX = Math.cos(arcTangentAngle);
-                  const arcPerpY = Math.sin(arcTangentAngle);
-                  const straightPerpX = -Math.sin(straightAngle);
-                  const straightPerpY = Math.cos(straightAngle);
-                  
-                  const fillPoints = [
-                    { x: jx + arcPerpX * halfArcThick, y: jy + arcPerpY * halfArcThick },
-                    { x: jx + straightPerpX * halfStraightThick, y: jy + straightPerpY * halfStraightThick },
-                    { x: jx - arcPerpX * halfArcThick, y: jy - arcPerpY * halfArcThick },
-                    { x: jx - straightPerpX * halfStraightThick, y: jy - straightPerpY * halfStraightThick },
-                  ];
-                  
-                  const pointsStr = fillPoints.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
+                  // Use the pre-computed fill polygon for seamless junction
+                  const pointsStr = junction.fillPolygon.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
                   
                   return (
                     <g key={`arc-straight-junction-${idx}`}>
-                      {/* Junction fill polygon */}
+                      {/* Junction fill polygon - covers the gap between arc and straight wall */}
                       <polygon
                         points={pointsStr}
-                        fill="#B0B0B0"
+                        fill={fillColor}
                         stroke="none"
                       />
                     </g>

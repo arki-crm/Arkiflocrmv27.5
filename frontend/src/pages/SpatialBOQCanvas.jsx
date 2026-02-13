@@ -747,11 +747,16 @@ export default function SpatialBOQCanvas() {
         }
         if (wallPairs.length > 0) {
           const pair = wallPairs[0];
+          // Calculate the through wall direction to determine stem offset
+          const throughWall1 = pair.through[0].wall;
+          const throughThickness = throughWall1.thickness || DEFAULT_WALL_THICKNESS;
+          
           tJunctions.push({
             x: vertex.x,
             y: vertex.y,
             throughWalls: pair.through.map(c => c.wall),
-            stemWall: pair.stem.wall
+            stemWall: pair.stem.wall,
+            throughThickness: throughThickness
           });
         }
       }

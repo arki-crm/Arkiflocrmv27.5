@@ -2699,6 +2699,7 @@ export default function SpatialBOQCanvas() {
         
         // Set ref synchronously for immediate use in mousemove
         arcDrawingRef.current = { isDrawing: true, startPoint: startPoint };
+        console.log('[ArcInit] REF SET - arcDrawingRef.current:', arcDrawingRef.current);
         
         // Initialize temp arc wall with zero chord length
         const initialArc = {

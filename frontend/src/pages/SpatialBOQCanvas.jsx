@@ -4037,6 +4037,12 @@ export default function SpatialBOQCanvas() {
                   
                   if (!outline || outline.length < 3) return null;
                   
+                  // Check if this chain consists only of stem walls from T-junctions
+                  // If so, skip rendering here as T-junction render handles it
+                  const tJunctionStemWallIds = (unifiedBoundary.tJunctions || []).map(tj => tj.stemWall?.wall_id).filter(Boolean);
+                  const isOnlyStemWalls = wallIds.every(wid => tJunctionStemWallIds.includes(wid));
+                  if (isOnlyStemWalls) return null;
+                  
                   const isAnyWallSelected = wallIds.some(wid => 
                     selectedItem?.type === 'wall' && selectedItem.item.wall_id === wid
                   );

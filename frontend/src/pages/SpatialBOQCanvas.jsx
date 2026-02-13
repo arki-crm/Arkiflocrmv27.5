@@ -8,7 +8,8 @@ import {
   Eye, Package, FileText, ChevronLeft, ChevronRight,
   DoorOpen, PanelTop, Layers, Move, Maximize2, X,
   RectangleHorizontal, SquareIcon, Pencil, GripVertical,
-  Undo2, Redo2, RotateCw, FlipHorizontal, FlipVertical
+  Undo2, Redo2, RotateCw, FlipHorizontal, FlipVertical,
+  Scissors
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';

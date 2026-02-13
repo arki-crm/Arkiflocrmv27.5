@@ -1296,6 +1296,12 @@ export default function SpatialBOQCanvas() {
           setTool('select');
           return;
         }
+        // S key - Split wall tool
+        if (e.key === 's' || e.key === 'S') {
+          e.preventDefault();
+          setTool('split');
+          return;
+        }
       }
 
       if (!selectedItem) return;

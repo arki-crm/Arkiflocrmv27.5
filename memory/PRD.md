@@ -9,7 +9,36 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: CAD Precision Enhancements (Coohom-style) COMPLETE ✅
+## Current Status: Wall Split & T-Junction Handling COMPLETE ✅
+**As of February 13, 2026**
+
+### Composer (SpatialBOQCanvas) - Wall Split Tool
+
+Implemented professional wall split functionality and T-junction handling for complex layouts.
+
+| # | Feature | Description | Status |
+|---|---------|-------------|--------|
+| 1 | **Wall Split Tool** | New scissors icon in toolbar, click on wall to split into two | ✅ |
+| 2 | **Keyboard Shortcut** | Press 'S' to activate split tool | ✅ |
+| 3 | **Split Preview** | Red circle marker with "Click to Split" label appears on hover | ✅ |
+| 4 | **T-Junction Detection** | Detects vertices with 3 walls where 2 are collinear | ✅ |
+| 5 | **T-Junction Handling** | Loop/chain tracing continues through T-junctions along collinear walls | ✅ |
+
+**Split Tool Features:**
+- Scissors icon in toolbar (red highlight when active)
+- Crosshair cursor when split tool is active
+- Toast notification showing "Wall split into XXXmm and XXXmm segments"
+- Auto-switches back to select tool after successful split
+- Minimum split distance of 100mm from endpoints
+
+**T-Junction Geometry:**
+- `areWallsCollinear()` - Detects if two walls form a straight line at a vertex
+- `findCollinearContinuation()` - Finds the wall that continues collinearly at T-junction
+- Modified `computeUnifiedWallBoundary()` to handle 3-connection vertices
+
+---
+
+## Previous Status: CAD Precision Enhancements (Coohom-style) COMPLETE ✅
 **As of February 13, 2026**
 
 ### Composer (SpatialBOQCanvas) - Coohom-style CAD Precision

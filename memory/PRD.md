@@ -9,7 +9,32 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Wall Split & T-Junction Handling COMPLETE ✅
+## Current Status: T-Junction Geometry Engine COMPLETE ✅
+**As of February 13, 2026**
+
+### Composer (SpatialBOQCanvas) - T-Junction Rendering
+
+Implemented proper T-junction detection and seamless geometry rendering (Coohom-style).
+
+| # | Feature | Description | Status |
+|---|---------|-------------|--------|
+| 1 | **Mid-span T-Junction Detection** | Detects when wall endpoint lies on another wall's middle (not just endpoints) | ✅ |
+| 2 | **Junction Geometry Calculation** | Computes through-wall direction, stem direction, and proper offsets | ✅ |
+| 3 | **Stem Wall Rendering** | Renders stem from through-wall outer edge (no overlap) | ✅ |
+| 4 | **Seamless Junction Strokes** | Stem wall has no stroke at junction edge (blends with through-wall) | ✅ |
+| 5 | **Stem Chain Skipping** | Stem walls in T-junctions skip normal chain rendering (no double render) | ✅ |
+| 6 | **Through-Wall Chain Detection** | Chains detect when they have affecting T-junctions | ✅ |
+
+**T-Junction Technical Details:**
+- Mid-span detection uses point-to-line projection with 50mm threshold
+- Stem polygon starts at through-wall outer edge (halfThroughThickness offset)
+- Stem rendered with fill only (no stroke at junction edge)
+- Outer edges (left, far end, right) have proper black strokes
+- Chain renderer skips walls that are T-junction stems
+
+---
+
+## Previous Status: Wall Split & T-Junction Handling COMPLETE ✅
 **As of February 13, 2026**
 
 ### Composer (SpatialBOQCanvas) - Wall Split Tool v2

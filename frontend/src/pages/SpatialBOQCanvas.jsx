@@ -1901,43 +1901,50 @@ export default function SpatialBOQCanvas() {
     const toChainStartY = chainStart.y - startY;
     
     // Project chain start onto the drawing line
-    // t = (toChainStart · drawDir)
+    // t = (toChainStart · drawDir) = distance along draw direction to perpendicular foot
     const t = toChainStartX * drawDirX + toChainStartY * drawDirY;
     
-    // If t <= 0, chain start is behind the draw start - not useful
+    // If t <= 0, perpendicular foot is behind the draw start - not useful
     if (t <= 0) return null;
     
-    // Closest point on the projected line to chain start
-    const closestX = startX + t * drawDirX;
-    const closestY = startY + t * drawDirY;
+    // Perpendicular foot point on the drawing line
+    // THIS is where wall 3 should END so wall 4 connects cleanly to chain start
+    const footX = startX + t * drawDirX;
+    const footY = startY + t * drawDirY;
     
-    // Distance from chain start to the projected line (perpendicular distance)
-    const perpDistX = chainStart.x - closestX;
-    const perpDistY = chainStart.y - closestY;
-    const perpDist = Math.sqrt(perpDistX * perpDistX + perpDistY * perpDistY);
+    // Distance from chain start to the perpendicular foot (how far wall 4 needs to travel)
+    const wall4Dx = chainStart.x - footX;
+    const wall4Dy = chainStart.y - footY;
+    const wall4Length = Math.sqrt(wall4Dx * wall4Dx + wall4Dy * wall4Dy);
     
-    // If perpendicular distance is small, trajectory aligns with chain start
-    // Use a generous threshold (300mm) for early detection
-    const ALIGNMENT_THRESHOLD = 300;
+    // Only show if wall 4 length is reasonable (not too short, not too far)
+    // Minimum 200mm wall, maximum 5000mm prediction range
+    if (wall4Length < 200 || wall4Length > 5000) return null;
     
-    if (perpDist < ALIGNMENT_THRESHOLD) {
-      // Distance from current cursor to the chain start point
-      const cursorToChainDist = Math.sqrt(
-        (endX - chainStart.x) * (endX - chainStart.x) + 
-        (endY - chainStart.y) * (endY - chainStart.y)
-      );
-      
-      return {
-        x: chainStart.x,
-        y: chainStart.y,
-        perpDistance: perpDist,
-        projectionDistance: t, // Distance along draw direction
-        cursorDistance: cursorToChainDist,
-        alignmentStrength: 1 - (perpDist / ALIGNMENT_THRESHOLD) // 1 = perfect alignment, 0 = at threshold
-      };
-    }
+    // Distance from current cursor to the foot point
+    const cursorToFootDist = Math.sqrt(
+      (endX - footX) * (endX - footX) + 
+      (endY - footY) * (endY - footY)
+    );
     
-    return null;
+    // Only show when cursor is approaching the foot point (within 2000mm)
+    // or has passed it but not too far
+    if (cursorToFootDist > 2000 && t > drawLen) return null;
+    
+    return {
+      // The intersection point ON the line being drawn (where wall 3 should end)
+      x: footX,
+      y: footY,
+      // The chain start point (where wall 4 will connect to close the room)
+      chainStartX: chainStart.x,
+      chainStartY: chainStart.y,
+      // Distance from foot to chain start (wall 4 length)
+      wall4Length: wall4Length,
+      // Distance from cursor to foot point
+      cursorDistance: cursorToFootDist,
+      // Distance along draw direction to foot
+      projectionDistance: t
+    };
   }, []);
 
   // ============================================

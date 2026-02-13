@@ -1259,6 +1259,7 @@ export default function SpatialBOQCanvas() {
           e.preventDefault();
           if (layout?.walls?.length >= 3) {
             setTool('fill');
+            setShowFloorMaterialPanel(true);
           }
           return;
         }

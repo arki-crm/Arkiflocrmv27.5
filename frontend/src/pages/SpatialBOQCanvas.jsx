@@ -5355,35 +5355,35 @@ export default function SpatialBOQCanvas() {
 
                 {/* ============================================
                    LOOP CLOSURE PROJECTION INDICATOR
-                   Shows "Close Room" guidance when drawing 3rd wall 
-                   and trajectory aligns with room start point
-                   Helps user anticipate final wall closure BEFORE reaching it
+                   Shows "Intersection" point ON the line being drawn (wall 3)
+                   where it should END so wall 4 can close the room cleanly
+                   Also shows a preview line for where wall 4 will go
                    ============================================ */}
                 {loopClosureProjection && (wallClickMode === 'waiting_end' || isDrawing) && !canCloseShape && tempWall && (
                   <g style={{ zIndex: 9998 }}>
-                    {/* Dashed projection line from cursor toward closure point */}
+                    {/* WALL 4 PREVIEW: Dashed line showing where the closing wall will go */}
                     <line
-                      x1={tempWall.end.x * scale}
-                      y1={tempWall.end.y * scale}
-                      x2={loopClosureProjection.x * scale}
-                      y2={loopClosureProjection.y * scale}
-                      stroke="#F59E0B"
+                      x1={loopClosureProjection.x * scale}
+                      y1={loopClosureProjection.y * scale}
+                      x2={loopClosureProjection.chainStartX * scale}
+                      y2={loopClosureProjection.chainStartY * scale}
+                      stroke="#22C55E"
                       strokeWidth="2"
-                      strokeDasharray="10,5"
-                      strokeOpacity={0.5 + loopClosureProjection.alignmentStrength * 0.5}
+                      strokeDasharray="8,4"
+                      strokeOpacity="0.7"
                     />
                     
-                    {/* Extended alignment guides at closure point */}
+                    {/* Extended alignment guides at intersection point */}
                     {/* Horizontal guide */}
                     <line
                       x1={-10000}
                       y1={loopClosureProjection.y * scale}
                       x2={10000}
                       y2={loopClosureProjection.y * scale}
-                      stroke="#F59E0B"
+                      stroke="#22C55E"
                       strokeWidth="1"
                       strokeDasharray="6,4"
-                      strokeOpacity={0.4 + loopClosureProjection.alignmentStrength * 0.3}
+                      strokeOpacity="0.5"
                     />
                     {/* Vertical guide */}
                     <line
@@ -5391,92 +5391,91 @@ export default function SpatialBOQCanvas() {
                       y1={-10000}
                       x2={loopClosureProjection.x * scale}
                       y2={10000}
-                      stroke="#F59E0B"
+                      stroke="#22C55E"
                       strokeWidth="1"
                       strokeDasharray="6,4"
-                      strokeOpacity={0.4 + loopClosureProjection.alignmentStrength * 0.3}
+                      strokeOpacity="0.5"
                     />
                     
-                    {/* Large crosshair at closure point */}
+                    {/* Large crosshair at intersection point (where wall 3 should end) */}
                     {/* Horizontal crosshair */}
                     <line
-                      x1={loopClosureProjection.x * scale - 18}
+                      x1={loopClosureProjection.x * scale - 20}
                       y1={loopClosureProjection.y * scale}
-                      x2={loopClosureProjection.x * scale + 18}
+                      x2={loopClosureProjection.x * scale + 20}
                       y2={loopClosureProjection.y * scale}
-                      stroke="#F59E0B"
+                      stroke="#22C55E"
                       strokeWidth="3"
                     />
                     {/* Vertical crosshair */}
                     <line
                       x1={loopClosureProjection.x * scale}
-                      y1={loopClosureProjection.y * scale - 18}
+                      y1={loopClosureProjection.y * scale - 20}
                       x2={loopClosureProjection.x * scale}
-                      y2={loopClosureProjection.y * scale + 18}
-                      stroke="#F59E0B"
+                      y2={loopClosureProjection.y * scale + 20}
+                      stroke="#22C55E"
                       strokeWidth="3"
                     />
                     
-                    {/* Outer ring - pulsing effect based on alignment strength */}
+                    {/* Outer ring at intersection point */}
                     <circle
                       cx={loopClosureProjection.x * scale}
                       cy={loopClosureProjection.y * scale}
-                      r={14}
+                      r={12}
                       fill="none"
-                      stroke="#F59E0B"
-                      strokeWidth="2.5"
-                      strokeOpacity={0.6 + loopClosureProjection.alignmentStrength * 0.4}
+                      stroke="#22C55E"
+                      strokeWidth="2"
+                      strokeOpacity="0.8"
                     />
                     
-                    {/* Inner target circle */}
+                    {/* Inner target dot at intersection */}
                     <circle
                       cx={loopClosureProjection.x * scale}
                       cy={loopClosureProjection.y * scale}
-                      r={6}
-                      fill="#F59E0B"
-                      fillOpacity={0.8 + loopClosureProjection.alignmentStrength * 0.2}
+                      r={5}
+                      fill="#22C55E"
                     />
                     
-                    {/* "Close Room" label with background pill */}
+                    {/* "Intersection" label with background */}
                     <rect
-                      x={loopClosureProjection.x * scale - 46}
-                      y={loopClosureProjection.y * scale + 22}
-                      width="92"
-                      height="20"
-                      rx="10"
-                      fill="rgba(245, 158, 11, 0.95)"
+                      x={loopClosureProjection.x * scale - 42}
+                      y={loopClosureProjection.y * scale + 18}
+                      width="84"
+                      height="18"
+                      rx="3"
+                      fill="rgba(34, 197, 94, 0.9)"
                     />
                     <text
                       x={loopClosureProjection.x * scale}
-                      y={loopClosureProjection.y * scale + 36}
-                      fontSize="12"
+                      y={loopClosureProjection.y * scale + 31}
+                      fontSize="11"
                       fill="white"
                       textAnchor="middle"
-                      fontWeight="700"
+                      fontWeight="600"
                     >
-                      Close Room
+                      Intersection
                     </text>
                     
-                    {/* Distance indicator showing how far to closure */}
-                    {loopClosureProjection.cursorDistance > 100 && (
+                    {/* Wall 4 length preview - shows how long the closing wall will be */}
+                    {loopClosureProjection.wall4Length > 0 && (
                       <>
                         <rect
-                          x={loopClosureProjection.x * scale - 30}
-                          y={loopClosureProjection.y * scale - 38}
+                          x={(loopClosureProjection.x + loopClosureProjection.chainStartX) / 2 * scale - 30}
+                          y={(loopClosureProjection.y + loopClosureProjection.chainStartY) / 2 * scale - 10}
                           width="60"
                           height="16"
                           rx="3"
-                          fill="rgba(0,0,0,0.7)"
+                          fill="rgba(0,0,0,0.75)"
                         />
                         <text
-                          x={loopClosureProjection.x * scale}
-                          y={loopClosureProjection.y * scale - 26}
+                          x={(loopClosureProjection.x + loopClosureProjection.chainStartX) / 2 * scale}
+                          y={(loopClosureProjection.y + loopClosureProjection.chainStartY) / 2 * scale + 2}
                           fontSize="10"
-                          fill="#F59E0B"
+                          fill="#22C55E"
                           textAnchor="middle"
                           fontWeight="600"
                         >
-                          {Math.round(loopClosureProjection.cursorDistance)}mm
+                          {Math.round(loopClosureProjection.wall4Length)}mm
                         </text>
                       </>
                     )}

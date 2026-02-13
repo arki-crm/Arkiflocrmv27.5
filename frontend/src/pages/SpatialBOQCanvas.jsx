@@ -433,13 +433,13 @@ export default function SpatialBOQCanvas() {
 
   // ============================================
   // UNIFIED WALL BOUNDARY ENGINE
-  // Detects closed wall loops and generates unified boundary polygons
-  // with proper miter joins at all corners
-  // Handles multiple separate closed loops in the same layout
+  // Detects closed wall loops AND open wall chains, generates unified boundary polygons
+  // with proper miter joins at all corners (no overlap)
+  // Handles multiple separate groups in the same layout
   // ============================================
   
   const computeUnifiedWallBoundary = useCallback(() => {
-    if (!layout?.walls || layout.walls.length < 3) {
+    if (!layout?.walls || layout.walls.length === 0) {
       return null;
     }
 
@@ -467,7 +467,6 @@ export default function SpatialBOQCanvas() {
     }
 
     // Find all closed loops by looking for cycles in the graph
-    // A closed loop requires vertices with exactly 2 connections
     const closedLoops = [];
     const processedWalls = new Set();
 
@@ -475,7 +474,6 @@ export default function SpatialBOQCanvas() {
     for (const [startKey, startVertex] of vertices) {
       if (startVertex.walls.length !== 2) continue;
       
-      // Check if we've already processed all walls from this vertex
       const unprocessedWall = startVertex.walls.find(conn => !processedWalls.has(conn.wall.wall_id));
       if (!unprocessedWall) continue;
 
@@ -492,11 +490,10 @@ export default function SpatialBOQCanvas() {
       while (iterations < maxIterations) {
         iterations++;
         const vertex = vertices.get(currentKey);
-        if (!vertex || vertex.walls.length !== 2) break; // Not part of a closed loop
+        if (!vertex || vertex.walls.length !== 2) break;
         
         loopVertices.push({ x: vertex.x, y: vertex.y });
         
-        // Find the next wall (not the one we came from)
         const nextConn = vertex.walls.find(conn => 
           conn.wall.wall_id !== prevWallId && !localVisited.has(conn.wall.wall_id)
         );
@@ -508,31 +505,105 @@ export default function SpatialBOQCanvas() {
         prevWallId = nextConn.wall.wall_id;
         currentKey = nextConn.otherKey;
         
-        // Check if we've closed the loop
         if (currentKey === startKey && loopVertices.length >= 3) {
-          // Found a closed loop!
           loopWallIds.forEach(wid => processedWalls.add(wid));
           closedLoops.push({
             vertices: loopVertices,
-            wallIds: loopWallIds
+            wallIds: loopWallIds,
+            isClosed: true
           });
           break;
         }
       }
     }
 
-    console.log('[UnifiedBoundary] Found', closedLoops.length, 'closed loop(s) from', walls.length, 'walls');
-
-    if (closedLoops.length === 0) {
-      return null;
+    // Find open wall chains (connected walls that don't form closed loops)
+    // These need miter joins at internal corners but flat caps at endpoints
+    const openChains = [];
+    
+    for (const wall of walls) {
+      if (processedWalls.has(wall.wall_id)) continue;
+      
+      // Start tracing from this wall
+      const chainWallIds = [wall.wall_id];
+      const chainVertices = [];
+      processedWalls.add(wall.wall_id);
+      
+      // Trace from start endpoint
+      let currentKey = coordKey(wall.start_x, wall.start_y);
+      let startChainVertices = [{ x: wall.start_x, y: wall.start_y }];
+      let prevWallId = wall.wall_id;
+      
+      while (true) {
+        const vertex = vertices.get(currentKey);
+        if (!vertex || vertex.walls.length !== 2) break;
+        
+        const nextConn = vertex.walls.find(conn => 
+          conn.wall.wall_id !== prevWallId && !processedWalls.has(conn.wall.wall_id)
+        );
+        if (!nextConn) break;
+        
+        startChainVertices.push({ x: vertex.x, y: vertex.y });
+        chainWallIds.unshift(nextConn.wall.wall_id);
+        processedWalls.add(nextConn.wall.wall_id);
+        prevWallId = nextConn.wall.wall_id;
+        
+        // Move to the other end of this new wall
+        currentKey = nextConn.otherKey;
+      }
+      // Add the final endpoint of the chain start
+      const lastStartVertex = vertices.get(currentKey);
+      if (lastStartVertex) {
+        startChainVertices.push({ x: lastStartVertex.x, y: lastStartVertex.y });
+      }
+      
+      // Trace from end endpoint
+      currentKey = coordKey(wall.end_x, wall.end_y);
+      let endChainVertices = [{ x: wall.end_x, y: wall.end_y }];
+      prevWallId = wall.wall_id;
+      
+      while (true) {
+        const vertex = vertices.get(currentKey);
+        if (!vertex || vertex.walls.length !== 2) break;
+        
+        const nextConn = vertex.walls.find(conn => 
+          conn.wall.wall_id !== prevWallId && !processedWalls.has(conn.wall.wall_id)
+        );
+        if (!nextConn) break;
+        
+        endChainVertices.push({ x: vertex.x, y: vertex.y });
+        chainWallIds.push(nextConn.wall.wall_id);
+        processedWalls.add(nextConn.wall.wall_id);
+        prevWallId = nextConn.wall.wall_id;
+        
+        currentKey = nextConn.otherKey;
+      }
+      // Add the final endpoint of the chain end
+      const lastEndVertex = vertices.get(currentKey);
+      if (lastEndVertex) {
+        endChainVertices.push({ x: lastEndVertex.x, y: lastEndVertex.y });
+      }
+      
+      // Combine: reverse start chain, add original wall's endpoints, add end chain
+      startChainVertices.reverse();
+      chainVertices.push(...startChainVertices.slice(0, -1), ...endChainVertices);
+      
+      if (chainVertices.length >= 2) {
+        openChains.push({
+          vertices: chainVertices,
+          wallIds: chainWallIds,
+          isClosed: false
+        });
+      }
     }
 
+    console.log('[UnifiedBoundary] Found', closedLoops.length, 'closed loop(s) and', openChains.length, 'open chain(s) from', walls.length, 'walls');
+
     // Process each closed loop
-    const boundaries = closedLoops.map(loop => {
+    const loopBoundaries = closedLoops.map(loop => {
       const thickness = walls.find(w => loop.wallIds.includes(w.wall_id))?.thickness || DEFAULT_WALL_THICKNESS;
       const halfThickness = thickness / 2;
 
-      // Generate outer and inner boundaries with proper miter joins
       const outerBoundary = offsetPolygon(loop.vertices, halfThickness, 'outward');
       const innerBoundary = offsetPolygon(loop.vertices, halfThickness, 'inward');
 
@@ -541,13 +612,38 @@ export default function SpatialBOQCanvas() {
         outer: outerBoundary,
         inner: innerBoundary,
         thickness: thickness,
-        wallIds: loop.wallIds
+        wallIds: loop.wallIds,
+        isClosed: true
       };
     });
 
+    // Process each open chain - create proper miter joins at internal corners
+    const chainBoundaries = openChains.map(chain => {
+      const thickness = walls.find(w => chain.wallIds.includes(w.wall_id))?.thickness || DEFAULT_WALL_THICKNESS;
+      const halfThickness = thickness / 2;
+
+      // For open chains, we need to create a proper outline with flat caps at ends
+      const outline = offsetOpenChain(chain.vertices, halfThickness);
+
+      return {
+        centerline: chain.vertices,
+        outline: outline,
+        thickness: thickness,
+        wallIds: chain.wallIds,
+        isClosed: false
+      };
+    });
+
+    const allBoundaries = [...loopBoundaries, ...chainBoundaries];
+    
+    if (allBoundaries.length === 0) {
+      return null;
+    }
+
     return {
-      loops: boundaries,
-      allWallIds: boundaries.flatMap(b => b.wallIds)
+      loops: loopBoundaries,
+      chains: chainBoundaries,
+      allWallIds: allBoundaries.flatMap(b => b.wallIds)
     };
   }, [layout?.walls]);
 

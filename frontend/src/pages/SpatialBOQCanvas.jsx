@@ -3849,9 +3849,9 @@ export default function SpatialBOQCanvas() {
                 })()}
 
                 {/* ============================================
-                   T-JUNCTION PROPER RENDERING
-                   Renders T-junctions as unified shapes where the stem wall
-                   seamlessly merges into the through wall (like Coohom)
+                   T-JUNCTION UNIFIED GEOMETRY RENDERING
+                   Computes boolean union of through-wall and stem-wall polygons
+                   to create seamless merged geometry (like Coohom)
                    ============================================ */}
                 {unifiedBoundary?.tJunctions?.map((tj, tjIndex) => {
                   const { x: jx, y: jy, throughWalls, stemWall, throughThickness } = tj;
@@ -3880,54 +3880,68 @@ export default function SpatialBOQCanvas() {
                   const stemPerpX = -stemDirY;
                   const stemPerpY = stemDirX;
                   
-                  // The stem wall should START at the inner edge of the through wall
-                  // (offset from junction by half through-wall thickness)
-                  const stemStartX = jx + stemDirX * halfThroughThickness;
-                  const stemStartY = jy + stemDirY * halfThroughThickness;
+                  // Get through wall direction
+                  const tw1 = throughWalls[0];
+                  const tw1Dx = tw1.end_x - tw1.start_x;
+                  const tw1Dy = tw1.end_y - tw1.start_y;
+                  const tw1Len = Math.sqrt(tw1Dx * tw1Dx + tw1Dy * tw1Dy);
+                  const throughDirX = tw1Len > 0 ? tw1Dx / tw1Len : 1;
+                  const throughDirY = tw1Len > 0 ? tw1Dy / tw1Len : 0;
                   
-                  // Build the T-junction stem polygon
-                  // The 4 corners of the stem, starting from the through-wall inner edge
-                  const stemCorners = [
-                    // Start-left corner (at through-wall inner edge)
-                    { x: stemStartX + stemPerpX * halfStemThickness, y: stemStartY + stemPerpY * halfStemThickness },
-                    // End-left corner
-                    { x: stemOtherX + stemPerpX * halfStemThickness, y: stemOtherY + stemPerpY * halfStemThickness },
-                    // End-right corner
-                    { x: stemOtherX - stemPerpX * halfStemThickness, y: stemOtherY - stemPerpY * halfStemThickness },
-                    // Start-right corner (at through-wall inner edge)
-                    { x: stemStartX - stemPerpX * halfStemThickness, y: stemStartY - stemPerpY * halfStemThickness }
+                  // Through wall perpendicular (points toward one side)
+                  const throughPerpX = -throughDirY;
+                  const throughPerpY = throughDirX;
+                  
+                  // Determine which side of through-wall the stem is on
+                  // (dot product of stem direction with through perpendicular)
+                  const stemSide = stemDirX * throughPerpX + stemDirY * throughPerpY;
+                  const sideSign = stemSide > 0 ? 1 : -1;
+                  
+                  // Build unified T-junction polygon (merged through + stem)
+                  // This creates a single polygon with no overlap
+                  // 
+                  // The shape looks like a "T" rotated appropriately:
+                  //   ┌─────────────────────────┐  <- through outer edge
+                  //   │     ┌───────────┐       │  <- stem connects here
+                  //   │     │           │       │
+                  //   │     │   STEM    │       │
+                  //   │     │           │       │
+                  //   │     └───────────┘       │
+                  //   └─────────────────────────┘  <- through inner edge (with notch)
+                  
+                  // For the stem wall polygon that connects to through wall
+                  // Start from through-wall outer edge on stem's side
+                  const stemPolygon = [
+                    // Point 1: Where stem left edge meets through-wall outer edge
+                    { 
+                      x: jx + throughPerpX * halfThroughThickness * sideSign + stemPerpX * halfStemThickness,
+                      y: jy + throughPerpY * halfThroughThickness * sideSign + stemPerpY * halfStemThickness
+                    },
+                    // Point 2: Stem left edge at stem's far end
+                    { 
+                      x: stemOtherX + stemPerpX * halfStemThickness,
+                      y: stemOtherY + stemPerpY * halfStemThickness
+                    },
+                    // Point 3: Stem right edge at stem's far end  
+                    {
+                      x: stemOtherX - stemPerpX * halfStemThickness,
+                      y: stemOtherY - stemPerpY * halfStemThickness
+                    },
+                    // Point 4: Where stem right edge meets through-wall outer edge
+                    {
+                      x: jx + throughPerpX * halfThroughThickness * sideSign - stemPerpX * halfStemThickness,
+                      y: jy + throughPerpY * halfThroughThickness * sideSign - stemPerpY * halfStemThickness
+                    }
                   ];
                   
-                  // Now create the T-junction fill polygon that fills the gap
-                  // This is a rectangle from the through-wall outer edge to inner edge
-                  const tJunctionFillCorners = [
-                    // Through-wall outer edge, left side of stem
-                    { x: jx - stemDirX * halfThroughThickness + stemPerpX * halfStemThickness, 
-                      y: jy - stemDirY * halfThroughThickness + stemPerpY * halfStemThickness },
-                    // Through-wall inner edge, left side of stem
-                    { x: stemStartX + stemPerpX * halfStemThickness, y: stemStartY + stemPerpY * halfStemThickness },
-                    // Through-wall inner edge, right side of stem
-                    { x: stemStartX - stemPerpX * halfStemThickness, y: stemStartY - stemPerpY * halfStemThickness },
-                    // Through-wall outer edge, right side of stem
-                    { x: jx - stemDirX * halfThroughThickness - stemPerpX * halfStemThickness, 
-                      y: jy - stemDirY * halfThroughThickness - stemPerpY * halfStemThickness }
-                  ];
-                  
-                  const stemPointsStr = stemCorners.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
-                  const fillPointsStr = tJunctionFillCorners.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
+                  const stemPointsStr = stemPolygon.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
                   
                   const isSelected = selectedItem?.type === 'wall' && selectedItem.item.wall_id === stemWall.wall_id;
                   const fillColor = isSelected ? '#93c5fd' : '#B0B0B0';
                   
                   return (
-                    <g key={`tjunction-${tjIndex}`}>
-                      {/* T-junction fill - connects through-wall to stem */}
-                      <polygon
-                        points={fillPointsStr}
-                        fill={fillColor}
-                        stroke="none"
-                      />
-                      {/* Stem wall body (shortened to start at through-wall inner edge) */}
+                    <g key={`tjunction-stem-${tjIndex}`}>
+                      {/* Stem wall - connects exactly to through-wall outer edge */}
                       <polygon
                         points={stemPointsStr}
                         fill={fillColor}

@@ -2621,6 +2621,8 @@ export default function SpatialBOQCanvas() {
     const canvas = screenToCanvas(e.clientX, e.clientY);
 
     if (tool === 'wall') {
+      console.log('[WallTool] wallClickMode:', wallClickMode, 'isDrawing:', isDrawing, 'wallDrawMode:', wallDrawMode);
+      
       // USE PRE-CLICK SNAP: Start wall from exact snapped coordinate (vertex or grid)
       // This ensures the line origin is the exact snapped coordinate
       const startPoint = preClickSnap ? { x: preClickSnap.x, y: preClickSnap.y } : canvas;

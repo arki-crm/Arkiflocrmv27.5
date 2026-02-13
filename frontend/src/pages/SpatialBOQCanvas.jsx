@@ -1188,31 +1188,163 @@ export default function SpatialBOQCanvas() {
     };
   };
 
-  // Find nearest corner from all walls for magnetic snap (Item #3)
-  const findNearestCorner = (x, y) => {
-    if (!layout?.walls?.length) return null;
-    let nearest = null;
-    let minDist = CORNER_SNAP_THRESHOLD;
+  // CAD Enhanced Snapping System with Priority Order: Endpoint → Midpoint → Grid → Free
+  const findSnapPoint = useCallback((x, y, excludeWallId = null) => {
+    if (!layout?.walls?.length) {
+      setSnapIndicator(null);
+      return { x, y, snapped: false, type: null };
+    }
 
+    let bestSnap = null;
+    let minDist = Infinity;
+
+    // Priority 1: Endpoint snapping (highest priority)
     for (const wall of layout.walls) {
-      // Check start point
+      if (wall.wall_id === excludeWallId) continue;
+      
       const distStart = Math.sqrt(Math.pow(x - wall.start_x, 2) + Math.pow(y - wall.start_y, 2));
-      if (distStart < minDist) {
+      if (distStart < ENDPOINT_SNAP_THRESHOLD && distStart < minDist) {
         minDist = distStart;
-        nearest = { x: wall.start_x, y: wall.start_y };
+        bestSnap = { x: wall.start_x, y: wall.start_y, snapped: true, type: 'endpoint' };
       }
-      // Check end point
+      
       const distEnd = Math.sqrt(Math.pow(x - wall.end_x, 2) + Math.pow(y - wall.end_y, 2));
-      if (distEnd < minDist) {
+      if (distEnd < ENDPOINT_SNAP_THRESHOLD && distEnd < minDist) {
         minDist = distEnd;
-        nearest = { x: wall.end_x, y: wall.end_y };
+        bestSnap = { x: wall.end_x, y: wall.end_y, snapped: true, type: 'endpoint' };
       }
     }
-    return nearest;
+
+    // If endpoint found, use it (highest priority)
+    if (bestSnap && bestSnap.type === 'endpoint') {
+      setSnapIndicator({ x: bestSnap.x, y: bestSnap.y, type: 'endpoint' });
+      return bestSnap;
+    }
+
+    // Priority 2: Midpoint snapping
+    for (const wall of layout.walls) {
+      if (wall.wall_id === excludeWallId) continue;
+      
+      const midX = (wall.start_x + wall.end_x) / 2;
+      const midY = (wall.start_y + wall.end_y) / 2;
+      const distMid = Math.sqrt(Math.pow(x - midX, 2) + Math.pow(y - midY, 2));
+      
+      if (distMid < MIDPOINT_SNAP_THRESHOLD && distMid < minDist) {
+        minDist = distMid;
+        bestSnap = { x: midX, y: midY, snapped: true, type: 'midpoint' };
+      }
+    }
+
+    if (bestSnap && bestSnap.type === 'midpoint') {
+      setSnapIndicator({ x: bestSnap.x, y: bestSnap.y, type: 'midpoint' });
+      return bestSnap;
+    }
+
+    // Priority 3: Grid snapping
+    const gridX = Math.round(x / GRID_SNAP_SIZE) * GRID_SNAP_SIZE;
+    const gridY = Math.round(y / GRID_SNAP_SIZE) * GRID_SNAP_SIZE;
+    const distGrid = Math.sqrt(Math.pow(x - gridX, 2) + Math.pow(y - gridY, 2));
+    
+    if (distGrid < GRID_SNAP_SIZE / 2) {
+      setSnapIndicator({ x: gridX, y: gridY, type: 'grid' });
+      return { x: gridX, y: gridY, snapped: true, type: 'grid' };
+    }
+
+    // Priority 4: Free draw (no snap)
+    setSnapIndicator(null);
+    return { x, y, snapped: false, type: null };
+  }, [layout?.walls]);
+
+  // Legacy findNearestCorner for backward compatibility - now uses enhanced snapping
+  const findNearestCorner = (x, y) => {
+    const snap = findSnapPoint(x, y);
+    return snap.snapped ? { x: snap.x, y: snap.y } : null;
   };
 
-  // Auto-straight line assistance (Item #2) - Snap to 0°/90°/180°
-  const snapToStraightLine = (startX, startY, endX, endY) => {
+  // Find alignment guides for current position
+  const findAlignmentGuides = useCallback((x, y, excludeWallId = null) => {
+    if (!layout?.walls?.length) return [];
+    
+    const guides = [];
+    const canvasWidth = 10000; // Large canvas extent for guides
+    
+    for (const wall of layout.walls) {
+      if (wall.wall_id === excludeWallId) continue;
+      
+      // Check horizontal alignment with wall endpoints
+      if (Math.abs(y - wall.start_y) < ALIGNMENT_THRESHOLD) {
+        guides.push({ type: 'horizontal', position: wall.start_y, start: 0, end: canvasWidth });
+      }
+      if (Math.abs(y - wall.end_y) < ALIGNMENT_THRESHOLD && wall.end_y !== wall.start_y) {
+        guides.push({ type: 'horizontal', position: wall.end_y, start: 0, end: canvasWidth });
+      }
+      
+      // Check vertical alignment with wall endpoints  
+      if (Math.abs(x - wall.start_x) < ALIGNMENT_THRESHOLD) {
+        guides.push({ type: 'vertical', position: wall.start_x, start: 0, end: canvasWidth });
+      }
+      if (Math.abs(x - wall.end_x) < ALIGNMENT_THRESHOLD && wall.end_x !== wall.start_x) {
+        guides.push({ type: 'vertical', position: wall.end_x, start: 0, end: canvasWidth });
+      }
+    }
+    
+    // Deduplicate guides
+    const uniqueGuides = guides.filter((guide, index, self) =>
+      index === self.findIndex(g => g.type === guide.type && Math.abs(g.position - guide.position) < 10)
+    );
+    
+    return uniqueGuides;
+  }, [layout?.walls]);
+
+  // Enhanced orthogonal constraint (Shift-lock) - forces 0°/90°/180°/270°
+  const applyOrthogonalConstraint = (startX, startY, endX, endY) => {
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    
+    if (length < 10) return { x: endX, y: endY }; // Too short, no constraint
+    
+    // Determine dominant axis
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // Horizontal dominant - snap to pure horizontal
+      return { x: startX + (dx > 0 ? length : -length), y: startY };
+    } else {
+      // Vertical dominant - snap to pure vertical
+      return { x: startX, y: startY + (dy > 0 ? length : -length) };
+    }
+  };
+
+  // Auto-merge vertices when endpoint dragged close to another
+  const findMergeTarget = useCallback((x, y, excludeWallId, excludeEndpoint) => {
+    if (!layout?.walls?.length) return null;
+    
+    for (const wall of layout.walls) {
+      if (wall.wall_id === excludeWallId) continue;
+      
+      const distStart = Math.sqrt(Math.pow(x - wall.start_x, 2) + Math.pow(y - wall.start_y, 2));
+      if (distStart < VERTEX_MERGE_THRESHOLD) {
+        return { x: wall.start_x, y: wall.start_y, wallId: wall.wall_id, endpoint: 'start' };
+      }
+      
+      const distEnd = Math.sqrt(Math.pow(x - wall.end_x, 2) + Math.pow(y - wall.end_y, 2));
+      if (distEnd < VERTEX_MERGE_THRESHOLD) {
+        return { x: wall.end_x, y: wall.end_y, wallId: wall.wall_id, endpoint: 'end' };
+      }
+    }
+    return null;
+  }, [layout?.walls]);
+
+  // Auto-straight line assistance (Item #2) - Snap to 0°/90°/180° with enhanced Shift support
+  const snapToStraightLine = (startX, startY, endX, endY, forceOrthogonal = false) => {
+    // If Shift is held or forceOrthogonal, use strict orthogonal constraint
+    if (shiftKeyHeld || forceOrthogonal) {
+      const constrained = applyOrthogonalConstraint(startX, startY, endX, endY);
+      const dx = constrained.x - startX;
+      const dy = constrained.y - startY;
+      const angle = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 0 : 180) : (dy > 0 ? 90 : -90);
+      return { x: constrained.x, y: constrained.y, snapped: true, angle };
+    }
+
     const dx = endX - startX;
     const dy = endY - startY;
     const angle = Math.atan2(dy, dx) * (180 / Math.PI);

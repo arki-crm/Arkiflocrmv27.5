@@ -1612,49 +1612,6 @@ export default function SpatialBOQCanvas() {
           // Select wall for dragging (whole wall movement)
           saveToHistory();
           setSelectedItem({ type: 'wall', item: clickedWall });
-      const endpoint = findWallEndpointAt(canvas.x, canvas.y);
-      if (endpoint) {
-        saveToHistory();
-        setSelectedItem({ type: 'wall', item: endpoint.wall });
-        setIsDragging(true);
-        setDragType('wall_endpoint');
-        setDragEndpoint(endpoint.endpoint);
-        return;
-      }
-
-      // Check for wall click first (for dragging)
-      const clickedWall = findWallAt(canvas.x, canvas.y);
-      const clickedModule = findModuleAt(canvas.x, canvas.y);
-      const clickedDoor = findDoorAt(canvas.x, canvas.y);
-      const clickedWindow = findWindowAt(canvas.x, canvas.y);
-
-      if (clickedModule) {
-        setSelectedItem({ type: 'module', item: clickedModule });
-        setIsDragging(true);
-        setDragType('module');
-        setDragStart({ x: canvas.x - clickedModule.x, y: canvas.y - clickedModule.y });
-      } else if (clickedDoor) {
-        setSelectedItem({ type: 'door', item: clickedDoor });
-        setIsDragging(true);
-        setDragType('door');
-        setDragStart({ x: canvas.x - clickedDoor.x, y: canvas.y - clickedDoor.y });
-      } else if (clickedWindow) {
-        setSelectedItem({ type: 'window', item: clickedWindow });
-        setIsDragging(true);
-        setDragType('window');
-        setDragStart({ x: canvas.x - clickedWindow.x, y: canvas.y - clickedWindow.y });
-      } else if (clickedWall) {
-        // Check if we're clicking near an endpoint of this wall for length editing
-        const wallEndpoint = findSpecificWallEndpoint(canvas.x, canvas.y, clickedWall);
-        if (wallEndpoint) {
-          saveToHistory();
-          setSelectedItem({ type: 'wall', item: clickedWall });
-          setIsDragging(true);
-          setDragType('wall_endpoint');
-          setDragEndpoint(wallEndpoint);
-        } else {
-          saveToHistory();
-          setSelectedItem({ type: 'wall', item: clickedWall });
           setIsDragging(true);
           setDragType('wall');
           setDragStart({ x: canvas.x, y: canvas.y, wall_start_x: clickedWall.start_x, wall_start_y: clickedWall.start_y, wall_end_x: clickedWall.end_x, wall_end_y: clickedWall.end_y });

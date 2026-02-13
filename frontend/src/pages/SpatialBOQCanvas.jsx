@@ -4945,62 +4945,73 @@ export default function SpatialBOQCanvas() {
                   </g>
                 ))}
 
-                {/* CLOSE SHAPE INDICATOR - Shows when cursor is near the start point to close shape */}
+                {/* ============================================
+                   COOHOM-STYLE INTERSECTION INDICATOR
+                   Shows when cursor is near the start point to close room
+                   ============================================ */}
                 {canCloseShape && (wallClickMode === 'waiting_end' || isDrawing) && (
                   <g>
-                    {/* Pulsing ring effect */}
+                    {/* Green dashed alignment guides extending from intersection point */}
+                    {/* Horizontal guide - extends left and right */}
+                    <line
+                      x1={0}
+                      y1={canCloseShape.y * scale}
+                      x2={canvasSize.width}
+                      y2={canCloseShape.y * scale}
+                      stroke="#22C55E"
+                      strokeWidth="1"
+                      strokeDasharray="6,4"
+                      strokeOpacity="0.7"
+                    />
+                    {/* Vertical guide - extends up and down */}
+                    <line
+                      x1={canCloseShape.x * scale}
+                      y1={0}
+                      x2={canCloseShape.x * scale}
+                      y2={canvasSize.height}
+                      stroke="#22C55E"
+                      strokeWidth="1"
+                      strokeDasharray="6,4"
+                      strokeOpacity="0.7"
+                    />
+                    
+                    {/* Crosshair/target indicator at intersection */}
+                    {/* Horizontal crosshair line */}
+                    <line
+                      x1={canCloseShape.x * scale - 12}
+                      y1={canCloseShape.y * scale}
+                      x2={canCloseShape.x * scale + 12}
+                      y2={canCloseShape.y * scale}
+                      stroke="#22C55E"
+                      strokeWidth="2"
+                    />
+                    {/* Vertical crosshair line */}
+                    <line
+                      x1={canCloseShape.x * scale}
+                      y1={canCloseShape.y * scale - 12}
+                      x2={canCloseShape.x * scale}
+                      y2={canCloseShape.y * scale + 12}
+                      stroke="#22C55E"
+                      strokeWidth="2"
+                    />
+                    {/* Center dot */}
                     <circle
                       cx={canCloseShape.x * scale}
                       cy={canCloseShape.y * scale}
-                      r={18}
-                      fill="none"
-                      stroke="#22C55E"
-                      strokeWidth="2"
-                      strokeOpacity="0.4"
-                    >
-                      <animate attributeName="r" from="12" to="22" dur="1s" repeatCount="indefinite" />
-                      <animate attributeName="stroke-opacity" from="0.6" to="0" dur="1s" repeatCount="indefinite" />
-                    </circle>
-                    {/* Solid indicator */}
-                    <circle
-                      cx={canCloseShape.x * scale}
-                      cy={canCloseShape.y * scale}
-                      r={12}
+                      r={4}
                       fill="#22C55E"
-                      fillOpacity="0.2"
-                      stroke="#22C55E"
-                      strokeWidth="2"
                     />
-                    {/* Close icon (checkmark) */}
-                    <path
-                      d={`M ${canCloseShape.x * scale - 5} ${canCloseShape.y * scale} 
-                          L ${canCloseShape.x * scale - 1} ${canCloseShape.y * scale + 4} 
-                          L ${canCloseShape.x * scale + 6} ${canCloseShape.y * scale - 4}`}
-                      fill="none"
-                      stroke="#16A34A"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    {/* Label */}
-                    <rect
-                      x={canCloseShape.x * scale - 40}
-                      y={canCloseShape.y * scale - 38}
-                      width="80"
-                      height="20"
-                      rx="4"
-                      fill="#22C55E"
-                      filter="drop-shadow(0 2px 4px rgba(0,0,0,0.2))"
-                    />
+                    
+                    {/* "Intersection" label below the point (Coohom-style) */}
                     <text
                       x={canCloseShape.x * scale}
-                      y={canCloseShape.y * scale - 25}
+                      y={canCloseShape.y * scale + 28}
                       fontSize="11"
-                      fill="white"
+                      fill="#22C55E"
                       textAnchor="middle"
-                      fontWeight="600"
+                      fontWeight="500"
                     >
-                      Close Room
+                      Intersection
                     </text>
                   </g>
                 )}

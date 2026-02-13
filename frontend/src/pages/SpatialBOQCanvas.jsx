@@ -2120,22 +2120,23 @@ export default function SpatialBOQCanvas() {
     } else if (tool === 'select') {
       // SELECTION PRIORITY ORDER: Vertex > Module > Door/Window > Wall > Floor
       
-      // Priority 1: Check for vertex (endpoint) click first
+      // Priority 1: Check for vertex (junction point) click first
       const vertex = findVertexAt(canvas.x, canvas.y);
-      if (vertex && vertex.walls.length > 0) {
+      if (vertex && vertex.walls.length >= 2) {
+        // Junction point selected - will drag all connected walls together
         saveToHistory();
-        // Select the first wall at this vertex for endpoint dragging
-        const { wall, endpoint } = vertex.walls[0];
-        setSelectedItem({ type: 'wall', item: wall });
+        setSelectedVertex(vertex);
+        setSelectedItem(null); // Clear single wall selection
         setIsDragging(true);
-        setDragType('wall_endpoint');
-        setDragEndpoint(endpoint);
+        setDragType('vertex');
+        setDragStart({ x: canvas.x, y: canvas.y, vertexX: vertex.x, vertexY: vertex.y });
         return;
       }
       
       // Priority 2: Check for module click
       const clickedModule = findModuleAt(canvas.x, canvas.y);
       if (clickedModule) {
+        setSelectedVertex(null);
         setSelectedItem({ type: 'module', item: clickedModule });
         setIsDragging(true);
         setDragType('module');
@@ -2146,6 +2147,7 @@ export default function SpatialBOQCanvas() {
       // Priority 3: Check for door/window click
       const clickedDoor = findDoorAt(canvas.x, canvas.y);
       if (clickedDoor) {
+        setSelectedVertex(null);
         setSelectedItem({ type: 'door', item: clickedDoor });
         setIsDragging(true);
         setDragType('door');

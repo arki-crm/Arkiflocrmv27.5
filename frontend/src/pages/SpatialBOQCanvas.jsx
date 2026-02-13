@@ -4223,19 +4223,19 @@ export default function SpatialBOQCanvas() {
                           const nextPt = side[i + 1];
                           
                           for (const tj of affectingTJunctions) {
-                            const halfStemThickness = tj.stemThickness / 2;
-                            const halfThroughThickness = tj.throughThickness / 2;
+                            const halfStemThickness = (tj.stemThickness || DEFAULT_WALL_THICKNESS) / 2;
+                            const halfThroughThickness = (tj.throughThickness || DEFAULT_WALL_THICKNESS) / 2;
                             
                             // Calculate the stem perpendicular direction
-                            const stemPerpX = -tj.stemDirY;
-                            const stemPerpY = tj.stemDirX;
+                            const stemPerpX = -(tj.stemDirY || 0);
+                            const stemPerpY = tj.stemDirX || 0;
                             
                             // Through wall perpendicular
-                            const throughPerpX = -tj.throughDirY;
-                            const throughPerpY = tj.throughDirX;
+                            const throughPerpX = -(tj.throughDirY || 0);
+                            const throughPerpY = tj.throughDirX || 0;
                             
                             // Determine which side the stem is on
-                            const stemSide = tj.stemDirX * throughPerpX + tj.stemDirY * throughPerpY;
+                            const stemSide = (tj.stemDirX || 0) * throughPerpX + (tj.stemDirY || 0) * throughPerpY;
                             const sideSign = stemSide > 0 ? 1 : -1;
                             
                             // Check if this edge segment contains the T-junction
@@ -4261,23 +4261,57 @@ export default function SpatialBOQCanvas() {
                               const isCorrectSide = (isLeftSide && sideSign > 0) || (!isLeftSide && sideSign < 0);
                               
                               if (isCorrectSide) {
-                                // Insert notch points
-                                // Notch start point (at through wall edge, left of stem)
-                                const notchStartX = junctionEdgeX - stemPerpX * halfStemThickness;
-                                const notchStartY = junctionEdgeY - stemPerpY * halfStemThickness;
+                                console.log(`[Notch] Creating notch at T-junction (${tj.x?.toFixed(0)}, ${tj.y?.toFixed(0)}) on ${isLeftSide ? 'left' : 'right'} side`);
                                 
-                                // Notch end point (at through wall edge, right of stem)
-                                const notchEndX = junctionEdgeX + stemPerpX * halfStemThickness;
-                                const notchEndY = junctionEdgeY + stemPerpY * halfStemThickness;
+                                // The notch is a rectangular indent into the through-wall polygon
+                                // We need 4 points to create the notch:
+                                // 1. Entry point on edge (left of stem)
+                                // 2. Inner corner (left of stem, at stem start)
+                                // 3. Inner corner (right of stem, at stem start)  
+                                // 4. Exit point on edge (right of stem)
                                 
-                                // Determine order based on edge direction
-                                const dotStart = (notchStartX - pt.x) * edgeX + (notchStartY - pt.y) * edgeY;
-                                const dotEnd = (notchEndX - pt.x) * edgeX + (notchEndY - pt.y) * edgeY;
+                                // Along-edge direction (normalized)
+                                const edgeDirX = edgeX / edgeLen;
+                                const edgeDirY = edgeY / edgeLen;
                                 
-                                if (dotStart < dotEnd) {
-                                  newSide.push({ x: notchStartX, y: notchStartY });
-                                  newSide.push({ x: notchEndX, y: notchEndY });
+                                // Entry point on through-wall edge (left side of stem opening)
+                                const notchEntry = {
+                                  x: junctionEdgeX - stemPerpX * halfStemThickness,
+                                  y: junctionEdgeY - stemPerpY * halfStemThickness
+                                };
+                                
+                                // Exit point on through-wall edge (right side of stem opening)
+                                const notchExit = {
+                                  x: junctionEdgeX + stemPerpX * halfStemThickness,
+                                  y: junctionEdgeY + stemPerpY * halfStemThickness
+                                };
+                                
+                                // Order based on edge direction
+                                const dotEntry = (notchEntry.x - pt.x) * edgeX + (notchEntry.y - pt.y) * edgeY;
+                                const dotExit = (notchExit.x - pt.x) * edgeX + (notchExit.y - pt.y) * edgeY;
+                                
+                                if (dotEntry < dotExit) {
+                                  newSide.push(notchEntry);
+                                  newSide.push(notchExit);
                                 } else {
+                                  newSide.push(notchExit);
+                                  newSide.push(notchEntry);
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      
+                      return newSide;
+                    };
+                    
+                    const modifiedLeft = insertNotchPoints(leftSide, true);
+                    const modifiedRight = insertNotchPoints(rightSide, false);
+                    
+                    // Reconstruct the outline
+                    modifiedOutline = [...modifiedLeft, ...modifiedRight.reverse()];
+                  }
                                   newSide.push({ x: notchEndX, y: notchEndY });
                                   newSide.push({ x: notchStartX, y: notchStartY });
                                 }

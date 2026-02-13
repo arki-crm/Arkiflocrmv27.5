@@ -1819,6 +1819,48 @@ export default function SpatialBOQCanvas() {
     return null;
   }, [layout?.walls]);
 
+  // Find vertex (junction) at a given position - for selecting split points
+  const findVertexAt = useCallback((x, y) => {
+    if (!layout?.walls?.length) return null;
+    
+    const VERTEX_CLICK_THRESHOLD = 50; // mm
+    
+    // Build vertex map
+    const coordKey = (px, py) => `${Math.round(px/10)*10}_${Math.round(py/10)*10}`;
+    const vertices = new Map();
+    
+    for (const wall of layout.walls) {
+      const startKey = coordKey(wall.start_x, wall.start_y);
+      const endKey = coordKey(wall.end_x, wall.end_y);
+      
+      if (!vertices.has(startKey)) {
+        vertices.set(startKey, { x: wall.start_x, y: wall.start_y, walls: [] });
+      }
+      vertices.get(startKey).walls.push({ wall, endpoint: 'start' });
+      
+      if (!vertices.has(endKey)) {
+        vertices.set(endKey, { x: wall.end_x, y: wall.end_y, walls: [] });
+      }
+      vertices.get(endKey).walls.push({ wall, endpoint: 'end' });
+    }
+    
+    // Find closest vertex with 2+ walls (junction point)
+    let closestVertex = null;
+    let closestDist = Infinity;
+    
+    for (const [key, vertex] of vertices) {
+      if (vertex.walls.length < 2) continue; // Only junctions
+      
+      const dist = Math.sqrt(Math.pow(x - vertex.x, 2) + Math.pow(y - vertex.y, 2));
+      if (dist < VERTEX_CLICK_THRESHOLD && dist < closestDist) {
+        closestDist = dist;
+        closestVertex = vertex;
+      }
+    }
+    
+    return closestVertex;
+  }, [layout?.walls]);
+
   // Auto-straight line assistance (Item #2) - Snap to 0°/90°/180° with enhanced Shift support
   const snapToStraightLine = (startX, startY, endX, endY, forceOrthogonal = false) => {
     // If Shift is held or forceOrthogonal, use strict orthogonal constraint

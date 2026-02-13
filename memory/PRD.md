@@ -34,6 +34,8 @@ Implemented curved/arc wall drawing capability with two input methods and full s
 | 14 | **Arc Curvature Drag Edit** | Diamond handle at arc midpoint to adjust curvature | ✅ |
 | 15 | **Arc Wall Translation** | Drag to move entire arc wall | ✅ |
 | 16 | **Arc Click Detection** | Click detection works for arc walls | ✅ |
+| 17 | **Arc Endpoint Dragging** | Drag endpoints to resize arc while maintaining curvature | ✅ |
+| 18 | **Arc-Straight Junction** | Detection and rendering of arc-to-straight connections | ✅ |
 
 **Arc Wall Technical Details:**
 - Two calculation functions: `calculateArcFromRadius()` and `calculateArcFromChordHeight()`

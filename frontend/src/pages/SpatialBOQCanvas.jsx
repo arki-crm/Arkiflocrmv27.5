@@ -4338,17 +4338,82 @@ export default function SpatialBOQCanvas() {
                   
                   const pointsStr = modifiedOutline.map(p => `${p.x * scale},${p.y * scale}`).join(' ');
                   
+                  // Build edge stroke paths, skipping edges at T-junction points
+                  const edgeStrokes = [];
+                  for (let i = 0; i < modifiedOutline.length; i++) {
+                    const p1 = modifiedOutline[i];
+                    const p2 = modifiedOutline[(i + 1) % modifiedOutline.length];
+                    
+                    // Check if this edge is at a T-junction (should not be stroked)
+                    let skipEdge = false;
+                    for (const tj of affectingTJunctions) {
+                      const halfStemThickness = (tj.stemThickness || DEFAULT_WALL_THICKNESS) / 2;
+                      const halfThroughThickness = (tj.throughThickness || DEFAULT_WALL_THICKNESS) / 2;
+                      
+                      // Calculate junction edge points on through-wall
+                      const throughPerpX = -(tj.throughDirY || 0);
+                      const throughPerpY = tj.throughDirX || 0;
+                      const stemPerpX = -(tj.stemDirY || 0);
+                      const stemPerpY = tj.stemDirX || 0;
+                      
+                      // Determine which side stem is on
+                      const stemSide = (tj.stemDirX || 0) * throughPerpX + (tj.stemDirY || 0) * throughPerpY;
+                      const sideSign = stemSide > 0 ? 1 : -1;
+                      
+                      // Junction edge on through-wall outer boundary
+                      const jEdgeX = tj.x + throughPerpX * halfThroughThickness * sideSign;
+                      const jEdgeY = tj.y + throughPerpY * halfThroughThickness * sideSign;
+                      
+                      // Check if either endpoint of this edge is near the junction edge
+                      const edgeMidX = (p1.x + p2.x) / 2;
+                      const edgeMidY = (p1.y + p2.y) / 2;
+                      
+                      // Calculate distance from edge midpoint to junction point
+                      const distToJunction = Math.sqrt(
+                        (edgeMidX - jEdgeX) * (edgeMidX - jEdgeX) + 
+                        (edgeMidY - jEdgeY) * (edgeMidY - jEdgeY)
+                      );
+                      
+                      // Calculate edge length
+                      const edgeLen = Math.sqrt(
+                        (p2.x - p1.x) * (p2.x - p1.x) + 
+                        (p2.y - p1.y) * (p2.y - p1.y)
+                      );
+                      
+                      // If edge is short and near junction, it's the junction edge - skip it
+                      if (distToJunction < halfStemThickness * 2 && edgeLen < halfStemThickness * 3) {
+                        skipEdge = true;
+                        break;
+                      }
+                    }
+                    
+                    if (!skipEdge) {
+                      edgeStrokes.push({
+                        x1: p1.x * scale, y1: p1.y * scale,
+                        x2: p2.x * scale, y2: p2.y * scale
+                      });
+                    }
+                  }
+                  
                   return (
                     <g key={`chain-${chainIndex}`}>
-                      {/* Chain fill with proper miter corners and T-junction notches */}
+                      {/* Chain fill - no stroke to avoid seam lines at junctions */}
                       <polygon
                         points={pointsStr}
                         fill={isAnyWallSelected ? '#93c5fd' : '#B0B0B0'}
-                        stroke="#000000"
-                        strokeWidth="0.5"
-                        strokeLinejoin="miter"
+                        stroke="none"
                         style={{ cursor: 'move' }}
                       />
+                      {/* Draw outer edge strokes, skipping T-junction edges */}
+                      {edgeStrokes.map((edge, idx) => (
+                        <line
+                          key={`chain-edge-${chainIndex}-${idx}`}
+                          x1={edge.x1} y1={edge.y1}
+                          x2={edge.x2} y2={edge.y2}
+                          stroke="#000000"
+                          strokeWidth="0.5"
+                        />
+                      ))}
                       {/* Dimension labels for walls in this chain */}
                       {chainWalls.map(wall => {
                         const midX = (wall.start_x + wall.end_x) / 2;

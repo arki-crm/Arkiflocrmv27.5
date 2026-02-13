@@ -3483,6 +3483,7 @@ export default function SpatialBOQCanvas() {
                         tool === 'module' ? 'copy' : 
                         tool === 'door' || tool === 'window' ? 'crosshair' : 
                         tool === 'fill' ? 'cell' :
+                        tool === 'split' ? 'crosshair' :
                         isDragging ? 'grabbing' : 'default' 
               }}
             >

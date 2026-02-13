@@ -2900,6 +2900,7 @@ export default function SpatialBOQCanvas() {
         setTempRectWalls({ start: drawStart, end: endPoint });
       } else if (wallDrawMode === 'arc') {
         // Arc wall mode - calculate arc based on input method
+        console.log('[ArcDebug] Arc mode - calculating arc from', drawStart, 'to', endPoint);
         const bulgeDir = calculateBulgeDirection(drawStart.x, drawStart.y, endPoint.x, endPoint.y, canvas.x, canvas.y);
         setArcBulgeDirection(bulgeDir);
         
@@ -2912,6 +2913,7 @@ export default function SpatialBOQCanvas() {
           arcParams = calculateArcFromChordHeight(drawStart.x, drawStart.y, endPoint.x, endPoint.y, chordHeightValue, bulgeDir);
         }
         
+        console.log('[ArcDebug] Arc params calculated:', arcParams);
         setTempArcWall(arcParams);
         setDrawingDimension({ 
           length: Math.round(arcParams.arcLength), 

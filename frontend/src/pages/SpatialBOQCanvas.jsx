@@ -1510,21 +1510,16 @@ export default function SpatialBOQCanvas() {
     const canvas = screenToCanvas(e.clientX, e.clientY);
 
     if (tool === 'wall') {
-      // Check for wall endpoint click (for resizing)
-      const endpoint = findWallEndpointAt(canvas.x, canvas.y);
-      if (endpoint) {
-        setSelectedItem({ type: 'wall', item: endpoint.wall });
-        setIsDragging(true);
-        setDragType('wall_endpoint');
-        setDragEndpoint(endpoint.endpoint);
-        return;
-      }
-
+      // USE PRE-CLICK SNAP: Start wall from exact snapped coordinate (vertex or grid)
+      // This ensures the line origin is the exact snapped coordinate
+      const startPoint = preClickSnap ? { x: preClickSnap.x, y: preClickSnap.y } : canvas;
+      
       // Click-Release wall drawing mode (Item #4)
       if (wallClickMode === 'waiting_end') {
-        // Second click - complete the wall
+        // Second click - complete the wall using snapped end point
         saveToHistory();
         if (tempWall && tempWall.length > 100) {
+          // Use the snapped end point from tempWall (already snapped during mouse move)
           const newWall = createWall(tempWall.start.x, tempWall.start.y, tempWall.end.x, tempWall.end.y);
           setLayout(prev => ({ ...prev, walls: [...prev.walls, newWall] }));
           setHasChanges(true);
@@ -1532,20 +1527,21 @@ export default function SpatialBOQCanvas() {
         setWallClickMode(null);
         setTempWall(null);
         setDrawStart(null);
+        setPreClickSnap(null);
         return;
       }
 
-      // First click - start wall drawing
-      const snappedStart = findNearestCorner(canvas.x, canvas.y) || canvas;
-      setDrawStart(snappedStart);
+      // First click - start wall drawing from PRE-SNAPPED point
+      setDrawStart(startPoint);
+      setPreClickSnap(null); // Clear pre-click indicator once clicked
       
       if (wallDrawMode === 'rectangle' || wallDrawMode === 'square') {
         setIsDrawing(true);
-        setTempRectWalls({ start: snappedStart, end: snappedStart });
+        setTempRectWalls({ start: startPoint, end: startPoint });
       } else {
         // Free line - use click-release mode
         setWallClickMode('waiting_end');
-        setTempWall({ start: snappedStart, end: snappedStart, length: 0 });
+        setTempWall({ start: startPoint, end: startPoint, length: 0 });
       }
     } else if (tool === 'door' && selectedDoorType) {
       addOpening(canvas.x, canvas.y, 'door', selectedDoorType);
@@ -1557,7 +1553,65 @@ export default function SpatialBOQCanvas() {
       // Manual floor fill tool - click inside room
       handleFillFloor(canvas.x, canvas.y);
     } else if (tool === 'select') {
-      // First check for wall endpoint click (for length extension - Item #3)
+      // SELECTION PRIORITY ORDER: Vertex > Module > Door/Window > Wall > Floor
+      
+      // Priority 1: Check for vertex (endpoint) click first
+      const vertex = findVertexAt(canvas.x, canvas.y);
+      if (vertex && vertex.walls.length > 0) {
+        saveToHistory();
+        // Select the first wall at this vertex for endpoint dragging
+        const { wall, endpoint } = vertex.walls[0];
+        setSelectedItem({ type: 'wall', item: wall });
+        setIsDragging(true);
+        setDragType('wall_endpoint');
+        setDragEndpoint(endpoint);
+        return;
+      }
+      
+      // Priority 2: Check for module click
+      const clickedModule = findModuleAt(canvas.x, canvas.y);
+      if (clickedModule) {
+        setSelectedItem({ type: 'module', item: clickedModule });
+        setIsDragging(true);
+        setDragType('module');
+        setDragStart({ x: canvas.x - clickedModule.x, y: canvas.y - clickedModule.y });
+        return;
+      }
+      
+      // Priority 3: Check for door/window click
+      const clickedDoor = findDoorAt(canvas.x, canvas.y);
+      if (clickedDoor) {
+        setSelectedItem({ type: 'door', item: clickedDoor });
+        setIsDragging(true);
+        setDragType('door');
+        setDragStart({ x: canvas.x - clickedDoor.x, y: canvas.y - clickedDoor.y });
+        return;
+      }
+      
+      const clickedWindow = findWindowAt(canvas.x, canvas.y);
+      if (clickedWindow) {
+        setSelectedItem({ type: 'window', item: clickedWindow });
+        setIsDragging(true);
+        setDragType('window');
+        setDragStart({ x: canvas.x - clickedWindow.x, y: canvas.y - clickedWindow.y });
+        return;
+      }
+      
+      // Priority 4: Check for wall click (body of wall, not endpoint)
+      const clickedWall = findWallAt(canvas.x, canvas.y);
+      if (clickedWall) {
+        // Check if clicking near an endpoint of this specific wall
+        const wallEndpoint = findSpecificWallEndpoint(canvas.x, canvas.y, clickedWall);
+        if (wallEndpoint) {
+          saveToHistory();
+          setSelectedItem({ type: 'wall', item: clickedWall });
+          setIsDragging(true);
+          setDragType('wall_endpoint');
+          setDragEndpoint(wallEndpoint);
+        } else {
+          // Select wall for dragging (whole wall movement)
+          saveToHistory();
+          setSelectedItem({ type: 'wall', item: clickedWall });
       const endpoint = findWallEndpointAt(canvas.x, canvas.y);
       if (endpoint) {
         saveToHistory();

@@ -5660,6 +5660,10 @@ export default function SpatialBOQCanvas() {
                     const outerArcEdge = `M ${outer.startX * scale} ${outer.startY * scale} A ${outer.radius * scale} ${outer.radius * scale} 0 ${largeArcFlag} ${sweepFlag} ${outer.endX * scale} ${outer.endY * scale}`;
                     const innerArcEdge = `M ${inner.startX * scale} ${inner.startY * scale} A ${inner.radius * scale} ${inner.radius * scale} 0 ${largeArcFlag} ${sweepFlag} ${inner.endX * scale} ${inner.endY * scale}`;
                     
+                    // Check if endpoints are connected to straight walls (for hiding end cap strokes)
+                    const startConnected = isArcEndpointConnected(wall.wall_id, 'start');
+                    const endConnected = isArcEndpointConnected(wall.wall_id, 'end');
+                    
                     return (
                       <g key={wall.wall_id} style={{ cursor: 'move' }}>
                         {/* Arc wall fill */}
@@ -5671,17 +5675,22 @@ export default function SpatialBOQCanvas() {
                         <path d={outerArcEdge} stroke="#000000" strokeWidth="0.5" fill="none" />
                         {/* Inner arc edge */}
                         <path d={innerArcEdge} stroke="#000000" strokeWidth="0.5" fill="none" />
-                        {/* End caps */}
-                        <line 
-                          x1={outer.startX * scale} y1={outer.startY * scale}
-                          x2={inner.startX * scale} y2={inner.startY * scale}
-                          stroke="#000000" strokeWidth="0.5"
-                        />
-                        <line 
-                          x1={outer.endX * scale} y1={outer.endY * scale}
-                          x2={inner.endX * scale} y2={inner.endY * scale}
-                          stroke="#000000" strokeWidth="0.5"
-                        />
+                        {/* Start end cap - hide if connected to straight wall */}
+                        {!startConnected && (
+                          <line 
+                            x1={outer.startX * scale} y1={outer.startY * scale}
+                            x2={inner.startX * scale} y2={inner.startY * scale}
+                            stroke="#000000" strokeWidth="0.5"
+                          />
+                        )}
+                        {/* End end cap - hide if connected to straight wall */}
+                        {!endConnected && (
+                          <line 
+                            x1={outer.endX * scale} y1={outer.endY * scale}
+                            x2={inner.endX * scale} y2={inner.endY * scale}
+                            stroke="#000000" strokeWidth="0.5"
+                          />
+                        )}
                         {/* Arc dimensions label */}
                         <text
                           x={wall.arc_center_x * scale}

@@ -594,6 +594,7 @@ export default function SpatialBOQCanvas() {
 
     // Find open wall chains (connected walls that don't form closed loops)
     // These need miter joins at internal corners but flat caps at endpoints
+    // Also handles T-junctions by continuing along collinear walls
     const openChains = [];
     
     for (const wall of walls) {
@@ -614,14 +615,28 @@ export default function SpatialBOQCanvas() {
           const vertex = vertices.get(currentKey);
           if (!vertex) break;
           
-          // Find next unprocessed wall at this vertex
-          const nextConn = vertex.walls.find(conn => 
-            conn.wall.wall_id !== prevWallId && !processedWalls.has(conn.wall.wall_id)
-          );
+          let nextConn = null;
+          
+          if (vertex.walls.length === 2) {
+            // Normal vertex - find next unprocessed wall
+            nextConn = vertex.walls.find(conn => 
+              conn.wall.wall_id !== prevWallId && !processedWalls.has(conn.wall.wall_id)
+            );
+          } else if (vertex.walls.length === 3 && prevWallId) {
+            // T-junction - try to continue along collinear wall
+            const collinearConn = findCollinearContinuation(vertex, prevWallId);
+            if (collinearConn && !processedWalls.has(collinearConn.wall.wall_id)) {
+              nextConn = collinearConn;
+            }
+          } else if (vertex.walls.length === 1) {
+            // Dead end - this is a true endpoint
+            traced.push({ x: vertex.x, y: vertex.y, isEndpoint: true });
+            break;
+          }
           
           if (!nextConn) {
-            // No more connections - this is an endpoint
-            traced.push({ x: vertex.x, y: vertex.y, isEndpoint: true });
+            // No more connections or can't continue through T-junction
+            traced.push({ x: vertex.x, y: vertex.y, isEndpoint: vertex.walls.length === 1 || (vertex.walls.length === 3) });
             break;
           }
           

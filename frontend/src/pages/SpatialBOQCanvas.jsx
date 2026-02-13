@@ -1455,29 +1455,42 @@ export default function SpatialBOQCanvas() {
     return snap.snapped ? { x: snap.x, y: snap.y } : null;
   };
 
-  // Coohom-style alignment guides - green dashed lines when drawing horizontally/vertically
+  // Coohom-style alignment guides - shows when line is close to horizontal/vertical
+  // Always shows guides to help draw straight lines
   const findAlignmentGuides = useCallback((startX, startY, endX, endY) => {
     const guides = [];
     const dx = endX - startX;
     const dy = endY - startY;
+    const length = Math.sqrt(dx * dx + dy * dy);
     
-    // Show horizontal guide when drawing mostly horizontal (within 5 degrees)
-    if (Math.abs(dy) < Math.abs(dx) * 0.1 || Math.abs(dy) < 50) {
+    if (length < 50) return guides; // Too short to determine direction
+    
+    // Calculate angle from horizontal
+    const angle = Math.abs(Math.atan2(dy, dx) * (180 / Math.PI));
+    const normalizedAngle = angle > 90 ? 180 - angle : angle;
+    
+    // Extended guide lines across canvas
+    const extendLength = 5000; // mm
+    
+    // Show horizontal guide when close to horizontal (within 10 degrees)
+    if (normalizedAngle < 10) {
       guides.push({ 
         type: 'horizontal', 
         y: startY,
-        x1: Math.min(startX, endX) - 500,
-        x2: Math.max(startX, endX) + 500
+        x1: startX - extendLength,
+        x2: startX + extendLength,
+        isLocked: normalizedAngle < 3 // Bright green when locked to straight
       });
     }
     
-    // Show vertical guide when drawing mostly vertical (within 5 degrees)
-    if (Math.abs(dx) < Math.abs(dy) * 0.1 || Math.abs(dx) < 50) {
+    // Show vertical guide when close to vertical (within 10 degrees of 90)
+    if (normalizedAngle > 80) {
       guides.push({ 
         type: 'vertical', 
         x: startX,
-        y1: Math.min(startY, endY) - 500,
-        y2: Math.max(startY, endY) + 500
+        y1: startY - extendLength,
+        y2: startY + extendLength,
+        isLocked: normalizedAngle > 87 // Bright green when locked to straight
       });
     }
     

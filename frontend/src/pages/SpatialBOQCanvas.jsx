@@ -2160,16 +2160,39 @@ export default function SpatialBOQCanvas() {
       if (wallClickMode === 'waiting_end') {
         // Second click - complete the wall using snapped end point
         saveToHistory();
-        if (tempWall && tempWall.length > 100) {
-          // Use the snapped end point from tempWall (already snapped during mouse move)
-          const newWall = createWall(tempWall.start.x, tempWall.start.y, tempWall.end.x, tempWall.end.y);
-          setLayout(prev => ({ ...prev, walls: [...prev.walls, newWall] }));
-          setHasChanges(true);
+        
+        // AUTO-SNAP TO CLOSE POINT: If canCloseShape is active, snap to it
+        let finalEndPoint = tempWall ? tempWall.end : canvas;
+        if (canCloseShape) {
+          // Snap to the close point for perfect room closure
+          finalEndPoint = { x: canCloseShape.x, y: canCloseShape.y };
+          console.log('[LoopClosure] Auto-snapping to close point:', canCloseShape.x, canCloseShape.y);
+        }
+        
+        if (tempWall && tempWall.start) {
+          const wallLength = Math.sqrt(
+            Math.pow(finalEndPoint.x - tempWall.start.x, 2) + 
+            Math.pow(finalEndPoint.y - tempWall.start.y, 2)
+          );
+          
+          if (wallLength > 100) {
+            // Create the wall with auto-snapped end point
+            const newWall = createWall(tempWall.start.x, tempWall.start.y, finalEndPoint.x, finalEndPoint.y);
+            setLayout(prev => ({ ...prev, walls: [...prev.walls, newWall] }));
+            setHasChanges(true);
+            
+            // If we closed a room, trigger floor fill
+            if (canCloseShape) {
+              console.log('[LoopClosure] Room closed! Triggering floor detection...');
+              // The unified boundary will automatically detect the closed loop on next render
+            }
+          }
         }
         setWallClickMode(null);
         setTempWall(null);
         setDrawStart(null);
         setPreClickSnap(null);
+        setCanCloseShape(null);
         return;
       }
 

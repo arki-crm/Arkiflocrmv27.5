@@ -5345,6 +5345,136 @@ export default function SpatialBOQCanvas() {
                   </g>
                 )}
 
+                {/* ============================================
+                   LOOP CLOSURE PROJECTION INDICATOR
+                   Shows "Close Room" guidance when drawing 3rd wall 
+                   and trajectory aligns with room start point
+                   Helps user anticipate final wall closure BEFORE reaching it
+                   ============================================ */}
+                {loopClosureProjection && (wallClickMode === 'waiting_end' || isDrawing) && !canCloseShape && tempWall && (
+                  <g style={{ zIndex: 9998 }}>
+                    {/* Dashed projection line from cursor toward closure point */}
+                    <line
+                      x1={tempWall.end.x * scale}
+                      y1={tempWall.end.y * scale}
+                      x2={loopClosureProjection.x * scale}
+                      y2={loopClosureProjection.y * scale}
+                      stroke="#F59E0B"
+                      strokeWidth="2"
+                      strokeDasharray="10,5"
+                      strokeOpacity={0.5 + loopClosureProjection.alignmentStrength * 0.5}
+                    />
+                    
+                    {/* Extended alignment guides at closure point */}
+                    {/* Horizontal guide */}
+                    <line
+                      x1={-10000}
+                      y1={loopClosureProjection.y * scale}
+                      x2={10000}
+                      y2={loopClosureProjection.y * scale}
+                      stroke="#F59E0B"
+                      strokeWidth="1"
+                      strokeDasharray="6,4"
+                      strokeOpacity={0.4 + loopClosureProjection.alignmentStrength * 0.3}
+                    />
+                    {/* Vertical guide */}
+                    <line
+                      x1={loopClosureProjection.x * scale}
+                      y1={-10000}
+                      x2={loopClosureProjection.x * scale}
+                      y2={10000}
+                      stroke="#F59E0B"
+                      strokeWidth="1"
+                      strokeDasharray="6,4"
+                      strokeOpacity={0.4 + loopClosureProjection.alignmentStrength * 0.3}
+                    />
+                    
+                    {/* Large crosshair at closure point */}
+                    {/* Horizontal crosshair */}
+                    <line
+                      x1={loopClosureProjection.x * scale - 18}
+                      y1={loopClosureProjection.y * scale}
+                      x2={loopClosureProjection.x * scale + 18}
+                      y2={loopClosureProjection.y * scale}
+                      stroke="#F59E0B"
+                      strokeWidth="3"
+                    />
+                    {/* Vertical crosshair */}
+                    <line
+                      x1={loopClosureProjection.x * scale}
+                      y1={loopClosureProjection.y * scale - 18}
+                      x2={loopClosureProjection.x * scale}
+                      y2={loopClosureProjection.y * scale + 18}
+                      stroke="#F59E0B"
+                      strokeWidth="3"
+                    />
+                    
+                    {/* Outer ring - pulsing effect based on alignment strength */}
+                    <circle
+                      cx={loopClosureProjection.x * scale}
+                      cy={loopClosureProjection.y * scale}
+                      r={14}
+                      fill="none"
+                      stroke="#F59E0B"
+                      strokeWidth="2.5"
+                      strokeOpacity={0.6 + loopClosureProjection.alignmentStrength * 0.4}
+                    />
+                    
+                    {/* Inner target circle */}
+                    <circle
+                      cx={loopClosureProjection.x * scale}
+                      cy={loopClosureProjection.y * scale}
+                      r={6}
+                      fill="#F59E0B"
+                      fillOpacity={0.8 + loopClosureProjection.alignmentStrength * 0.2}
+                    />
+                    
+                    {/* "Close Room" label with background pill */}
+                    <rect
+                      x={loopClosureProjection.x * scale - 46}
+                      y={loopClosureProjection.y * scale + 22}
+                      width="92"
+                      height="20"
+                      rx="10"
+                      fill="rgba(245, 158, 11, 0.95)"
+                    />
+                    <text
+                      x={loopClosureProjection.x * scale}
+                      y={loopClosureProjection.y * scale + 36}
+                      fontSize="12"
+                      fill="white"
+                      textAnchor="middle"
+                      fontWeight="700"
+                    >
+                      Close Room
+                    </text>
+                    
+                    {/* Distance indicator showing how far to closure */}
+                    {loopClosureProjection.cursorDistance > 100 && (
+                      <>
+                        <rect
+                          x={loopClosureProjection.x * scale - 30}
+                          y={loopClosureProjection.y * scale - 38}
+                          width="60"
+                          height="16"
+                          rx="3"
+                          fill="rgba(0,0,0,0.7)"
+                        />
+                        <text
+                          x={loopClosureProjection.x * scale}
+                          y={loopClosureProjection.y * scale - 26}
+                          fontSize="10"
+                          fill="#F59E0B"
+                          textAnchor="middle"
+                          fontWeight="600"
+                        >
+                          {Math.round(loopClosureProjection.cursorDistance)}mm
+                        </text>
+                      </>
+                    )}
+                  </g>
+                )}
+
                 {/* PRE-CLICK SNAP INDICATOR - Shows BEFORE clicking when wall tool active */}
                 {preClickSnap && tool === 'wall' && !wallClickMode && (
                   <g>

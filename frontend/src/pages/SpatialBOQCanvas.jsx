@@ -3067,6 +3067,55 @@ export default function SpatialBOQCanvas() {
     // Find attached wall
     const wall = layout?.walls?.find(w => w.wall_id === opening.wall_id);
     if (wall) {
+      // Handle arc wall movement
+      if (wall.is_arc) {
+        // Calculate new position along arc based on mouse movement
+        const currentCenterX = opening.x + opening.width / 2;
+        const currentCenterY = opening.y + opening.depth / 2;
+        const newCenterX = currentCenterX + dx;
+        const newCenterY = currentCenterY + dy;
+        
+        // Project new position onto arc
+        const toCenterDx = newCenterX - wall.arc_center_x;
+        const toCenterDy = newCenterY - wall.arc_center_y;
+        const newAngle = Math.atan2(toCenterDy, toCenterDx);
+        
+        // Clamp angle to arc range
+        let startAngle = wall.arc_start_angle;
+        let endAngle = wall.arc_end_angle;
+        let angleDiff = endAngle - startAngle;
+        if (wall.arc_bulge_direction > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+        if (wall.arc_bulge_direction < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+        
+        // Calculate position ratio
+        let posAngleDiff = newAngle - startAngle;
+        if (wall.arc_bulge_direction > 0 && posAngleDiff > 0) posAngleDiff -= 2 * Math.PI;
+        if (wall.arc_bulge_direction < 0 && posAngleDiff < 0) posAngleDiff += 2 * Math.PI;
+        
+        let positionRatio = Math.abs(angleDiff) > 0 ? posAngleDiff / angleDiff : 0;
+        positionRatio = Math.max(0, Math.min(1, positionRatio));
+        
+        // Calculate clamped angle
+        const clampedAngle = startAngle + angleDiff * positionRatio;
+        
+        // New position on arc
+        const newX = wall.arc_center_x + wall.arc_radius * Math.cos(clampedAngle) - opening.width / 2;
+        const newY = wall.arc_center_y + wall.arc_radius * Math.sin(clampedAngle) - opening.depth / 2;
+        
+        // Calculate new tangent rotation
+        const tangentAngle = clampedAngle + Math.PI / 2;
+        const newRotation = tangentAngle * (180 / Math.PI);
+        
+        updateOpening(item.type, id, { 
+          x: Math.round(newX), 
+          y: Math.round(newY),
+          rotation: newRotation,
+          arc_position_ratio: positionRatio
+        });
+        return;
+      }
+      
+      // Handle straight wall movement (original logic)
       const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
       let newX = opening.x + (isHorizontal ? dx : 0);
       let newY = opening.y + (isHorizontal ? 0 : dy);

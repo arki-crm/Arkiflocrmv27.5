@@ -4241,19 +4241,67 @@ export default function SpatialBOQCanvas() {
     });
   };
 
-  // Find door at position
+  // Find door at position - ENHANCED HITBOX for easier selection
   const findDoorAt = (x, y) => {
     if (!layout?.doors) return null;
+    const HITBOX_PADDING = 50; // Extra padding for easier selection
     return layout.doors.find(d => {
-      return x >= d.x && x <= d.x + d.width && y >= d.y && y <= d.y + d.depth;
+      const wall = layout?.walls?.find(w => w.wall_id === d.wall_id);
+      
+      if (wall?.is_arc && d.is_on_arc) {
+        // Arc door hitbox - check distance to arc position
+        const arcRadius = wall.arc_radius;
+        const posRatio = d.arc_position_ratio || 0.5;
+        let angleDiff = wall.arc_end_angle - wall.arc_start_angle;
+        if (wall.arc_bulge_direction > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+        if (wall.arc_bulge_direction < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+        const doorAngle = wall.arc_start_angle + angleDiff * posRatio;
+        
+        const doorCenterX = wall.arc_center_x + arcRadius * Math.cos(doorAngle);
+        const doorCenterY = wall.arc_center_y + arcRadius * Math.sin(doorAngle);
+        const dist = Math.sqrt(Math.pow(x - doorCenterX, 2) + Math.pow(y - doorCenterY, 2));
+        
+        return dist < (d.width / 2 + HITBOX_PADDING);
+      }
+      
+      // Straight door - expanded AABB hitbox
+      const minX = d.x - HITBOX_PADDING;
+      const maxX = d.x + d.width + HITBOX_PADDING;
+      const minY = d.y - HITBOX_PADDING;
+      const maxY = d.y + d.depth + HITBOX_PADDING;
+      return x >= minX && x <= maxX && y >= minY && y <= maxY;
     });
   };
 
-  // Find window at position
+  // Find window at position - ENHANCED HITBOX for easier selection
   const findWindowAt = (x, y) => {
     if (!layout?.windows) return null;
+    const HITBOX_PADDING = 50; // Extra padding for easier selection
     return layout.windows.find(w => {
-      return x >= w.x && x <= w.x + w.width && y >= w.y && y <= w.y + w.depth;
+      const wall = layout?.walls?.find(wall => wall.wall_id === w.wall_id);
+      
+      if (wall?.is_arc && w.is_on_arc) {
+        // Arc window hitbox
+        const arcRadius = wall.arc_radius;
+        const posRatio = w.arc_position_ratio || 0.5;
+        let angleDiff = wall.arc_end_angle - wall.arc_start_angle;
+        if (wall.arc_bulge_direction > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+        if (wall.arc_bulge_direction < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+        const winAngle = wall.arc_start_angle + angleDiff * posRatio;
+        
+        const winCenterX = wall.arc_center_x + arcRadius * Math.cos(winAngle);
+        const winCenterY = wall.arc_center_y + arcRadius * Math.sin(winAngle);
+        const dist = Math.sqrt(Math.pow(x - winCenterX, 2) + Math.pow(y - winCenterY, 2));
+        
+        return dist < (w.width / 2 + HITBOX_PADDING);
+      }
+      
+      // Straight window - expanded AABB hitbox
+      const minX = w.x - HITBOX_PADDING;
+      const maxX = w.x + w.width + HITBOX_PADDING;
+      const minY = w.y - HITBOX_PADDING;
+      const maxY = w.y + w.depth + HITBOX_PADDING;
+      return x >= minX && x <= maxX && y >= minY && y <= maxY;
     });
   };
 

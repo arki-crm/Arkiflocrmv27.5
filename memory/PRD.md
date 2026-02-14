@@ -39,6 +39,10 @@ Implemented curved/arc wall drawing capability with two input methods, full stru
 | 19 | **Arc-Straight Junction Fill** | Fill polygon at junction for seamless visual merge | ✅ |
 | 20 | **Conditional End Cap Hiding** | Arc end caps hidden when connected to straight wall | ✅ |
 | 21 | **Chain Edge Skipping** | Straight wall end caps hidden at arc junctions | ✅ |
+| 22 | **Tangent Miter Junction** | Arc-straight junction uses tangent bisector for seamless miter corner | ✅ |
+| 23 | **Curved Door on Arc** | Doors on arc walls render as curved SVG paths following wall curvature | ✅ |
+| 24 | **Curved Window on Arc** | Windows on arc walls render with curved frame and radial divider | ✅ |
+| 25 | **Floor Fill with Arc Boundary** | Floor polygon includes arc curve vertices (not just chord) | ✅ |
 
 **Arc Wall Technical Details:**
 - Two calculation functions: `calculateArcFromRadius()` and `calculateArcFromChordHeight()`
@@ -47,12 +51,27 @@ Implemented curved/arc wall drawing capability with two input methods, full stru
 - Bulge direction determined by cross product of chord and mouse vectors
 - Arc wall properties stored: `is_arc`, `arc_radius`, `arc_chord_length`, `arc_chord_height`, `arc_center_x/y`, `arc_start/end_angle`, `arc_sweep_flag`, `arc_large_arc_flag`, `arc_bulge_direction`
 
-**Arc-Straight Junction Merging Technical Details:**
-- `arcStraightJunctions` memo: Detects connections within `CLOSURE_TOLERANCE` (200mm) and computes `fillPolygon` geometry
+**Arc-Straight Junction Tangent Miter Technical Details:**
+- `arcStraightJunctions` memo: Detects connections within `CLOSURE_TOLERANCE` (200mm)
+- `computeTangentMiterJunction()`: Calculates miter angle as bisector of arc tangent and straight wall direction
+- Miter factor = 1/cos(halfAngle), clamped to max 3 to prevent extreme miter spikes
+- Fill polygon: 4-6 point polygon covering the junction gap with proper miter geometry
 - `isArcEndpointConnected()` helper: Checks if specific arc endpoint has junction
-- Junction fill polygon: Connects arc inner/outer points to straight wall corner points
-- Conditional rendering: End cap strokes skipped when `startConnected` or `endConnected` is true
-- Edge skipping in chain rendering: Filters out short edges near arc-straight junction points
+- Conditional rendering: End cap strokes skipped when connected
+
+**Curved Door/Window on Arc Walls:**
+- When `door.is_on_arc && attachedWall.is_arc`, renders curved SVG arc path
+- Angular span = opening.width / arcRadius (in radians)
+- Inner/outer radii calculated from wall.arc_radius ± halfThickness
+- Door swing arc follows wall curvature
+- Window has radial divider line (inner to outer at center angle)
+- Text label rotated to match arc tangent angle
+
+**Floor Fill with Arc Boundary:**
+- `detectFloorPolygon()` tracks `wallSequence` array during traversal
+- `generateArcBoundaryPoints(wall, 12)` creates 12 curve vertices along inner arc radius
+- Floor polygon includes curve vertices for smooth arc boundary (not chord straight line)
+- Interior offset applied for clean floor edge inside wall boundary
 
 **Arc Wall UI:**
 - Located under Wall Tool dropdown (alongside Straight Wall, Rectangle, Square)

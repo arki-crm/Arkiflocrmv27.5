@@ -2656,56 +2656,262 @@ export default function SpatialBOQCanvas() {
     return { x: endX, y: endY, snapped: false, angle: Math.round(angle) };
   };
 
-  // Magnetic snap module to wall INNER EDGE (Item #7 - Fixed to snap to inner face)
+  // Magnetic snap module to wall INNER EDGE - ALL DIRECTIONS (Left/Right/Front/Back/Arc)
+  // Enhanced with collision detection to prevent wall penetration
   const snapModuleToWall = (x, y, width, depth) => {
     if (!layout?.walls?.length) return { x, y, wall_id: null, distance: null };
 
-    let bestSnap = { x, y, wall_id: null, distance: Infinity, distanceToWall: null };
+    let bestSnap = { x, y, wall_id: null, distance: Infinity, distanceToWall: null, snapDirection: null };
+    const moduleCenterX = x + width / 2;
+    const moduleCenterY = y + depth / 2;
 
     for (const wall of layout.walls) {
-      const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
       const wallThickness = wall.thickness || DEFAULT_WALL_THICKNESS;
       const halfThickness = wallThickness / 2;
       
-      if (isHorizontal) {
-        // Horizontal wall - snap module Y to wall INNER edge
-        const wallY = wall.start_y;
+      if (wall.is_arc) {
+        // ARC WALL SNAPPING - snap module to arc inner boundary
+        const dx = moduleCenterX - wall.arc_center_x;
+        const dy = moduleCenterY - wall.arc_center_y;
+        const distToCenter = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx);
         
-        // Top side of wall (inner edge is below centerline)
-        const innerTopY = wallY + halfThickness;
-        const distTop = Math.abs(y - innerTopY);
-        if (distTop < SNAP_THRESHOLD && distTop < bestSnap.distance) {
-          bestSnap = { x, y: innerTopY, wall_id: wall.wall_id, distance: distTop, distanceToWall: 0 };
+        // Check if module is within arc angle range
+        let startAngle = wall.arc_start_angle;
+        let endAngle = wall.arc_end_angle;
+        let angleDiff = endAngle - startAngle;
+        if (wall.arc_bulge_direction > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+        if (wall.arc_bulge_direction < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+        
+        // Normalize angle check
+        let posAngleDiff = angle - startAngle;
+        if (wall.arc_bulge_direction > 0 && posAngleDiff > 0) posAngleDiff -= 2 * Math.PI;
+        if (wall.arc_bulge_direction < 0 && posAngleDiff < 0) posAngleDiff += 2 * Math.PI;
+        const posRatio = Math.abs(angleDiff) > 0 ? posAngleDiff / angleDiff : 0;
+        
+        if (posRatio >= -0.1 && posRatio <= 1.1) {
+          // Module is within arc range - calculate snap distance
+          // Determine if room is inside or outside the arc
+          const innerRadius = wall.arc_radius - halfThickness;
+          const outerRadius = wall.arc_radius + halfThickness;
+          
+          // Snap to inner side of arc (room side)
+          const snapRadius = innerRadius;
+          const distToInner = Math.abs(distToCenter - snapRadius);
+          
+          if (distToInner < SNAP_THRESHOLD && distToInner < bestSnap.distance) {
+            // Calculate snapped position - module center on the snap circle
+            const snappedCenterX = wall.arc_center_x + snapRadius * Math.cos(angle);
+            const snappedCenterY = wall.arc_center_y + snapRadius * Math.sin(angle);
+            
+            // Offset for module corner
+            bestSnap = {
+              x: snappedCenterX - width / 2,
+              y: snappedCenterY - depth / 2,
+              wall_id: wall.wall_id,
+              distance: distToInner,
+              distanceToWall: 0,
+              snapDirection: 'arc',
+              arcAngle: angle
+            };
+          }
         }
+        continue;
+      }
+      
+      // STRAIGHT WALL SNAPPING - check all 4 sides of wall
+      const wallStartX = Math.min(wall.start_x, wall.end_x);
+      const wallEndX = Math.max(wall.start_x, wall.end_x);
+      const wallStartY = Math.min(wall.start_y, wall.end_y);
+      const wallEndY = Math.max(wall.start_y, wall.end_y);
+      
+      const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+      
+      if (isHorizontal) {
+        const wallY = (wall.start_y + wall.end_y) / 2;
         
-        // Bottom side of wall (inner edge is above centerline)  
-        const innerBottomY = wallY - halfThickness;
-        const distBottom = Math.abs((y + depth) - innerBottomY);
-        if (distBottom < SNAP_THRESHOLD && distBottom < bestSnap.distance) {
-          bestSnap = { x, y: innerBottomY - depth, wall_id: wall.wall_id, distance: distBottom, distanceToWall: 0 };
+        // Check if module X overlaps with wall X range (with tolerance)
+        const moduleMinX = x;
+        const moduleMaxX = x + width;
+        const wallRangeOverlap = moduleMaxX >= wallStartX - SNAP_THRESHOLD && moduleMinX <= wallEndX + SNAP_THRESHOLD;
+        
+        if (wallRangeOverlap) {
+          // TOP side of wall (inner edge is below centerline) - module attaches from above
+          const innerTopY = wallY + halfThickness;
+          const distModuleBottomToWallTop = Math.abs((y + depth) - innerTopY);
+          if (distModuleBottomToWallTop < SNAP_THRESHOLD && distModuleBottomToWallTop < bestSnap.distance) {
+            bestSnap = { 
+              x, 
+              y: innerTopY - depth, 
+              wall_id: wall.wall_id, 
+              distance: distModuleBottomToWallTop, 
+              distanceToWall: 0,
+              snapDirection: 'bottom' // module's bottom edge snaps
+            };
+          }
+          
+          // BOTTOM side of wall (inner edge is above centerline) - module attaches from below
+          const innerBottomY = wallY - halfThickness;
+          const distModuleTopToWallBottom = Math.abs(y - innerBottomY);
+          if (distModuleTopToWallBottom < SNAP_THRESHOLD && distModuleTopToWallBottom < bestSnap.distance) {
+            bestSnap = { 
+              x, 
+              y: innerBottomY, 
+              wall_id: wall.wall_id, 
+              distance: distModuleTopToWallBottom, 
+              distanceToWall: 0,
+              snapDirection: 'top' // module's top edge snaps
+            };
+          }
         }
       } else {
-        // Vertical wall - snap module X to wall INNER edge
-        const wallX = wall.start_x;
+        // VERTICAL WALL
+        const wallX = (wall.start_x + wall.end_x) / 2;
         
-        // Right side of wall (inner edge is to the right of centerline)
-        const innerRightX = wallX + halfThickness;
-        const distLeft = Math.abs(x - innerRightX);
-        if (distLeft < SNAP_THRESHOLD && distLeft < bestSnap.distance) {
-          bestSnap = { x: innerRightX, y, wall_id: wall.wall_id, distance: distLeft, distanceToWall: 0 };
-        }
+        // Check if module Y overlaps with wall Y range (with tolerance)
+        const moduleMinY = y;
+        const moduleMaxY = y + depth;
+        const wallRangeOverlap = moduleMaxY >= wallStartY - SNAP_THRESHOLD && moduleMinY <= wallEndY + SNAP_THRESHOLD;
         
-        // Left side of wall (inner edge is to the left of centerline)
-        const innerLeftX = wallX - halfThickness;
-        const distRight = Math.abs((x + width) - innerLeftX);
-        if (distRight < SNAP_THRESHOLD && distRight < bestSnap.distance) {
-          bestSnap = { x: innerLeftX - width, y, wall_id: wall.wall_id, distance: distRight, distanceToWall: 0 };
+        if (wallRangeOverlap) {
+          // RIGHT side of wall (inner edge is to the right) - module attaches from right
+          const innerRightX = wallX + halfThickness;
+          const distModuleLeftToWallRight = Math.abs(x - innerRightX);
+          if (distModuleLeftToWallRight < SNAP_THRESHOLD && distModuleLeftToWallRight < bestSnap.distance) {
+            bestSnap = { 
+              x: innerRightX, 
+              y, 
+              wall_id: wall.wall_id, 
+              distance: distModuleLeftToWallRight, 
+              distanceToWall: 0,
+              snapDirection: 'left' // module's left edge snaps
+            };
+          }
+          
+          // LEFT side of wall (inner edge is to the left) - module attaches from left
+          const innerLeftX = wallX - halfThickness;
+          const distModuleRightToWallLeft = Math.abs((x + width) - innerLeftX);
+          if (distModuleRightToWallLeft < SNAP_THRESHOLD && distModuleRightToWallLeft < bestSnap.distance) {
+            bestSnap = { 
+              x: innerLeftX - width, 
+              y, 
+              wall_id: wall.wall_id, 
+              distance: distModuleRightToWallLeft, 
+              distanceToWall: 0,
+              snapDirection: 'right' // module's right edge snaps
+            };
+          }
         }
       }
     }
 
-    return { x: bestSnap.x, y: bestSnap.y, wall_id: bestSnap.wall_id, distanceToWall: bestSnap.distanceToWall };
+    return { 
+      x: bestSnap.x, 
+      y: bestSnap.y, 
+      wall_id: bestSnap.wall_id, 
+      distanceToWall: bestSnap.distanceToWall,
+      snapDirection: bestSnap.snapDirection
+    };
   };
+  
+  // Check if module collides with any wall (for collision boundary detection)
+  const checkModuleWallCollision = useCallback((moduleX, moduleY, moduleWidth, moduleDepth, excludeWallId = null) => {
+    if (!layout?.walls?.length) return { collides: false };
+    
+    for (const wall of layout.walls) {
+      if (excludeWallId && wall.wall_id === excludeWallId) continue;
+      
+      const wallThickness = wall.thickness || DEFAULT_WALL_THICKNESS;
+      const halfThickness = wallThickness / 2;
+      
+      if (wall.is_arc) {
+        // Arc wall collision - check if module overlaps arc boundary
+        const corners = [
+          { x: moduleX, y: moduleY },
+          { x: moduleX + moduleWidth, y: moduleY },
+          { x: moduleX + moduleWidth, y: moduleY + moduleDepth },
+          { x: moduleX, y: moduleY + moduleDepth }
+        ];
+        
+        for (const corner of corners) {
+          const dx = corner.x - wall.arc_center_x;
+          const dy = corner.y - wall.arc_center_y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const innerR = wall.arc_radius - halfThickness;
+          const outerR = wall.arc_radius + halfThickness;
+          
+          if (dist >= innerR && dist <= outerR) {
+            // Check if within arc angle range
+            const angle = Math.atan2(dy, dx);
+            let startAngle = wall.arc_start_angle;
+            let angleDiff = wall.arc_end_angle - startAngle;
+            if (wall.arc_bulge_direction > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+            if (wall.arc_bulge_direction < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+            
+            let posAngleDiff = angle - startAngle;
+            if (wall.arc_bulge_direction > 0 && posAngleDiff > 0) posAngleDiff -= 2 * Math.PI;
+            if (wall.arc_bulge_direction < 0 && posAngleDiff < 0) posAngleDiff += 2 * Math.PI;
+            const posRatio = Math.abs(angleDiff) > 0 ? posAngleDiff / angleDiff : 0;
+            
+            if (posRatio >= 0 && posRatio <= 1) {
+              return { collides: true, wall };
+            }
+          }
+        }
+      } else {
+        // Straight wall collision - AABB check
+        const wallMinX = Math.min(wall.start_x, wall.end_x) - halfThickness;
+        const wallMaxX = Math.max(wall.start_x, wall.end_x) + halfThickness;
+        const wallMinY = Math.min(wall.start_y, wall.end_y) - halfThickness;
+        const wallMaxY = Math.max(wall.start_y, wall.end_y) + halfThickness;
+        
+        const moduleMinX = moduleX;
+        const moduleMaxX = moduleX + moduleWidth;
+        const moduleMinY = moduleY;
+        const moduleMaxY = moduleY + moduleDepth;
+        
+        // Check AABB overlap
+        if (moduleMaxX > wallMinX && moduleMinX < wallMaxX &&
+            moduleMaxY > wallMinY && moduleMinY < wallMaxY) {
+          return { collides: true, wall };
+        }
+      }
+    }
+    
+    return { collides: false };
+  }, [layout?.walls]);
+  
+  // Check if module overlaps with other modules
+  const checkModuleOverlap = useCallback((moduleX, moduleY, moduleWidth, moduleDepth, excludeModuleId = null) => {
+    if (!layout?.modules?.length) return { overlaps: false, overlappingModules: [] };
+    
+    const overlappingModules = [];
+    
+    for (const other of layout.modules) {
+      if (excludeModuleId && other.module_id === excludeModuleId) continue;
+      
+      // AABB overlap check
+      const moduleMinX = moduleX;
+      const moduleMaxX = moduleX + moduleWidth;
+      const moduleMinY = moduleY;
+      const moduleMaxY = moduleY + moduleDepth;
+      
+      const otherMinX = other.x;
+      const otherMaxX = other.x + other.width;
+      const otherMinY = other.y;
+      const otherMaxY = other.y + other.depth;
+      
+      if (moduleMaxX > otherMinX && moduleMinX < otherMaxX &&
+          moduleMaxY > otherMinY && moduleMinY < otherMaxY) {
+        overlappingModules.push(other);
+      }
+    }
+    
+    return { 
+      overlaps: overlappingModules.length > 0, 
+      overlappingModules 
+    };
+  }, [layout?.modules]);
 
   // Calculate distance from module to nearest wall (Item #8)
   const calculateModuleToWallDistance = (module) => {

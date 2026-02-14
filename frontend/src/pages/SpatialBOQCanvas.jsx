@@ -3055,40 +3055,57 @@ export default function SpatialBOQCanvas() {
     return nearest;
   };
 
-  // Apply exact distance to wall (Item #8)
+  // Apply exact distance to wall (supports all directions + "0" for flush snap)
   const applyModuleDistanceToWall = (moduleId, distance, direction) => {
     saveToHistory();
     const module = layout?.modules?.find(m => m.module_id === moduleId);
     if (!module) return;
 
-    const distInfo = calculateModuleToWallDistance(module);
-    if (!distInfo?.wall) return;
+    const distances = calculateModuleToWallDistances(module);
+    if (!distances || !distances[direction]?.wall) return;
 
-    const wall = distInfo.wall;
-    const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+    const wall = distances[direction].wall;
     const wallThickness = wall.thickness || DEFAULT_WALL_THICKNESS;
     const halfThickness = wallThickness / 2;
 
     let newX = module.x;
     let newY = module.y;
 
-    if (isHorizontal) {
-      const wallY = wall.start_y;
-      if (direction === 'top' || distInfo.direction === 'top') {
-        newY = wallY - halfThickness - distance;
-      } else {
-        newY = wallY + halfThickness + distance - module.depth;
-      }
+    if (wall.is_arc) {
+      // Arc wall positioning
+      const moduleCenterX = module.x + module.width / 2;
+      const moduleCenterY = module.y + module.depth / 2;
+      const angle = Math.atan2(moduleCenterY - wall.arc_center_y, moduleCenterX - wall.arc_center_x);
+      const innerRadius = wall.arc_radius - halfThickness;
+      const targetRadius = innerRadius - distance;
+      
+      newX = wall.arc_center_x + targetRadius * Math.cos(angle) - module.width / 2;
+      newY = wall.arc_center_y + targetRadius * Math.sin(angle) - module.depth / 2;
     } else {
-      const wallX = wall.start_x;
-      if (direction === 'left' || distInfo.direction === 'left') {
-        newX = wallX + halfThickness + distance;
+      const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+      
+      if (isHorizontal) {
+        const wallY = (wall.start_y + wall.end_y) / 2;
+        if (direction === 'top') {
+          // Wall is above, position module below it
+          newY = wallY - halfThickness + distance;
+        } else if (direction === 'bottom') {
+          // Wall is below, position module above it
+          newY = wallY + halfThickness - distance - module.depth;
+        }
       } else {
-        newX = wallX - halfThickness - distance - module.width;
+        const wallX = (wall.start_x + wall.end_x) / 2;
+        if (direction === 'left') {
+          // Wall is to the left, position module to its right
+          newX = wallX + halfThickness + distance;
+        } else if (direction === 'right') {
+          // Wall is to the right, position module to its left
+          newX = wallX - halfThickness - distance - module.width;
+        }
       }
     }
 
-    updateModule(moduleId, { x: newX, y: newY, wall_id: wall.wall_id });
+    updateModule(moduleId, { x: Math.round(newX), y: Math.round(newY), wall_id: wall.wall_id });
     setEditingModuleDistance(null);
   };
 

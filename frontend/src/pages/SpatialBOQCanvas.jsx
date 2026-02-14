@@ -334,14 +334,40 @@ export default function SpatialBOQCanvas() {
       return;
     }
 
+    // Helper function to generate arc boundary points
+    const generateArcBoundaryPoints = (wall, numSegments = 16) => {
+      if (!wall.is_arc) return [];
+      
+      const points = [];
+      const innerRadius = wall.arc_radius - (wall.thickness || DEFAULT_WALL_THICKNESS) / 2;
+      
+      let angleDiff = wall.arc_end_angle - wall.arc_start_angle;
+      if (wall.arc_bulge_direction > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+      if (wall.arc_bulge_direction < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+      
+      // Generate points along the inner arc (inside of the room)
+      for (let i = 0; i <= numSegments; i++) {
+        const t = i / numSegments;
+        const angle = wall.arc_start_angle + angleDiff * t;
+        points.push({
+          x: wall.arc_center_x + innerRadius * Math.cos(angle),
+          y: wall.arc_center_y + innerRadius * Math.sin(angle)
+        });
+      }
+      
+      return points;
+    };
+
     // Calculate the polygon by traversing connected walls
     // Try starting from different vertices if needed
     let bestPolygon = null;
+    let bestArcWalls = []; // Track which walls in the polygon are arcs
     
     for (const [startKey, startConnections] of endpoints) {
       if (startConnections.length < 2) continue;
       
       const polygon = [];
+      const wallSequence = []; // Track walls in order
       const visitedWalls = new Set();
       let currentKey = startKey;
       let prevWallId = null;
@@ -367,6 +393,7 @@ export default function SpatialBOQCanvas() {
             // We've completed the loop
             if (!bestPolygon || polygon.length > bestPolygon.length) {
               bestPolygon = [...polygon];
+              bestArcWalls = [...wallSequence];
             }
           }
           break;
@@ -374,12 +401,14 @@ export default function SpatialBOQCanvas() {
 
         prevWallId = next.wall.wall_id;
         visitedWalls.add(next.wall.wall_id);
+        wallSequence.push(next.wall);
         currentKey = next.other;
 
         // Check if we're back at start
         if (currentKey === startKey && polygon.length >= 3) {
           if (!bestPolygon || polygon.length > bestPolygon.length) {
             bestPolygon = [...polygon];
+            bestArcWalls = [...wallSequence];
           }
           break;
         }
@@ -387,9 +416,70 @@ export default function SpatialBOQCanvas() {
     }
 
     if (bestPolygon && bestPolygon.length >= 3) {
+      // Generate floor polygon with arc curve vertices
+      const floorPolygonWithArcs = [];
+      const halfThickness = DEFAULT_WALL_THICKNESS / 2;
+      
+      for (let i = 0; i < bestPolygon.length; i++) {
+        const wall = bestArcWalls[i];
+        const nextIdx = (i + 1) % bestPolygon.length;
+        
+        if (wall && wall.is_arc) {
+          // For arc walls, add curve vertices along the inner boundary
+          const arcPoints = generateArcBoundaryPoints(wall, 12);
+          
+          // Determine direction based on wall orientation in the loop
+          const currentPoint = bestPolygon[i];
+          const nextPoint = bestPolygon[nextIdx];
+          const wallStartDist = Math.sqrt(
+            Math.pow(currentPoint.x - wall.start_x, 2) + 
+            Math.pow(currentPoint.y - wall.start_y, 2)
+          );
+          
+          if (wallStartDist < COORD_TOLERANCE) {
+            // Wall goes from current to next (forward direction)
+            floorPolygonWithArcs.push(...arcPoints.slice(0, -1)); // Exclude last to avoid duplicate
+          } else {
+            // Wall goes from next to current (reverse direction)
+            const reversedPoints = [...arcPoints].reverse();
+            floorPolygonWithArcs.push(...reversedPoints.slice(0, -1));
+          }
+        } else {
+          // For straight walls, just add the corner point (offset inward)
+          floorPolygonWithArcs.push(bestPolygon[i]);
+        }
+      }
+      
       // Calculate interior polygon (account for wall thickness)
-      const interiorPolygon = calculateInteriorPolygon(bestPolygon, DEFAULT_WALL_THICKNESS / 2);
-      setDetectedFloor(interiorPolygon);
+      // If we have arc walls, use the arc-inclusive polygon; otherwise use simple offset
+      const hasArcWalls = bestArcWalls.some(w => w && w.is_arc);
+      
+      if (hasArcWalls && floorPolygonWithArcs.length > 0) {
+        // For arc-inclusive floor, apply minimal offset to straight wall corners only
+        const interiorPolygon = floorPolygonWithArcs.map((p, idx) => {
+          // Find centroid for offset direction
+          const centroidX = floorPolygonWithArcs.reduce((sum, pt) => sum + pt.x, 0) / floorPolygonWithArcs.length;
+          const centroidY = floorPolygonWithArcs.reduce((sum, pt) => sum + pt.y, 0) / floorPolygonWithArcs.length;
+          
+          const dx = p.x - centroidX;
+          const dy = p.y - centroidY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          if (dist > 0) {
+            // Small inward offset for clean floor edge
+            const offsetAmount = 10; // Small offset
+            return {
+              x: p.x - (dx / dist) * offsetAmount,
+              y: p.y - (dy / dist) * offsetAmount
+            };
+          }
+          return p;
+        });
+        setDetectedFloor(interiorPolygon);
+      } else {
+        const interiorPolygon = calculateInteriorPolygon(bestPolygon, halfThickness);
+        setDetectedFloor(interiorPolygon);
+      }
       return;
     }
 

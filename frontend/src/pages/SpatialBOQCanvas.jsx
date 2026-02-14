@@ -6215,6 +6215,102 @@ export default function SpatialBOQCanvas() {
                   const centerX = (door.x + door.width / 2) * scale;
                   const centerY = (door.y + door.depth / 2) * scale;
                   
+                  // Check if door is on an arc wall
+                  const attachedWall = layout?.walls?.find(w => w.wall_id === door.wall_id);
+                  const isOnArc = attachedWall?.is_arc && door.is_on_arc;
+                  
+                  if (isOnArc && attachedWall) {
+                    // CURVED DOOR RENDERING - follows arc wall curvature
+                    const arcRadius = attachedWall.arc_radius;
+                    const arcCenterX = attachedWall.arc_center_x;
+                    const arcCenterY = attachedWall.arc_center_y;
+                    const wallThickness = attachedWall.thickness || DEFAULT_WALL_THICKNESS;
+                    const halfThick = wallThickness / 2;
+                    
+                    // Calculate door's angular span on the arc
+                    const doorAngleSpan = door.width / arcRadius; // radians
+                    const posRatio = door.arc_position_ratio || 0.5;
+                    
+                    // Get the angle at door center
+                    let angleDiff = attachedWall.arc_end_angle - attachedWall.arc_start_angle;
+                    if (attachedWall.arc_bulge_direction > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+                    if (attachedWall.arc_bulge_direction < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+                    const doorCenterAngle = attachedWall.arc_start_angle + angleDiff * posRatio;
+                    
+                    // Door start and end angles
+                    const doorStartAngle = doorCenterAngle - doorAngleSpan / 2;
+                    const doorEndAngle = doorCenterAngle + doorAngleSpan / 2;
+                    
+                    // Inner and outer radii for door cutout
+                    const innerR = arcRadius - halfThick;
+                    const outerR = arcRadius + halfThick;
+                    
+                    // Generate curved door path
+                    const innerStartX = arcCenterX + innerR * Math.cos(doorStartAngle);
+                    const innerStartY = arcCenterY + innerR * Math.sin(doorStartAngle);
+                    const innerEndX = arcCenterX + innerR * Math.cos(doorEndAngle);
+                    const innerEndY = arcCenterY + innerR * Math.sin(doorEndAngle);
+                    const outerStartX = arcCenterX + outerR * Math.cos(doorStartAngle);
+                    const outerStartY = arcCenterY + outerR * Math.sin(doorStartAngle);
+                    const outerEndX = arcCenterX + outerR * Math.cos(doorEndAngle);
+                    const outerEndY = arcCenterY + outerR * Math.sin(doorEndAngle);
+                    
+                    // SVG arc flags
+                    const largeArc = doorAngleSpan > Math.PI ? 1 : 0;
+                    const sweepOuter = attachedWall.arc_bulge_direction < 0 ? 1 : 0;
+                    const sweepInner = attachedWall.arc_bulge_direction < 0 ? 0 : 1;
+                    
+                    // Create curved door path: outer arc -> end cap -> inner arc (reversed) -> start cap
+                    const curvedDoorPath = [
+                      `M ${outerStartX * scale} ${outerStartY * scale}`,
+                      `A ${outerR * scale} ${outerR * scale} 0 ${largeArc} ${sweepOuter} ${outerEndX * scale} ${outerEndY * scale}`,
+                      `L ${innerEndX * scale} ${innerEndY * scale}`,
+                      `A ${innerR * scale} ${innerR * scale} 0 ${largeArc} ${sweepInner} ${innerStartX * scale} ${innerStartY * scale}`,
+                      `Z`
+                    ].join(' ');
+                    
+                    // Door center for text placement
+                    const textRadius = arcRadius;
+                    const textX = arcCenterX + textRadius * Math.cos(doorCenterAngle);
+                    const textY = arcCenterY + textRadius * Math.sin(doorCenterAngle);
+                    const textRotation = (doorCenterAngle + Math.PI / 2) * (180 / Math.PI);
+                    
+                    return (
+                      <g key={door.door_id} style={{ cursor: 'move' }}>
+                        {/* Curved door fill */}
+                        <path
+                          d={curvedDoorPath}
+                          fill={MODULE_COLORS.door}
+                          fillOpacity="0.9"
+                          stroke={isSelected ? '#1e40af' : MODULE_COLORS.door}
+                          strokeWidth={isSelected ? 3 : 1}
+                        />
+                        {/* Door swing arc - curved along wall */}
+                        <path
+                          d={`M ${outerStartX * scale} ${outerStartY * scale} A ${(outerR + door.width * 0.3) * scale} ${(outerR + door.width * 0.3) * scale} 0 0 ${sweepOuter} ${(arcCenterX + (outerR + door.width * 0.3) * Math.cos(doorStartAngle + doorAngleSpan * 0.4)) * scale} ${(arcCenterY + (outerR + door.width * 0.3) * Math.sin(doorStartAngle + doorAngleSpan * 0.4)) * scale}`}
+                          fill="none"
+                          stroke={MODULE_COLORS.door}
+                          strokeWidth="1"
+                          strokeDasharray="3,2"
+                        />
+                        {/* Door label */}
+                        <text
+                          x={textX * scale}
+                          y={textY * scale}
+                          fontSize="9"
+                          fill="white"
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          fontWeight="500"
+                          transform={`rotate(${textRotation}, ${textX * scale}, ${textY * scale})`}
+                        >
+                          {door.type_name || 'Door'}
+                        </text>
+                      </g>
+                    );
+                  }
+                  
+                  // STRAIGHT WALL DOOR - original rectangle rendering
                   return (
                     <g 
                       key={door.door_id} 

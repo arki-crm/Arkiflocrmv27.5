@@ -6351,7 +6351,7 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
-                {/* Windows - with rotation support (Item #4) */}
+                {/* Windows - with rotation support and ARC WALL CURVED RENDERING */}
                 {layout?.windows?.map(win => {
                   const isSelected = selectedItem?.type === 'window' && selectedItem.item.window_id === win.window_id;
                   const rotation = win.rotation || 0;
@@ -6359,6 +6359,117 @@ export default function SpatialBOQCanvas() {
                   const centerX = (win.x + win.width / 2) * scale;
                   const centerY = (win.y + win.depth / 2) * scale;
                   
+                  // Check if window is on an arc wall
+                  const attachedWall = layout?.walls?.find(w => w.wall_id === win.wall_id);
+                  const isOnArc = attachedWall?.is_arc && win.is_on_arc;
+                  
+                  if (isOnArc && attachedWall) {
+                    // CURVED WINDOW RENDERING - follows arc wall curvature
+                    const arcRadius = attachedWall.arc_radius;
+                    const arcCenterX = attachedWall.arc_center_x;
+                    const arcCenterY = attachedWall.arc_center_y;
+                    const wallThickness = attachedWall.thickness || DEFAULT_WALL_THICKNESS;
+                    const halfThick = wallThickness / 2;
+                    
+                    // Calculate window's angular span on the arc
+                    const winAngleSpan = win.width / arcRadius; // radians
+                    const posRatio = win.arc_position_ratio || 0.5;
+                    
+                    // Get the angle at window center
+                    let angleDiff = attachedWall.arc_end_angle - attachedWall.arc_start_angle;
+                    if (attachedWall.arc_bulge_direction > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+                    if (attachedWall.arc_bulge_direction < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+                    const winCenterAngle = attachedWall.arc_start_angle + angleDiff * posRatio;
+                    
+                    // Window start and end angles
+                    const winStartAngle = winCenterAngle - winAngleSpan / 2;
+                    const winEndAngle = winCenterAngle + winAngleSpan / 2;
+                    
+                    // Inner and outer radii for window
+                    const innerR = arcRadius - halfThick;
+                    const outerR = arcRadius + halfThick;
+                    
+                    // Generate curved window path points
+                    const innerStartX = arcCenterX + innerR * Math.cos(winStartAngle);
+                    const innerStartY = arcCenterY + innerR * Math.sin(winStartAngle);
+                    const innerEndX = arcCenterX + innerR * Math.cos(winEndAngle);
+                    const innerEndY = arcCenterY + innerR * Math.sin(winEndAngle);
+                    const outerStartX = arcCenterX + outerR * Math.cos(winStartAngle);
+                    const outerStartY = arcCenterY + outerR * Math.sin(winStartAngle);
+                    const outerEndX = arcCenterX + outerR * Math.cos(winEndAngle);
+                    const outerEndY = arcCenterY + outerR * Math.sin(winEndAngle);
+                    
+                    // Middle points for center divider
+                    const midR = arcRadius;
+                    const midStartX = arcCenterX + midR * Math.cos(winStartAngle);
+                    const midStartY = arcCenterY + midR * Math.sin(winStartAngle);
+                    const midEndX = arcCenterX + midR * Math.cos(winEndAngle);
+                    const midEndY = arcCenterY + midR * Math.sin(winEndAngle);
+                    const midCenterX = arcCenterX + midR * Math.cos(winCenterAngle);
+                    const midCenterY = arcCenterY + midR * Math.sin(winCenterAngle);
+                    
+                    // SVG arc flags
+                    const largeArc = winAngleSpan > Math.PI ? 1 : 0;
+                    const sweepOuter = attachedWall.arc_bulge_direction < 0 ? 1 : 0;
+                    const sweepInner = attachedWall.arc_bulge_direction < 0 ? 0 : 1;
+                    
+                    // Create curved window path
+                    const curvedWinPath = [
+                      `M ${outerStartX * scale} ${outerStartY * scale}`,
+                      `A ${outerR * scale} ${outerR * scale} 0 ${largeArc} ${sweepOuter} ${outerEndX * scale} ${outerEndY * scale}`,
+                      `L ${innerEndX * scale} ${innerEndY * scale}`,
+                      `A ${innerR * scale} ${innerR * scale} 0 ${largeArc} ${sweepInner} ${innerStartX * scale} ${innerStartY * scale}`,
+                      `Z`
+                    ].join(' ');
+                    
+                    // Window center for text placement
+                    const textX = arcCenterX + midR * Math.cos(winCenterAngle);
+                    const textY = arcCenterY + midR * Math.sin(winCenterAngle);
+                    const textRotation = (winCenterAngle + Math.PI / 2) * (180 / Math.PI);
+                    
+                    // Center divider line (radial through center of window)
+                    const innerCenterX = arcCenterX + innerR * Math.cos(winCenterAngle);
+                    const innerCenterY = arcCenterY + innerR * Math.sin(winCenterAngle);
+                    const outerCenterX = arcCenterX + outerR * Math.cos(winCenterAngle);
+                    const outerCenterY = arcCenterY + outerR * Math.sin(winCenterAngle);
+                    
+                    return (
+                      <g key={win.window_id} style={{ cursor: 'move' }}>
+                        {/* Curved window fill */}
+                        <path
+                          d={curvedWinPath}
+                          fill={MODULE_COLORS.window}
+                          fillOpacity="0.7"
+                          stroke={isSelected ? '#1e40af' : MODULE_COLORS.window}
+                          strokeWidth={isSelected ? 3 : 1}
+                        />
+                        {/* Window pane divider - radial line through center */}
+                        <line
+                          x1={innerCenterX * scale}
+                          y1={innerCenterY * scale}
+                          x2={outerCenterX * scale}
+                          y2={outerCenterY * scale}
+                          stroke="white"
+                          strokeWidth="1"
+                        />
+                        {/* Window label */}
+                        <text
+                          x={textX * scale}
+                          y={textY * scale}
+                          fontSize="8"
+                          fill="white"
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          fontWeight="500"
+                          transform={`rotate(${textRotation}, ${textX * scale}, ${textY * scale})`}
+                        >
+                          {win.type_name || 'Window'}
+                        </text>
+                      </g>
+                    );
+                  }
+                  
+                  // STRAIGHT WALL WINDOW - original rectangle rendering
                   return (
                     <g 
                       key={win.window_id} 

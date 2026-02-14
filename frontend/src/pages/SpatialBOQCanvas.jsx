@@ -201,6 +201,10 @@ export default function SpatialBOQCanvas() {
   const [editingModuleDistance, setEditingModuleDistance] = useState(null);
   const [moduleDistanceValue, setModuleDistanceValue] = useState('');
   const moduleDistanceInputRef = useRef(null);
+  const [editingDistanceDirection, setEditingDistanceDirection] = useState(null); // Which direction is being edited
+  
+  // Module collision/overlap state
+  const [moduleOverlapState, setModuleOverlapState] = useState({}); // { moduleId: { overlaps: bool, wallCollision: bool } }
 
   // Drag state for modules/walls/openings
   const [isDragging, setIsDragging] = useState(false);

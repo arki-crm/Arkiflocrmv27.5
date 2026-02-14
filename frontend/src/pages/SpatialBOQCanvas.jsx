@@ -8676,10 +8676,15 @@ export default function SpatialBOQCanvas() {
               <DialogTitle className="flex items-center gap-2">
                 <Layers className="h-5 w-5" />
                 2D Wall Elevation View
-                <span className="text-xs font-normal text-slate-500 ml-2">(Drag modules to adjust position)</span>
+                <span className="text-xs font-normal text-slate-500 ml-2">
+                  {selectedItem?.item?.is_arc ? '(Arc Wall - Unfolded View)' : '(Drag modules to adjust position)'}
+                </span>
               </DialogTitle>
               <DialogDescription>
-                Wall: {selectedItem?.item?.length || 0}mm × {selectedItem?.item?.height || DEFAULT_WALL_HEIGHT}mm (H) • {roomName}
+                {selectedItem?.item?.is_arc 
+                  ? `Arc Wall: R${selectedItem?.item?.arc_radius || 0}mm • ${Math.round(selectedItem?.item?.arc_chord_length || 0)}mm arc length × ${selectedItem?.item?.height || DEFAULT_WALL_HEIGHT}mm (H) • ${roomName}`
+                  : `Wall: ${selectedItem?.item?.length || 0}mm × ${selectedItem?.item?.height || DEFAULT_WALL_HEIGHT}mm (H) • ${roomName}`
+                }
               </DialogDescription>
             </DialogHeader>
             <div className="flex-1 bg-slate-100 rounded-lg overflow-hidden relative" style={{ minHeight: '450px' }}>
@@ -8696,6 +8701,14 @@ export default function SpatialBOQCanvas() {
                     <pattern id="elevationGrid" width="50" height="50" patternUnits="userSpaceOnUse">
                       <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e2e8f0" strokeWidth="1" />
                     </pattern>
+                    {/* Arc curvature gradient for arc walls */}
+                    {selectedItem?.item?.is_arc && (
+                      <linearGradient id="arcCurvatureGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#f0f9ff" />
+                        <stop offset="50%" stopColor="#e0f2fe" />
+                        <stop offset="100%" stopColor="#f0f9ff" />
+                      </linearGradient>
+                    )}
                   </defs>
                   <rect width="100%" height="100%" fill="url(#elevationGrid)" />
 
@@ -8707,8 +8720,38 @@ export default function SpatialBOQCanvas() {
                   <line x1="50" y1="450" x2="950" y2="450" stroke="#374151" strokeWidth="4" />
                   <text x="55" y="472" fontSize="11" fill="#64748b">Floor (0mm)</text>
 
-                  {/* Wall background */}
-                  <rect x="50" y="30" width="900" height="420" fill="#fafafa" stroke="#cbd5e1" strokeWidth="1" />
+                  {/* Wall background - with curvature indication for arc walls */}
+                  {selectedItem?.item?.is_arc ? (
+                    <>
+                      {/* Arc wall unfolded - show curved top edge to indicate curvature */}
+                      <path
+                        d="M 50 30 Q 500 50 950 30 L 950 450 L 50 450 Z"
+                        fill="url(#arcCurvatureGrad)"
+                        stroke="#cbd5e1"
+                        strokeWidth="1"
+                      />
+                      {/* Curvature indicator lines */}
+                      {[0.2, 0.4, 0.6, 0.8].map((pct, i) => (
+                        <line
+                          key={i}
+                          x1={50 + pct * 900}
+                          y1={30 + Math.sin(pct * Math.PI) * 20}
+                          x2={50 + pct * 900}
+                          y2={450}
+                          stroke="#bae6fd"
+                          strokeWidth="1"
+                          strokeDasharray="4,4"
+                          opacity="0.5"
+                        />
+                      ))}
+                      {/* Arc curvature label */}
+                      <text x="500" y="18" fontSize="10" fill="#0284c7" textAnchor="middle" fontWeight="500">
+                        ↔ Arc Curvature (R{selectedItem?.item?.arc_radius || 0}mm)
+                      </text>
+                    </>
+                  ) : (
+                    <rect x="50" y="30" width="900" height="420" fill="#fafafa" stroke="#cbd5e1" strokeWidth="1" />
+                  )}
 
                   {/* Height markers - uses wall height (Item #1) */}
                   {(() => {
@@ -8725,17 +8768,22 @@ export default function SpatialBOQCanvas() {
                     });
                   })()}
 
-                  {/* Width markers */}
-                  {selectedItem?.item?.length && [0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
-                    const xPos = 50 + pct * 900;
-                    const mm = Math.round(pct * selectedItem.item.length);
-                    return (
-                      <g key={i}>
-                        <line x1={xPos} y1="450" x2={xPos} y2="455" stroke="#94a3b8" strokeWidth="1" />
-                        <text x={xPos} y="468" fontSize="9" fill="#64748b" textAnchor="middle">{mm}mm</text>
-                      </g>
-                    );
-                  })}
+                  {/* Width markers - use arc length for arc walls */}
+                  {(() => {
+                    const wallLength = selectedItem?.item?.is_arc 
+                      ? (selectedItem?.item?.arc_chord_length || selectedItem?.item?.length || 3000)
+                      : (selectedItem?.item?.length || 3000);
+                    return [0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
+                      const xPos = 50 + pct * 900;
+                      const mm = Math.round(pct * wallLength);
+                      return (
+                        <g key={i}>
+                          <line x1={xPos} y1="450" x2={xPos} y2="455" stroke="#94a3b8" strokeWidth="1" />
+                          <text x={xPos} y="468" fontSize="9" fill="#64748b" textAnchor="middle">{mm}mm</text>
+                        </g>
+                      );
+                    });
+                  })()}
 
                   {/* Modules - Draggable (Item #3) */}
                   {getModulesOnWall(selectedItem?.item?.wall_id).map(m => {

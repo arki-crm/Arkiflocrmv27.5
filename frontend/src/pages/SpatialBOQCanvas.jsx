@@ -1111,7 +1111,7 @@ export default function SpatialBOQCanvas() {
   // ============================================
   // ARC-TO-STRAIGHT WALL JUNCTION DETECTION & GEOMETRY
   // Detects where arc walls connect to straight walls
-  // and computes the fill geometry for seamless rendering
+  // and computes TANGENT MITER JOIN geometry for seamless rendering
   // ============================================
   const arcStraightJunctions = useMemo(() => {
     if (!layout?.walls || layout.walls.length < 2) return [];
@@ -1139,18 +1139,43 @@ export default function SpatialBOQCanvas() {
         const straightPerpX = -straightDirY;
         const straightPerpY = straightDirX;
         
-        // Helper to compute junction geometry
-        const computeJunctionGeometry = (jx, jy, arcEndpoint, straightEndpoint, arcAngle) => {
-          // Arc tangent at the junction point (perpendicular to radius)
+        // Helper to compute TANGENT MITER junction geometry
+        const computeTangentMiterJunction = (jx, jy, arcEndpoint, straightEndpoint, arcAngle) => {
+          // Arc tangent direction at the junction point
           const arcTangentAngle = arcAngle + Math.PI / 2;
-          const arcPerpX = Math.cos(arcTangentAngle);
-          const arcPerpY = Math.sin(arcTangentAngle);
+          const arcTangentX = Math.cos(arcTangentAngle);
+          const arcTangentY = Math.sin(arcTangentAngle);
           
-          // Arc radial direction (pointing outward from center)
-          const arcRadialX = Math.cos(arcAngle);
-          const arcRadialY = Math.sin(arcAngle);
+          // Arc perpendicular (radial direction)
+          const arcPerpX = Math.cos(arcAngle);
+          const arcPerpY = Math.sin(arcAngle);
           
-          // Calculate the 4 corner points of the arc wall at this endpoint
+          // Determine straight wall direction at this endpoint
+          const straightAtJunctionDirX = straightEndpoint === 'start' ? straightDirX : -straightDirX;
+          const straightAtJunctionDirY = straightEndpoint === 'start' ? straightDirY : -straightDirY;
+          
+          // Calculate miter angle (bisector of arc tangent and straight wall direction)
+          // First, find the angle between arc tangent and straight wall
+          const arcTangentSign = arcWall.arc_bulge_direction < 0 ? -1 : 1;
+          const effectiveArcTangentX = arcTangentX * arcTangentSign;
+          const effectiveArcTangentY = arcTangentY * arcTangentSign;
+          
+          // Cross product to determine which side walls are on
+          const cross = effectiveArcTangentX * straightAtJunctionDirY - effectiveArcTangentY * straightAtJunctionDirX;
+          const dot = effectiveArcTangentX * straightAtJunctionDirX + effectiveArcTangentY * straightAtJunctionDirY;
+          const angleBetween = Math.atan2(cross, dot);
+          
+          // Miter direction is the bisector
+          const halfAngle = angleBetween / 2;
+          const miterAngle = Math.atan2(effectiveArcTangentY, effectiveArcTangentX) + halfAngle;
+          const miterDirX = Math.cos(miterAngle);
+          const miterDirY = Math.sin(miterAngle);
+          
+          // Miter length factor (1 / cos(halfAngle)) to ensure proper corner coverage
+          const miterFactor = Math.abs(Math.cos(halfAngle)) > 0.1 ? 1 / Math.abs(Math.cos(halfAngle)) : 2;
+          const clampedMiterFactor = Math.min(miterFactor, 3); // Limit extreme miters
+          
+          // Calculate arc wall corners at this endpoint
           const arcInnerRadius = arcWall.arc_radius - halfArcThick;
           const arcOuterRadius = arcWall.arc_radius + halfArcThick;
           const arcInnerX = arcWall.arc_center_x + arcInnerRadius * Math.cos(arcAngle);
@@ -1158,7 +1183,7 @@ export default function SpatialBOQCanvas() {
           const arcOuterX = arcWall.arc_center_x + arcOuterRadius * Math.cos(arcAngle);
           const arcOuterY = arcWall.arc_center_y + arcOuterRadius * Math.sin(arcAngle);
           
-          // Calculate the 2 corner points of the straight wall at this endpoint
+          // Calculate straight wall corners at this endpoint
           const straightEndX = straightEndpoint === 'start' ? straightWall.start_x : straightWall.end_x;
           const straightEndY = straightEndpoint === 'start' ? straightWall.start_y : straightWall.end_y;
           const straightCorner1X = straightEndX + straightPerpX * halfStraightThick;
@@ -1166,14 +1191,47 @@ export default function SpatialBOQCanvas() {
           const straightCorner2X = straightEndX - straightPerpX * halfStraightThick;
           const straightCorner2Y = straightEndY - straightPerpY * halfStraightThick;
           
-          // Create a fill polygon that covers the gap between arc and straight wall
-          // This polygon connects the arc's inner/outer points to the straight wall's corners
+          // Calculate miter intersection points for seamless corners
+          // The miter point is where the inner/outer edges of both walls would meet
+          const maxExtension = halfStraightThick * clampedMiterFactor;
+          
+          // Outer miter point
+          const outerMiterX = jx + miterDirX * maxExtension;
+          const outerMiterY = jy + miterDirY * maxExtension;
+          
+          // Inner miter point (opposite direction)
+          const innerMiterX = jx - miterDirX * maxExtension;
+          const innerMiterY = jy - miterDirY * maxExtension;
+          
+          // Create fill polygon that uses miter geometry for seamless join
+          // Order points to form a convex polygon covering the gap
           const fillPolygon = [
             { x: arcOuterX, y: arcOuterY },
+            { x: outerMiterX, y: outerMiterY },
             { x: straightCorner1X, y: straightCorner1Y },
             { x: straightCorner2X, y: straightCorner2Y },
+            { x: innerMiterX, y: innerMiterY },
             { x: arcInnerX, y: arcInnerY }
           ];
+          
+          // Simplify to quad if miter points are close to corners
+          const distOuter1 = Math.sqrt(Math.pow(outerMiterX - straightCorner1X, 2) + Math.pow(outerMiterY - straightCorner1Y, 2));
+          const distOuter2 = Math.sqrt(Math.pow(outerMiterX - arcOuterX, 2) + Math.pow(outerMiterY - arcOuterY, 2));
+          const distInner1 = Math.sqrt(Math.pow(innerMiterX - straightCorner2X, 2) + Math.pow(innerMiterY - straightCorner2Y, 2));
+          const distInner2 = Math.sqrt(Math.pow(innerMiterX - arcInnerX, 2) + Math.pow(innerMiterY - arcInnerY, 2));
+          
+          // Use simplified quad if miter is very close to existing corners
+          let finalFillPolygon;
+          if (distOuter1 < 5 && distOuter2 < 5 && distInner1 < 5 && distInner2 < 5) {
+            finalFillPolygon = [
+              { x: arcOuterX, y: arcOuterY },
+              { x: straightCorner1X, y: straightCorner1Y },
+              { x: straightCorner2X, y: straightCorner2Y },
+              { x: arcInnerX, y: arcInnerY }
+            ];
+          } else {
+            finalFillPolygon = fillPolygon;
+          }
           
           return {
             x: jx,
@@ -1183,11 +1241,14 @@ export default function SpatialBOQCanvas() {
             straightWallId: straightWall.wall_id,
             straightEndpoint,
             arcAngle,
-            fillPolygon,
+            fillPolygon: finalFillPolygon,
             arcOuterPoint: { x: arcOuterX, y: arcOuterY },
             arcInnerPoint: { x: arcInnerX, y: arcInnerY },
             straightCorner1: { x: straightCorner1X, y: straightCorner1Y },
-            straightCorner2: { x: straightCorner2X, y: straightCorner2Y }
+            straightCorner2: { x: straightCorner2X, y: straightCorner2Y },
+            miterOuter: { x: outerMiterX, y: outerMiterY },
+            miterInner: { x: innerMiterX, y: innerMiterY },
+            miterAngle: miterAngle * (180 / Math.PI)
           };
         };
         
@@ -1204,11 +1265,11 @@ export default function SpatialBOQCanvas() {
         if (arcStartToStraightStart < tolerance) {
           const jx = (arcWall.start_x + straightWall.start_x) / 2;
           const jy = (arcWall.start_y + straightWall.start_y) / 2;
-          junctions.push(computeJunctionGeometry(jx, jy, 'start', 'start', arcWall.arc_start_angle));
+          junctions.push(computeTangentMiterJunction(jx, jy, 'start', 'start', arcWall.arc_start_angle));
         } else if (arcStartToStraightEnd < tolerance) {
           const jx = (arcWall.start_x + straightWall.end_x) / 2;
           const jy = (arcWall.start_y + straightWall.end_y) / 2;
-          junctions.push(computeJunctionGeometry(jx, jy, 'start', 'end', arcWall.arc_start_angle));
+          junctions.push(computeTangentMiterJunction(jx, jy, 'start', 'end', arcWall.arc_start_angle));
         }
         
         // Check arc end against straight endpoints
@@ -1224,11 +1285,11 @@ export default function SpatialBOQCanvas() {
         if (arcEndToStraightStart < tolerance) {
           const jx = (arcWall.end_x + straightWall.start_x) / 2;
           const jy = (arcWall.end_y + straightWall.start_y) / 2;
-          junctions.push(computeJunctionGeometry(jx, jy, 'end', 'start', arcWall.arc_end_angle));
+          junctions.push(computeTangentMiterJunction(jx, jy, 'end', 'start', arcWall.arc_end_angle));
         } else if (arcEndToStraightEnd < tolerance) {
           const jx = (arcWall.end_x + straightWall.end_x) / 2;
           const jy = (arcWall.end_y + straightWall.end_y) / 2;
-          junctions.push(computeJunctionGeometry(jx, jy, 'end', 'end', arcWall.arc_end_angle));
+          junctions.push(computeTangentMiterJunction(jx, jy, 'end', 'end', arcWall.arc_end_angle));
         }
       }
     }

@@ -8789,13 +8789,23 @@ export default function SpatialBOQCanvas() {
                   {getModulesOnWall(selectedItem?.item?.wall_id).map(m => {
                     const modInfo = moduleLibrary.module_types?.[m.module_type] || {};
                     const color = MODULE_COLORS[m.module_type] || '#888';
-                    const wallLength = selectedItem?.item?.length || 3000;
-                    const wallHeight = selectedItem?.item?.height || DEFAULT_WALL_HEIGHT;
-                    
-                    // Calculate position relative to wall
                     const wall = selectedItem?.item;
-                    const wallStartX = Math.min(wall?.start_x || 0, wall?.end_x || 0);
-                    const moduleRelativeX = m.x - wallStartX;
+                    const wallHeight = wall?.height || DEFAULT_WALL_HEIGHT;
+                    
+                    // Use arc length for arc walls, otherwise use straight length
+                    const wallLength = wall?.is_arc 
+                      ? (wall?.arc_chord_length || wall?.length || 3000)
+                      : (wall?.length || 3000);
+                    
+                    // Calculate position relative to wall (use arc position for arc walls)
+                    let moduleRelativeX;
+                    if (wall?.is_arc && m.arc_position_ratio !== undefined) {
+                      // For arc walls, use the position ratio
+                      moduleRelativeX = m.arc_position_ratio * wallLength;
+                    } else {
+                      const wallStartX = Math.min(wall?.start_x || 0, wall?.end_x || 0);
+                      moduleRelativeX = m.x - wallStartX;
+                    }
                     
                     // Scale to SVG coordinates using wall height (Item #1)
                     const svgX = 50 + (moduleRelativeX / wallLength) * 900;
@@ -8853,11 +8863,15 @@ export default function SpatialBOQCanvas() {
                     );
                   })}
 
-                  {/* Doors in Elevation View (Item #3) */}
+                  {/* Doors in Elevation View (Item #3) - with arc wall support */}
                   {layout?.doors?.filter(d => d.wall_id === selectedItem?.item?.wall_id).map(door => {
-                    const wallLength = selectedItem?.item?.length || 3000;
-                    const wallHeight = selectedItem?.item?.height || DEFAULT_WALL_HEIGHT;
                     const wall = selectedItem?.item;
+                    const wallHeight = wall?.height || DEFAULT_WALL_HEIGHT;
+                    
+                    // Use arc length for arc walls
+                    const wallLength = wall?.is_arc 
+                      ? (wall?.arc_chord_length || wall?.length || 3000)
+                      : (wall?.length || 3000);
                     const wallStartX = Math.min(wall?.start_x || 0, wall?.end_x || 0);
                     const doorRelativeX = door.x - wallStartX;
                     

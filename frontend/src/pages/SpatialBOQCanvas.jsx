@@ -2913,63 +2913,146 @@ export default function SpatialBOQCanvas() {
     };
   }, [layout?.modules]);
 
-  // Calculate distance from module to nearest wall (Item #8)
-  const calculateModuleToWallDistance = (module) => {
+  // Calculate distance from module to ALL nearby walls (for dimension display)
+  const calculateModuleToWallDistances = useCallback((module) => {
     if (!layout?.walls?.length || !module) return null;
 
-    let nearestDistance = Infinity;
-    let direction = null;
-    let nearestWall = null;
+    const distances = {
+      top: null,
+      bottom: null,
+      left: null,
+      right: null
+    };
+    
+    const moduleCenterX = module.x + module.width / 2;
+    const moduleCenterY = module.y + module.depth / 2;
 
     for (const wall of layout.walls) {
-      const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
       const wallThickness = wall.thickness || DEFAULT_WALL_THICKNESS;
       const halfThickness = wallThickness / 2;
       
+      if (wall.is_arc) {
+        // Arc wall distance calculation
+        const dx = moduleCenterX - wall.arc_center_x;
+        const dy = moduleCenterY - wall.arc_center_y;
+        const distToCenter = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx);
+        
+        // Check if module is within arc angle range
+        let startAngle = wall.arc_start_angle;
+        let angleDiff = wall.arc_end_angle - startAngle;
+        if (wall.arc_bulge_direction > 0 && angleDiff > 0) angleDiff -= 2 * Math.PI;
+        if (wall.arc_bulge_direction < 0 && angleDiff < 0) angleDiff += 2 * Math.PI;
+        
+        let posAngleDiff = angle - startAngle;
+        if (wall.arc_bulge_direction > 0 && posAngleDiff > 0) posAngleDiff -= 2 * Math.PI;
+        if (wall.arc_bulge_direction < 0 && posAngleDiff < 0) posAngleDiff += 2 * Math.PI;
+        const posRatio = Math.abs(angleDiff) > 0 ? posAngleDiff / angleDiff : 0;
+        
+        if (posRatio >= 0 && posRatio <= 1) {
+          const innerRadius = wall.arc_radius - halfThickness;
+          const distToArc = Math.abs(distToCenter - innerRadius);
+          
+          // Determine direction based on angle
+          if (Math.abs(angle) < Math.PI / 4 || Math.abs(angle) > 3 * Math.PI / 4) {
+            // Mostly horizontal direction
+            if (angle > -Math.PI / 2 && angle < Math.PI / 2) {
+              if (!distances.right || distToArc < distances.right.distance) {
+                distances.right = { distance: Math.round(distToArc), wall, direction: 'right', isArc: true };
+              }
+            } else {
+              if (!distances.left || distToArc < distances.left.distance) {
+                distances.left = { distance: Math.round(distToArc), wall, direction: 'left', isArc: true };
+              }
+            }
+          } else {
+            // Mostly vertical direction
+            if (angle > 0) {
+              if (!distances.bottom || distToArc < distances.bottom.distance) {
+                distances.bottom = { distance: Math.round(distToArc), wall, direction: 'bottom', isArc: true };
+              }
+            } else {
+              if (!distances.top || distToArc < distances.top.distance) {
+                distances.top = { distance: Math.round(distToArc), wall, direction: 'top', isArc: true };
+              }
+            }
+          }
+        }
+        continue;
+      }
+      
+      // Straight wall distance calculation
+      const isHorizontal = Math.abs(wall.end_y - wall.start_y) < Math.abs(wall.end_x - wall.start_x);
+      const wallStartX = Math.min(wall.start_x, wall.end_x);
+      const wallEndX = Math.max(wall.start_x, wall.end_x);
+      const wallStartY = Math.min(wall.start_y, wall.end_y);
+      const wallEndY = Math.max(wall.start_y, wall.end_y);
+      
       if (isHorizontal) {
-        const wallY = wall.start_y;
+        const wallY = (wall.start_y + wall.end_y) / 2;
         const innerTop = wallY + halfThickness;
         const innerBottom = wallY - halfThickness;
         
-        // Distance from module top to wall bottom
-        const distToBottom = Math.abs(module.y - innerBottom);
-        if (distToBottom < nearestDistance) {
-          nearestDistance = distToBottom;
-          direction = 'top';
-          nearestWall = wall;
-        }
-        
-        // Distance from module bottom to wall top
-        const distToTop = Math.abs((module.y + module.depth) - innerTop);
-        if (distToTop < nearestDistance) {
-          nearestDistance = distToTop;
-          direction = 'bottom';
-          nearestWall = wall;
+        // Check X range overlap
+        if (module.x + module.width >= wallStartX && module.x <= wallEndX) {
+          // Distance from module top to wall bottom (wall is above module)
+          if (wallY < moduleCenterY) {
+            const dist = module.y - innerBottom;
+            if (dist >= 0 && (!distances.top || dist < distances.top.distance)) {
+              distances.top = { distance: Math.round(dist), wall, direction: 'top' };
+            }
+          }
+          
+          // Distance from module bottom to wall top (wall is below module)
+          if (wallY > moduleCenterY) {
+            const dist = innerTop - (module.y + module.depth);
+            if (dist >= 0 && (!distances.bottom || dist < distances.bottom.distance)) {
+              distances.bottom = { distance: Math.round(dist), wall, direction: 'bottom' };
+            }
+          }
         }
       } else {
-        const wallX = wall.start_x;
+        const wallX = (wall.start_x + wall.end_x) / 2;
         const innerRight = wallX + halfThickness;
         const innerLeft = wallX - halfThickness;
         
-        // Distance from module left to wall right
-        const distToRight = Math.abs(module.x - innerRight);
-        if (distToRight < nearestDistance) {
-          nearestDistance = distToRight;
-          direction = 'left';
-          nearestWall = wall;
-        }
-        
-        // Distance from module right to wall left
-        const distToLeft = Math.abs((module.x + module.width) - innerLeft);
-        if (distToLeft < nearestDistance) {
-          nearestDistance = distToLeft;
-          direction = 'right';
-          nearestWall = wall;
+        // Check Y range overlap
+        if (module.y + module.depth >= wallStartY && module.y <= wallEndY) {
+          // Distance from module left to wall right (wall is to the left)
+          if (wallX < moduleCenterX) {
+            const dist = module.x - innerRight;
+            if (dist >= 0 && (!distances.left || dist < distances.left.distance)) {
+              distances.left = { distance: Math.round(dist), wall, direction: 'left' };
+            }
+          }
+          
+          // Distance from module right to wall left (wall is to the right)
+          if (wallX > moduleCenterX) {
+            const dist = innerLeft - (module.x + module.width);
+            if (dist >= 0 && (!distances.right || dist < distances.right.distance)) {
+              distances.right = { distance: Math.round(dist), wall, direction: 'right' };
+            }
+          }
         }
       }
     }
 
-    return nearestDistance < 5000 ? { distance: Math.round(nearestDistance), direction, wall: nearestWall } : null;
+    return distances;
+  }, [layout?.walls]);
+
+  // Calculate distance from module to nearest wall (legacy - kept for compatibility)
+  const calculateModuleToWallDistance = (module) => {
+    const distances = calculateModuleToWallDistances(module);
+    if (!distances) return null;
+    
+    // Find the nearest distance
+    let nearest = null;
+    for (const dir of ['top', 'bottom', 'left', 'right']) {
+      if (distances[dir] && (!nearest || distances[dir].distance < nearest.distance)) {
+        nearest = distances[dir];
+      }
+    }
+    return nearest;
   };
 
   // Apply exact distance to wall (Item #8)

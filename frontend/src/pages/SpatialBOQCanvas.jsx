@@ -7020,90 +7020,405 @@ export default function SpatialBOQCanvas() {
                   );
                 })}
 
-                {/* Modules */}
+                {/* Modules with COLLISION DETECTION and DISTANCE LABELS */}
                 {layout?.modules?.map(module => {
                   const isSelected = selectedItem?.type === 'module' && selectedItem.item.module_id === module.module_id;
                   const color = MODULE_COLORS[module.module_type] || '#888';
                   const modInfo = moduleLibrary.module_types?.[module.module_type] || {};
                   const isSnappedToWall = !!module.wall_id;
+                  
+                  // Check for overlaps with other modules
+                  const overlapCheck = checkModuleOverlap(module.x, module.y, module.width, module.depth, module.module_id);
+                  const hasOverlap = overlapCheck.overlaps;
+                  
+                  // Check for wall collision
+                  const wallCollision = checkModuleWallCollision(module.x, module.y, module.width, module.depth, module.wall_id);
+                  const hasWallCollision = wallCollision.collides;
+                  
+                  // Determine outline color based on state
+                  let outlineColor = color;
+                  let outlineWidth = 1.5;
+                  if (isSelected) {
+                    outlineColor = '#1e40af';
+                    outlineWidth = 3;
+                  } else if (hasOverlap || hasWallCollision) {
+                    outlineColor = '#EF4444'; // Red for collision/overlap
+                    outlineWidth = 3;
+                  } else if (isSnappedToWall) {
+                    outlineColor = '#22c55e'; // Green for valid snap
+                    outlineWidth = 2;
+                  }
+                  
+                  // Calculate distances to walls for this module (when selected)
+                  const wallDistances = isSelected ? calculateModuleToWallDistances(module) : null;
 
                   return (
-                    <g
-                      key={module.module_id}
-                      transform={`translate(${module.x * scale}, ${module.y * scale}) rotate(${module.rotation})`}
-                      style={{ cursor: 'grab' }}
-                    >
-                      {/* Snap glow effect when attached to wall */}
-                      {isSnappedToWall && (
-                        <rect
-                          x="-2"
-                          y="-2"
-                          width={module.width * scale + 4}
-                          height={module.depth * scale + 4}
-                          fill="none"
-                          stroke="#22c55e"
-                          strokeWidth="2"
-                          strokeOpacity="0.5"
-                          rx="2"
-                          ry="2"
-                        />
-                      )}
-                      <rect
-                        x="0"
-                        y="0"
-                        width={module.width * scale}
-                        height={module.depth * scale}
-                        fill={color}
-                        fillOpacity="0.85"
-                        stroke={isSelected ? '#1e40af' : color}
-                        strokeWidth={isSelected ? 3 : 1.5}
-                      />
-                      {/* Wall snap indicator - enhanced */}
-                      {isSnappedToWall && (
-                        <g>
-                          <circle
-                            cx={module.width * scale / 2}
-                            cy="4"
-                            r="4"
-                            fill="#22c55e"
-                            stroke="white"
-                            strokeWidth="1.5"
+                    <g key={module.module_id}>
+                      <g
+                        transform={`translate(${module.x * scale}, ${module.y * scale}) rotate(${module.rotation})`}
+                        style={{ cursor: 'grab' }}
+                      >
+                        {/* Overlap/Collision warning glow */}
+                        {(hasOverlap || hasWallCollision) && (
+                          <rect
+                            x="-4"
+                            y="-4"
+                            width={module.width * scale + 8}
+                            height={module.depth * scale + 8}
+                            fill="none"
+                            stroke="#EF4444"
+                            strokeWidth="3"
+                            strokeOpacity="0.6"
+                            strokeDasharray="8,4"
+                            rx="3"
+                            ry="3"
                           />
-                          <line
-                            x1="0"
-                            y1="0"
-                            x2={module.width * scale}
-                            y2="0"
+                        )}
+                        {/* Snap glow effect when attached to wall (valid placement) */}
+                        {isSnappedToWall && !hasOverlap && !hasWallCollision && (
+                          <rect
+                            x="-2"
+                            y="-2"
+                            width={module.width * scale + 4}
+                            height={module.depth * scale + 4}
+                            fill="none"
                             stroke="#22c55e"
                             strokeWidth="2"
-                            strokeLinecap="round"
+                            strokeOpacity="0.5"
+                            rx="2"
+                            ry="2"
                           />
+                        )}
+                        {/* Main module rectangle */}
+                        <rect
+                          x="0"
+                          y="0"
+                          width={module.width * scale}
+                          height={module.depth * scale}
+                          fill={hasOverlap || hasWallCollision ? '#FCA5A5' : color}
+                          fillOpacity={hasOverlap || hasWallCollision ? 0.7 : 0.85}
+                          stroke={outlineColor}
+                          strokeWidth={outlineWidth}
+                        />
+                        {/* Wall snap indicator - enhanced */}
+                        {isSnappedToWall && !hasOverlap && !hasWallCollision && (
+                          <g>
+                            <circle
+                              cx={module.width * scale / 2}
+                              cy="4"
+                              r="4"
+                              fill="#22c55e"
+                              stroke="white"
+                              strokeWidth="1.5"
+                            />
+                            <line
+                              x1="0"
+                              y1="0"
+                              x2={module.width * scale}
+                              y2="0"
+                              stroke="#22c55e"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                          </g>
+                        )}
+                        {/* Collision/Overlap warning icon */}
+                        {(hasOverlap || hasWallCollision) && (
+                          <g>
+                            <circle
+                              cx={module.width * scale / 2}
+                              cy={module.depth * scale / 2}
+                              r="12"
+                              fill="#EF4444"
+                              stroke="white"
+                              strokeWidth="2"
+                            />
+                            <text
+                              x={module.width * scale / 2}
+                              y={module.depth * scale / 2 + 4}
+                              fontSize="14"
+                              fill="white"
+                              textAnchor="middle"
+                              fontWeight="bold"
+                            >
+                              !
+                            </text>
+                          </g>
+                        )}
+                        {/* Module type label */}
+                        {!hasOverlap && !hasWallCollision && (
+                          <text
+                            x={module.width * scale / 2}
+                            y={module.depth * scale / 2}
+                            fontSize="9"
+                            fill="white"
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            fontWeight="600"
+                          >
+                            {modInfo.name?.substring(0, 3) || 'MOD'}
+                          </text>
+                        )}
+                        <text
+                          x={module.width * scale / 2}
+                          y={module.depth * scale + 10}
+                          fontSize="8"
+                          fill="#4A5568"
+                          textAnchor="middle"
+                          fontWeight="500"
+                        >
+                          {module.width}×{module.depth}
+                        </text>
+                      </g>
+                      
+                      {/* WALL DISTANCE LABELS (when selected) - Clickable for editing */}
+                      {isSelected && wallDistances && (
+                        <g>
+                          {/* Top distance */}
+                          {wallDistances.top && (
+                            <g
+                              style={{ cursor: 'pointer' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingModuleDistance(module.module_id);
+                                setEditingDistanceDirection('top');
+                                setModuleDistanceValue(wallDistances.top.distance.toString());
+                              }}
+                            >
+                              <line
+                                x1={(module.x + module.width / 2) * scale}
+                                y1={module.y * scale}
+                                x2={(module.x + module.width / 2) * scale}
+                                y2={(module.y - wallDistances.top.distance) * scale}
+                                stroke="#3B82F6"
+                                strokeWidth="1"
+                                strokeDasharray="4,2"
+                              />
+                              <rect
+                                x={(module.x + module.width / 2) * scale - 25}
+                                y={(module.y - wallDistances.top.distance / 2) * scale - 10}
+                                width="50"
+                                height="20"
+                                fill="white"
+                                stroke="#3B82F6"
+                                strokeWidth="1"
+                                rx="3"
+                              />
+                              <text
+                                x={(module.x + module.width / 2) * scale}
+                                y={(module.y - wallDistances.top.distance / 2) * scale + 4}
+                                fontSize="10"
+                                fill="#3B82F6"
+                                textAnchor="middle"
+                                fontWeight="600"
+                              >
+                                {editingModuleDistance === module.module_id && editingDistanceDirection === 'top' ? '...' : `${wallDistances.top.distance}mm`}
+                              </text>
+                            </g>
+                          )}
+                          
+                          {/* Bottom distance */}
+                          {wallDistances.bottom && (
+                            <g
+                              style={{ cursor: 'pointer' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingModuleDistance(module.module_id);
+                                setEditingDistanceDirection('bottom');
+                                setModuleDistanceValue(wallDistances.bottom.distance.toString());
+                              }}
+                            >
+                              <line
+                                x1={(module.x + module.width / 2) * scale}
+                                y1={(module.y + module.depth) * scale}
+                                x2={(module.x + module.width / 2) * scale}
+                                y2={(module.y + module.depth + wallDistances.bottom.distance) * scale}
+                                stroke="#3B82F6"
+                                strokeWidth="1"
+                                strokeDasharray="4,2"
+                              />
+                              <rect
+                                x={(module.x + module.width / 2) * scale - 25}
+                                y={(module.y + module.depth + wallDistances.bottom.distance / 2) * scale - 10}
+                                width="50"
+                                height="20"
+                                fill="white"
+                                stroke="#3B82F6"
+                                strokeWidth="1"
+                                rx="3"
+                              />
+                              <text
+                                x={(module.x + module.width / 2) * scale}
+                                y={(module.y + module.depth + wallDistances.bottom.distance / 2) * scale + 4}
+                                fontSize="10"
+                                fill="#3B82F6"
+                                textAnchor="middle"
+                                fontWeight="600"
+                              >
+                                {editingModuleDistance === module.module_id && editingDistanceDirection === 'bottom' ? '...' : `${wallDistances.bottom.distance}mm`}
+                              </text>
+                            </g>
+                          )}
+                          
+                          {/* Left distance */}
+                          {wallDistances.left && (
+                            <g
+                              style={{ cursor: 'pointer' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingModuleDistance(module.module_id);
+                                setEditingDistanceDirection('left');
+                                setModuleDistanceValue(wallDistances.left.distance.toString());
+                              }}
+                            >
+                              <line
+                                x1={module.x * scale}
+                                y1={(module.y + module.depth / 2) * scale}
+                                x2={(module.x - wallDistances.left.distance) * scale}
+                                y2={(module.y + module.depth / 2) * scale}
+                                stroke="#3B82F6"
+                                strokeWidth="1"
+                                strokeDasharray="4,2"
+                              />
+                              <rect
+                                x={(module.x - wallDistances.left.distance / 2) * scale - 25}
+                                y={(module.y + module.depth / 2) * scale - 10}
+                                width="50"
+                                height="20"
+                                fill="white"
+                                stroke="#3B82F6"
+                                strokeWidth="1"
+                                rx="3"
+                              />
+                              <text
+                                x={(module.x - wallDistances.left.distance / 2) * scale}
+                                y={(module.y + module.depth / 2) * scale + 4}
+                                fontSize="10"
+                                fill="#3B82F6"
+                                textAnchor="middle"
+                                fontWeight="600"
+                              >
+                                {editingModuleDistance === module.module_id && editingDistanceDirection === 'left' ? '...' : `${wallDistances.left.distance}mm`}
+                              </text>
+                            </g>
+                          )}
+                          
+                          {/* Right distance */}
+                          {wallDistances.right && (
+                            <g
+                              style={{ cursor: 'pointer' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingModuleDistance(module.module_id);
+                                setEditingDistanceDirection('right');
+                                setModuleDistanceValue(wallDistances.right.distance.toString());
+                              }}
+                            >
+                              <line
+                                x1={(module.x + module.width) * scale}
+                                y1={(module.y + module.depth / 2) * scale}
+                                x2={(module.x + module.width + wallDistances.right.distance) * scale}
+                                y2={(module.y + module.depth / 2) * scale}
+                                stroke="#3B82F6"
+                                strokeWidth="1"
+                                strokeDasharray="4,2"
+                              />
+                              <rect
+                                x={(module.x + module.width + wallDistances.right.distance / 2) * scale - 25}
+                                y={(module.y + module.depth / 2) * scale - 10}
+                                width="50"
+                                height="20"
+                                fill="white"
+                                stroke="#3B82F6"
+                                strokeWidth="1"
+                                rx="3"
+                              />
+                              <text
+                                x={(module.x + module.width + wallDistances.right.distance / 2) * scale}
+                                y={(module.y + module.depth / 2) * scale + 4}
+                                fontSize="10"
+                                fill="#3B82F6"
+                                textAnchor="middle"
+                                fontWeight="600"
+                              >
+                                {editingModuleDistance === module.module_id && editingDistanceDirection === 'right' ? '...' : `${wallDistances.right.distance}mm`}
+                              </text>
+                            </g>
+                          )}
                         </g>
                       )}
-                      <text
-                        x={module.width * scale / 2}
-                        y={module.depth * scale / 2}
-                        fontSize="9"
-                        fill="white"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        fontWeight="600"
-                      >
-                        {modInfo.name?.substring(0, 3) || 'MOD'}
-                      </text>
-                      <text
-                        x={module.width * scale / 2}
-                        y={module.depth * scale + 10}
-                        fontSize="8"
-                        fill="#4A5568"
-                        textAnchor="middle"
-                        fontWeight="500"
-                      >
-                        {module.width}×{module.depth}
-                      </text>
                     </g>
                   );
                 })}
+                
+                {/* Distance Edit Input (floating) */}
+                {editingModuleDistance && editingDistanceDirection && (() => {
+                  const module = layout?.modules?.find(m => m.module_id === editingModuleDistance);
+                  if (!module) return null;
+                  
+                  const distances = calculateModuleToWallDistances(module);
+                  if (!distances || !distances[editingDistanceDirection]) return null;
+                  
+                  // Position the input near the dimension label
+                  let inputX, inputY;
+                  const dist = distances[editingDistanceDirection].distance;
+                  
+                  if (editingDistanceDirection === 'top') {
+                    inputX = (module.x + module.width / 2) * scale;
+                    inputY = (module.y - dist / 2) * scale;
+                  } else if (editingDistanceDirection === 'bottom') {
+                    inputX = (module.x + module.width / 2) * scale;
+                    inputY = (module.y + module.depth + dist / 2) * scale;
+                  } else if (editingDistanceDirection === 'left') {
+                    inputX = (module.x - dist / 2) * scale;
+                    inputY = (module.y + module.depth / 2) * scale;
+                  } else {
+                    inputX = (module.x + module.width + dist / 2) * scale;
+                    inputY = (module.y + module.depth / 2) * scale;
+                  }
+                  
+                  return (
+                    <foreignObject
+                      x={inputX - 35}
+                      y={inputY - 12}
+                      width="70"
+                      height="24"
+                    >
+                      <input
+                        ref={moduleDistanceInputRef}
+                        type="number"
+                        min="0"
+                        value={moduleDistanceValue}
+                        onChange={(e) => setModuleDistanceValue(e.target.value)}
+                        onBlur={() => {
+                          const newDist = parseInt(moduleDistanceValue, 10);
+                          if (!isNaN(newDist) && newDist >= 0) {
+                            applyModuleDistanceToWall(editingModuleDistance, newDist, editingDistanceDirection);
+                          }
+                          setEditingModuleDistance(null);
+                          setEditingDistanceDirection(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const newDist = parseInt(moduleDistanceValue, 10);
+                            if (!isNaN(newDist) && newDist >= 0) {
+                              applyModuleDistanceToWall(editingModuleDistance, newDist, editingDistanceDirection);
+                            }
+                            setEditingModuleDistance(null);
+                            setEditingDistanceDirection(null);
+                          } else if (e.key === 'Escape') {
+                            setEditingModuleDistance(null);
+                            setEditingDistanceDirection(null);
+                          }
+                        }}
+                        autoFocus
+                        className="w-full h-full text-center text-xs border-2 border-blue-500 rounded bg-white shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        style={{ fontSize: '11px' }}
+                        placeholder="0 = flush"
+                      />
+                    </foreignObject>
+                  );
+                })()}
 
                 {/* Guided lines for straight drawing - shows when approaching horizontal/vertical */}
                 {alignmentGuides.map((guide, index) => (

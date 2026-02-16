@@ -23187,10 +23187,12 @@ async def get_daily_closing(request: Request, date: Optional[str] = None):
         opening_balance = acc.get("opening_balance", 0)
         
         # Calculate opening balance (sum of all transactions before this day + opening balance)
+        # FIX: Use transaction_date (string "YYYY-MM-DD") for consistent filtering
+        # Previously used created_at which is an ISO string and doesn't compare well with datetime ranges
         prev_txn_pipeline = [
             {"$match": {
                 "account_id": account_id,
-                "created_at": {"$lt": target_date_start}
+                "transaction_date": {"$lt": date}
             }},
             {"$group": {
                 "_id": None,
@@ -23204,10 +23206,11 @@ async def get_daily_closing(request: Request, date: Optional[str] = None):
         calc_opening = opening_balance + prev_inflow - prev_outflow
         
         # Calculate today's transactions
+        # FIX: Use transaction_date (string) for consistent date filtering
         today_txn_pipeline = [
             {"$match": {
                 "account_id": account_id,
-                "created_at": {"$gte": target_date_start, "$lte": target_date_end}
+                "transaction_date": date  # Exact string match for today's date
             }},
             {"$group": {
                 "_id": None,

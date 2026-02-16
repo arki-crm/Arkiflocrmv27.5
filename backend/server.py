@@ -34446,12 +34446,17 @@ async def create_purchase_return(return_data: PurchaseReturnCreate, request: Req
             "transaction_date": return_data.return_date,
             "transaction_type": "adjustment",
             "entry_type": "purchase_return",
+            "is_daybook_entry": True,  # FIX: Explicit daybook flag
+            "is_cashbook_entry": False,  # This is just journal entry, not cash movement yet
             "amount": return_data.expected_refund_amount,
             "description": f"Purchase Return: {invoice.get('vendor_name', 'Unknown')} - {return_data.return_reason}",
             "project_id": invoice.get("project_id"),
             "vendor_id": invoice.get("vendor_id"),
+            "vendor_name": invoice.get("vendor_name"),
             "reference_type": "purchase_return",
             "reference_id": return_id,
+            "source_module": "purchase_return",
+            "source_id": return_id,
             "refund_status": "pending",
             "created_by": user.user_id,
             "created_by_name": user_doc.get("name", "Unknown"),

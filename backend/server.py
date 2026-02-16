@@ -31868,7 +31868,14 @@ async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, requ
         "source_id": incentive_id,
         "reference_type": "incentive_payout",
         "reference_id": payment_id,
+        # FIX: Explicit flags for proper cashbook AND daybook inclusion
         "is_cashbook_entry": True,
+        "is_daybook_entry": True,
+        # Additional metadata
+        "employee_id": incentive.get("employee_id"),
+        "employee_name": incentive.get("employee_name", "Employee"),
+        "payment_category": "incentive",
+        "incentive_type": incentive.get("incentive_type"),
         "created_at": now.isoformat(),
         "created_by": user.user_id,
         "created_by_name": user_doc.get("name", "Unknown")

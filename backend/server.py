@@ -32074,7 +32074,14 @@ async def payout_commission(commission_id: str, data: CommissionPayoutRequest, r
         "source_id": commission_id,
         "reference_type": "commission_payout",
         "reference_id": payment_id,
+        # FIX: Explicit flags for proper cashbook AND daybook inclusion
         "is_cashbook_entry": True,
+        "is_daybook_entry": True,
+        # Additional metadata
+        "recipient_id": commission.get("recipient_id"),
+        "recipient_name": commission.get("recipient_name", "Recipient"),
+        "payment_category": "commission",
+        "commission_type": commission.get("commission_type"),
         "created_at": now.isoformat(),
         "created_by": user.user_id,
         "created_by_name": user_doc.get("name", "Unknown")

@@ -31311,46 +31311,21 @@ async def process_salary_with_deductions(data: SalaryProcessingRequest, request:
     default_statutory = DEFAULT_STATUTORY_DEDUCTIONS.get(emp_classification, [])
     provided_deduction_types = [d.deduction_type for d in data.deductions]
     
-    # Auto-add missing statutory deductions for permanent/probation employees
-    # Only if no statutory deductions were explicitly provided
-    has_any_statutory = any(DEDUCTION_TYPES.get(dt, {}).get("statutory", False) for dt in provided_deduction_types)
-    
+    # FIX: Do NOT auto-add statutory deductions unless explicitly requested
+    # Manual deductions should ONLY deduct the exact entered amount
+    # Statutory deductions (PF/ESI/PT) must be explicitly selected by user
     auto_added_deductions = []
-    if not has_any_statutory and emp_classification in ["permanent", "probation"]:
-        # Check if we should auto-add based on salary thresholds
-        # PF: Typically for salary > 15000 (configurable)
-        # ESI: Typically for salary <= 21000 (configurable)
-        gross = data.gross_salary
-        
-        for statutory_type in default_statutory:
-            if statutory_type == "pf" and gross >= 15000:
-                # Standard PF is 12% of basic (assuming basic = 50% of gross for simplicity)
-                pf_amount = round(gross * 0.5 * 0.12, 0)
-                auto_added_deductions.append({
-                    "deduction_type": "pf",
-                    "amount": pf_amount,
-                    "reason": "Auto-calculated PF (12% of basic)",
-                    "auto_calculated": True
-                })
-            elif statutory_type == "esi" and gross <= 21000:
-                # ESI is 0.75% of gross for employee contribution
-                esi_amount = round(gross * 0.0075, 0)
-                auto_added_deductions.append({
-                    "deduction_type": "esi", 
-                    "amount": esi_amount,
-                    "reason": "Auto-calculated ESI (0.75% of gross)",
-                    "auto_calculated": True
-                })
-            elif statutory_type == "professional_tax":
-                # Professional tax is typically a fixed amount based on state
-                pt_amount = 200 if gross >= 15000 else 0
-                if pt_amount > 0:
-                    auto_added_deductions.append({
-                        "deduction_type": "professional_tax",
-                        "amount": pt_amount,
-                        "reason": "Auto-calculated Professional Tax",
-                        "auto_calculated": True
-                    })
+    
+    # REMOVED: Auto-addition of PF/ESI/Professional Tax
+    # Previously, the system would auto-add these deductions if:
+    # 1. Employee was permanent/probation
+    # 2. No statutory deductions were explicitly provided
+    # This caused ₹1,000 manual deduction to become ₹2,012 (₹1000 + PF + ESI + PT)
+    #
+    # NEW BEHAVIOR: 
+    # - Manual deductions reduce Net Payable by EXACT entered amount
+    # - Statutory deductions must be explicitly added by user via the deduction form
+    # - No hidden calculations unless user explicitly selects statutory deductions
     
     # Validate statutory deductions for exempt classifications
     if emp_classification in STATUTORY_EXEMPT_CLASSIFICATIONS:
@@ -31362,18 +31337,8 @@ async def process_salary_with_deductions(data: SalaryProcessingRequest, request:
                 detail=f"Employee '{employee.get('name')}' is classified as '{emp_classification}' and is exempt from statutory deductions. Remove: {', '.join(statutory_names)}"
             )
     
-    # Combine provided deductions with auto-added ones
+    # Use ONLY provided deductions (no auto-additions)
     all_deductions = list(data.deductions)
-    for auto_ded in auto_added_deductions:
-        # Convert to StructuredDeduction-like object
-        class AutoDeduction:
-            def __init__(self, d):
-                self.deduction_type = d["deduction_type"]
-                self.amount = d["amount"]
-                self.reason = d["reason"]
-                self.custom_label = None
-                self.auto_calculated = d["auto_calculated"]
-        all_deductions.append(AutoDeduction(auto_ded))
     
     # Calculate deductions breakdown
     deduction_breakdown = []

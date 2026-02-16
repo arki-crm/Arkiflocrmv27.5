@@ -34591,6 +34591,7 @@ async def update_purchase_return_refund(
                     "transaction_type": "inflow",  # P0-FIX: Purchase refund = INFLOW
                     "entry_type": "purchase_return_refund",
                     "is_cashbook_entry": True,  # P0-FIX: Explicit cashbook flag
+                    "is_daybook_entry": True,   # FIX: Also mark for daybook
                     "amount": update.actual_refund_received,
                     "mode": update.refund_mode or "bank_transfer",
                     "category_id": "vendor_refund",
@@ -34601,6 +34602,9 @@ async def update_purchase_return_refund(
                     "vendor_id": return_doc.get("vendor_id"),
                     "reference_type": "purchase_return",
                     "reference_id": return_id,
+                    "refund_status": "completed",
+                    "source_module": "purchase_return",
+                    "source_id": return_id,
                     "is_verified": False,
                     "created_by": user.user_id,
                     "created_by_name": user_doc.get("name", "Unknown"),

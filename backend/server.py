@@ -34649,6 +34649,7 @@ async def update_purchase_return_refund(
             "transaction_type": "outflow",  # Reversal of inflow = outflow
             "entry_type": "purchase_refund_reversal",
             "is_cashbook_entry": True,
+            "is_daybook_entry": True,  # FIX: Also mark for daybook
             "amount": return_doc.get("actual_refund_received", 0),
             "mode": "adjustment",
             "category_id": "refund_reversal",
@@ -34660,6 +34661,8 @@ async def update_purchase_return_refund(
             "reference_type": "purchase_return",
             "reference_id": return_id,
             "original_transaction_id": return_doc.get("linked_transaction_id"),
+            "source_module": "purchase_return",
+            "source_id": return_id,
             "is_reversal": True,
             "is_verified": True,
             "created_by": user.user_id,

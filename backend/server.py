@@ -30208,6 +30208,14 @@ async def create_salary_payment(data: SalaryPaymentCreate, request: Request):
         "source_id": payment_id,
         "reference_type": "salary_payment",
         "reference_id": payment_id,
+        # FIX: Explicit cashbook flag for proper filtering
+        "is_cashbook_entry": True,
+        # FIX: Mark as daybook entry as well (all cash movements go to daybook)
+        "is_daybook_entry": True,
+        # Additional metadata for reports
+        "employee_id": data.employee_id,
+        "employee_name": salary_master.get("employee_name", "Unknown"),
+        "payment_category": data.payment_type,  # advance, salary, final_settlement
         "created_at": now.isoformat(),
         "created_by": user.user_id,
         "created_by_name": user_doc.get("name", "Unknown"),

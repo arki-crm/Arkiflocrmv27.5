@@ -67,6 +67,12 @@ SUBMISSION_CHECKLIST = {
         {"key": "budget_final_approval", "label": "Budget Has Client Approval", "required": True},
         {"key": "design_presentation_ready", "label": "Design Presentation Ready", "required": True}
     ],
+    "validation_internal_check": [
+        {"key": "design_quality_verified", "label": "Design Quality Verified", "required": True},
+        {"key": "technical_accuracy_checked", "label": "Technical Accuracy Checked", "required": True},
+        {"key": "client_brief_alignment", "label": "Aligned with Client Brief", "required": True},
+        {"key": "internal_review_complete", "label": "Internal Review Complete", "required": True}
+    ],
     "pre_production_signoff": [
         {"key": "gfc_drawings_complete", "label": "GFC Drawings Complete", "required": True},
         {"key": "boq_prepared", "label": "BOQ Prepared", "required": True},
@@ -74,6 +80,13 @@ SUBMISSION_CHECKLIST = {
         {"key": "site_measurements_verified", "label": "Site Measurements Verified", "required": True},
         {"key": "production_timeline_confirmed", "label": "Production Timeline Confirmed", "required": True},
         {"key": "client_signoff_ready", "label": "Ready for Client Sign-Off", "required": True}
+    ],
+    "kws_signoff_document": [
+        {"key": "kws_document_prepared", "label": "KWS Document Prepared", "required": True},
+        {"key": "scope_finalized", "label": "Scope of Work Finalized", "required": True},
+        {"key": "pricing_confirmed", "label": "Pricing Confirmed", "required": True},
+        {"key": "terms_conditions_included", "label": "Terms & Conditions Included", "required": True},
+        {"key": "pdf_signed_uploaded", "label": "Signed PDF Uploaded", "required": True}
     ]
 }
 

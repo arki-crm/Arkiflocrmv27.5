@@ -1296,7 +1296,7 @@ export default function Salaries() {
                   <div className="bg-amber-50 p-4 rounded-lg">
                     <p className="text-xs text-amber-600">Pending Approval</p>
                     <p className="text-xl font-bold text-amber-700">
-                      {formatCurrency(incentives.filter(i => i.status === 'pending').reduce((sum, i) => sum + (i.amount || 0), 0))}
+                      {formatCurrency(incentives.filter(i => ['pending', 'pending_approval', 'draft'].includes(i.status)).reduce((sum, i) => sum + (i.amount || 0), 0))}
                     </p>
                   </div>
                   <div className="bg-blue-50 p-4 rounded-lg">

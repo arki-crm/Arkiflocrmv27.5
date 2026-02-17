@@ -125,6 +125,7 @@ export default function PurchaseReturns() {
   useEffect(() => {
     fetchReturns();
     fetchInvoices();
+    fetchAccounts();
   }, [filters]);
 
   const fetchReturns = async () => {
@@ -156,6 +157,79 @@ export default function PurchaseReturns() {
       setInvoices(response.data.entries || []);
     } catch (err) {
       console.error('Failed to fetch invoices:', err);
+    }
+  };
+  
+  const fetchAccounts = async () => {
+    try {
+      const response = await axios.get(`${API}/accounting/accounts`, {
+        withCredentials: true
+      });
+      setAccounts(response.data || []);
+    } catch (err) {
+      console.error('Failed to fetch accounts:', err);
+    }
+  };
+  
+  // Open refund modal
+  const openRefundModal = (returnItem) => {
+    setSelectedReturn(returnItem);
+    setRefundData({
+      refund_status: 'completed',
+      actual_refund_received: returnItem.expected_refund_amount || returnItem.total_return_value || 0,
+      refund_date: new Date().toISOString().split('T')[0],
+      refund_mode: returnItem.refund_mode || 'bank_transfer',
+      refund_account_id: '',
+      loss_amount: 0,
+      loss_reason: '',
+      remarks: ''
+    });
+    setShowRefundModal(true);
+  };
+  
+  // Handle refund amount change and calculate loss
+  const handleRefundAmountChange = (value) => {
+    const amount = parseFloat(value) || 0;
+    const expected = selectedReturn?.expected_refund_amount || selectedReturn?.total_return_value || 0;
+    const loss = Math.max(0, expected - amount);
+    setRefundData(prev => ({
+      ...prev,
+      actual_refund_received: amount,
+      loss_amount: loss
+    }));
+  };
+  
+  // Submit refund settlement
+  const handleSubmitRefund = async () => {
+    if (!selectedReturn) return;
+    
+    if (refundData.refund_status !== 'no_refund' && !refundData.refund_account_id) {
+      toast.error('Please select an account to receive the refund');
+      return;
+    }
+    
+    try {
+      setSubmittingRefund(true);
+      await axios.put(`${API}/finance/purchase-returns/${selectedReturn.return_id}/refund`, {
+        refund_status: refundData.refund_status,
+        actual_refund_received: refundData.refund_status === 'no_refund' ? 0 : refundData.actual_refund_received,
+        refund_date: refundData.refund_date,
+        refund_mode: refundData.refund_mode,
+        refund_account_id: refundData.refund_account_id,
+        loss_amount: refundData.loss_amount,
+        loss_reason: refundData.loss_reason,
+        remarks: refundData.remarks
+      }, { withCredentials: true });
+      
+      toast.success('Refund recorded successfully');
+      setShowRefundModal(false);
+      setSelectedReturn(null);
+      fetchReturns();
+    } catch (err) {
+      console.error('Failed to record refund:', err);
+      toast.error(err.response?.data?.detail || 'Failed to record refund');
+    } finally {
+      setSubmittingRefund(false);
     }
   };
 

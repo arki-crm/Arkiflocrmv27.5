@@ -80,6 +80,22 @@ export default function PurchaseReturns() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
   
+  // Refund settlement state
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [selectedReturn, setSelectedReturn] = useState(null);
+  const [accounts, setAccounts] = useState([]);
+  const [refundData, setRefundData] = useState({
+    refund_status: 'completed',
+    actual_refund_received: 0,
+    refund_date: new Date().toISOString().split('T')[0],
+    refund_mode: 'bank_transfer',
+    refund_account_id: '',
+    loss_amount: 0,
+    loss_reason: '',
+    remarks: ''
+  });
+  const [submittingRefund, setSubmittingRefund] = useState(false);
+  
   // Filters
   const [filters, setFilters] = useState({
     refund_status: '',

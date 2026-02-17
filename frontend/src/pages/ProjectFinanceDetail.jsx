@@ -1308,7 +1308,6 @@ const ProjectFinanceDetail = () => {
                   <AlertTriangle className="w-4 h-4 inline mr-1 text-amber-600" />
                   Stages with payments cannot be removed. Edit percentages or add new stages.
                 </div>
-                </div>
                 <div className="space-y-3">
                   {editedSchedule.map((stage, index) => {
                     const isLocked = stage.status === 'paid' || stage.paid_amount > 0;

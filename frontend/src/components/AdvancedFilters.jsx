@@ -332,6 +332,7 @@ export const loadFiltersFromStorage = (type) => {
     endDate: '',
     designerId: 'all',
     holdStatus: 'all',
+    collaboratorId: 'all',
     sortBy: 'updated_at:desc'
   };
 };

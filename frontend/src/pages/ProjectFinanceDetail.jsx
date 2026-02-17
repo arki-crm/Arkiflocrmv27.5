@@ -1381,13 +1381,13 @@ const ProjectFinanceDetail = () => {
                 </Button>
                 <div className="flex justify-between items-center pt-3 border-t">
                   <span className="text-sm text-slate-600">Sign-off Value:</span>
-                  <span className="font-bold text-slate-900">{formatCurrency(paymentSchedule.signoff_value || paymentSchedule.contract_value)}</span>
+                  <span className="font-bold text-slate-900">{formatCurrency(normalizedPaymentSchedule.signoff_value || normalizedPaymentSchedule.contract_value)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-slate-600">Schedule Total:</span>
                   <span className={cn(
                     "font-bold",
-                    Math.abs(editedSchedule.reduce((sum, s) => sum + (s.calculated_amount || 0), 0) - paymentSchedule.contract_value) > 1 
+                    Math.abs(editedSchedule.reduce((sum, s) => sum + (s.calculated_amount || 0), 0) - (normalizedPaymentSchedule.signoff_value || normalizedPaymentSchedule.contract_value)) > 1 
                       ? "text-amber-600" 
                       : "text-green-600"
                   )}>

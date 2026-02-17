@@ -1338,18 +1338,49 @@ export default function Salaries() {
                           <p className="text-xs text-slate-400">{inc.trigger_event || inc.calculation_type}</p>
                         </div>
                         <div className="flex gap-2">
-                          {inc.status === 'pending' && (
-                            <Button size="sm" variant="outline" onClick={() => handleApproveIncentive(inc.incentive_id)}>
-                              Approve
-                            </Button>
+                          {/* Pending: Approve + Reject + Edit + Delete */}
+                          {(inc.status === 'pending' || inc.status === 'pending_approval' || inc.status === 'draft') && (
+                            <>
+                              <Button size="sm" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleApproveIncentive(inc.incentive_id)}>
+                                <Check className="w-3 h-3 mr-1" /> Approve
+                              </Button>
+                              <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => openRejectModal('incentive', inc.incentive_id)}>
+                                <X className="w-3 h-3 mr-1" /> Reject
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => {
+                                setEditIncentiveData({ ...inc });
+                                setShowEditIncentiveModal(true);
+                              }}>
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => handleDeleteIncentive(inc.incentive_id)}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </>
                           )}
-                          {(inc.status === 'pending' || inc.status === 'approved') && (
+                          {/* Approved: Payout only */}
+                          {inc.status === 'approved' && (
                             <Button size="sm" onClick={() => {
                               setSelectedIncentive(inc);
                               setShowPayoutModal(true);
                             }}>
-                              Pay
+                              <DollarSign className="w-3 h-3 mr-1" /> Pay
                             </Button>
+                          )}
+                          {/* Rejected: Delete only */}
+                          {inc.status === 'rejected' && (
+                            <>
+                              <Badge variant="destructive" className="text-xs">{inc.rejection_reason || 'Rejected'}</Badge>
+                              <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => handleDeleteIncentive(inc.incentive_id)}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
+                          {/* Paid: View only (locked) */}
+                          {inc.status === 'paid' && (
+                            <Badge variant="default" className="bg-green-100 text-green-700">
+                              <CheckCircle className="w-3 h-3 mr-1" /> Paid
+                            </Badge>
                           )}
                         </div>
                       </div>

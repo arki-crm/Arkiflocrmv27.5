@@ -8581,9 +8581,11 @@ async def add_lead_collaborator(lead_id: str, request: Request):
     
     new_collaborator = {
         "user_id": collaborator_user_id,
-        "role": collab_user.get("role", "Unknown"),
+        "role": custom_role or collab_user.get("role", "Collaborator"),  # Use custom role if provided
+        "system_role": collab_user.get("role", "Unknown"),  # Store original system role for reference
         "added_at": now.isoformat(),
         "added_by": user.user_id,
+        "added_by_name": user.name,
         "reason": reason,
         "can_edit": True  # Permission-based, not role-based
     }
@@ -8594,7 +8596,7 @@ async def add_lead_collaborator(lead_id: str, request: Request):
         "user_id": user.user_id,
         "user_name": user.name,
         "role": user.role,
-        "message": f"Added {collab_user.get('name', 'Unknown')} as collaborator",
+        "message": f"Added {collab_user.get('name', 'Unknown')} as {custom_role or 'collaborator'}",
         "is_system": True,
         "created_at": now.isoformat()
     }

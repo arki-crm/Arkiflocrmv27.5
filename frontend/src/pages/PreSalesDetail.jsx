@@ -86,6 +86,33 @@ const SOURCE_COLORS = {
   'Others': 'bg-slate-100 text-slate-700'
 };
 
+// Collaborator role options
+const COLLABORATOR_ROLES = [
+  'Pre-Sales Executive',
+  'Designer',
+  'Sales Manager',
+  'Telecaller',
+  'Trainee',
+  'Site Engineer',
+  'Coordinator',
+  'Other'
+];
+
+// Helper functions
+const getInitials = (name) => {
+  if (!name) return '?';
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+};
+
+const getAvatarColor = (name) => {
+  const colors = [
+    'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500',
+    'bg-amber-500', 'bg-cyan-500', 'bg-red-500', 'bg-indigo-500'
+  ];
+  const index = name ? name.charCodeAt(0) % colors.length : 0;
+  return colors[index];
+};
+
 // ============ CUSTOMER DETAILS PANEL ============
 const CustomerDetailsPanel = ({ lead, canEdit, onSave, saving }) => {
   const [isEditing, setIsEditing] = useState(false);

@@ -883,6 +883,86 @@ export default function PurchaseReturns() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Update Item Disposition Modal */}
+      <Dialog open={showDispositionModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowDispositionModal(false);
+          setDispositionReturn(null);
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-blue-600" />
+              Update Item Status
+            </DialogTitle>
+          </DialogHeader>
+          
+          {dispositionReturn && (
+            <div className="space-y-4 py-2">
+              {/* Return Summary */}
+              <div className="bg-slate-50 p-3 rounded-lg space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Return ID:</span>
+                  <span className="font-mono font-medium">{dispositionReturn.return_id}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Vendor:</span>
+                  <span className="font-medium">{dispositionReturn.vendor_name}</span>
+                </div>
+              </div>
+              
+              {/* Item Disposition */}
+              <div>
+                <Label>Item Status *</Label>
+                <Select value={dispositionData.item_disposition} onValueChange={(v) => setDispositionData(prev => ({ ...prev, item_disposition: v }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ITEM_DISPOSITIONS.map(d => (
+                      <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Location (for company-held items) */}
+              {['with_company_office', 'with_company_site'].includes(dispositionData.item_disposition) && (
+                <div>
+                  <Label>Location</Label>
+                  <Input
+                    placeholder="e.g., Main Office Godown, Site A"
+                    value={dispositionData.disposition_location}
+                    onChange={(e) => setDispositionData(prev => ({ ...prev, disposition_location: e.target.value }))}
+                  />
+                </div>
+              )}
+              
+              {/* Notes */}
+              <div>
+                <Label>Notes</Label>
+                <Textarea
+                  placeholder="Additional details..."
+                  value={dispositionData.disposition_notes}
+                  onChange={(e) => setDispositionData(prev => ({ ...prev, disposition_notes: e.target.value }))}
+                />
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDispositionModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitDisposition} disabled={submittingDisposition}>
+              {submittingDisposition && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Update Status
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

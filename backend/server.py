@@ -32505,8 +32505,9 @@ async def payout_commission(commission_id: str, data: CommissionPayoutRequest, r
     if not commission:
         raise HTTPException(status_code=404, detail="Commission not found")
     
-    if commission.get("status") == "paid":
-        raise HTTPException(status_code=400, detail="Commission already paid")
+    # Can only payout from approved status (or pending for backward compatibility)
+    if commission.get("status") not in ["pending", "pending_approval", "approved"]:
+        raise HTTPException(status_code=400, detail=f"Commission status is '{commission.get('status')}'. Can only pay when status is 'approved'.")
     
     # Verify account
     account = await db.accounting_accounts.find_one({"account_id": data.account_id})

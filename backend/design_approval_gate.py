@@ -23,28 +23,33 @@ GATED_MILESTONES = {
     "design_meeting_2": {
         "name": "Design Meeting 2 (3D Concept Freeze)",
         "description": "3D concept must be approved before client presentation",
-        "stage": "3D Design"
+        "stage": "3D Design",
+        "order": 1
     },
     "design_meeting_3_final": {
         "name": "Design Meeting 3",
         "description": "Final design must be approved before sign-off meeting",
-        "stage": "Final Design"
-    },
-    "validation_internal_check": {
-        "name": "Submit for Validation (Internal Check)",
-        "description": "Internal validation check before final presentation",
-        "stage": "Validation (Internal Check)"
+        "stage": "Final Design",
+        "order": 2
     },
     "pre_production_signoff": {
         "name": "Final Design Presentation",
         "description": "Design must be approved before BOQ/Order lock",
-        "stage": "Production Handover"
+        "stage": "Production Handover",
+        "order": 3
+    },
+    "validation_internal_check": {
+        "name": "Submit for Validation (Internal Check)",
+        "description": "Internal validation check before final presentation",
+        "stage": "Validation (Internal Check)",
+        "order": 4
     },
     "kws_signoff_document": {
         "name": "KWS Sign Off Document",
         "description": "Final KWS sign-off document with client signature",
         "stage": "KWS Sign Off Document Preparation",
-        "requires_pdf_upload": True
+        "requires_pdf_upload": True,
+        "order": 5
     }
 }
 

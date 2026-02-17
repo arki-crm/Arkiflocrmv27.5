@@ -40,7 +40,11 @@ import {
   Edit2,
   X,
   ChevronRight,
-  AlertTriangle
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
+  Users,
+  Plus
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';

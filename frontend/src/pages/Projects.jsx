@@ -241,6 +241,7 @@ const Projects = () => {
 
   useEffect(() => {
     fetchDesigners();
+    fetchUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.role]);
 

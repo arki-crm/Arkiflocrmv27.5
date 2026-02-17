@@ -516,10 +516,21 @@ export default function PurchaseReturns() {
                           </Badge>
                         </td>
                         <td className="p-3 text-center">
-                          <Badge variant="outline" className="text-xs">
-                            <DispositionIcon className="w-3 h-3 mr-1" />
-                            {ITEM_DISPOSITIONS.find(d => d.value === ret.item_disposition)?.label || ret.item_disposition}
-                          </Badge>
+                          <div className="flex items-center justify-center gap-1">
+                            <Badge variant="outline" className="text-xs">
+                              <DispositionIcon className="w-3 h-3 mr-1" />
+                              {ITEM_DISPOSITIONS.find(d => d.value === ret.item_disposition)?.label || ret.item_disposition}
+                            </Badge>
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="h-6 w-6 p-0"
+                              onClick={() => openDispositionModal(ret)}
+                              title="Update Item Status"
+                            >
+                              <Edit className="w-3 h-3 text-slate-400 hover:text-slate-600" />
+                            </Button>
+                          </div>
                         </td>
                         <td className="p-3 text-center">
                           {canRecordRefund ? (

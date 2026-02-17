@@ -101,6 +101,7 @@ export const AdvancedFilters = ({
     filters.timeFilter && filters.timeFilter !== 'all',
     filters.designerId && filters.designerId !== 'all',
     filters.holdStatus && filters.holdStatus !== 'all',
+    filters.collaboratorId && filters.collaboratorId !== 'all',
     filters.startDate && filters.endDate,
     filters.sortBy && filters.sortBy !== 'updated_at:desc'
   ].filter(Boolean).length;
@@ -124,6 +125,7 @@ export const AdvancedFilters = ({
       endDate: '',
       designerId: 'all',
       holdStatus: 'all',
+      collaboratorId: 'all',
       sortBy: 'updated_at:desc'
     });
   };

@@ -1249,6 +1249,101 @@ const PreSalesDetail = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Add Collaborator Modal */}
+      <Dialog open={showCollaboratorModal} onOpenChange={setShowCollaboratorModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-600" />
+              Add Collaborator
+            </DialogTitle>
+            <DialogDescription>
+              Add a team member to collaborate on this pre-sales lead.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* User Selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Select User *</label>
+              {loadingUsers ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                </div>
+              ) : (
+                <SearchableSelect
+                  options={allUsers
+                    .filter(u => 
+                      u.user_id !== lead?.assigned_to && 
+                      u.user_id !== lead?.created_by &&
+                      !collaborators.some(c => c.user_id === u.user_id)
+                    )
+                    .map(u => ({ value: u.user_id, label: `${u.name} (${u.role})` }))}
+                  value={selectedCollaborator}
+                  onValueChange={setSelectedCollaborator}
+                  placeholder="Search and select user..."
+                  emptyMessage="No users available"
+                />
+              )}
+            </div>
+
+            {/* Role Selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Collaboration Role *</label>
+              <Select value={collaboratorRole} onValueChange={setCollaboratorRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {COLLABORATOR_ROLES.map(role => (
+                    <SelectItem key={role} value={role}>{role}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Reason (optional) */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Reason (optional)</label>
+              <Textarea
+                value={collaboratorReason}
+                onChange={(e) => setCollaboratorReason(e.target.value)}
+                placeholder="Why is this person being added?"
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowCollaboratorModal(false);
+                setSelectedCollaborator('');
+                setCollaboratorRole('');
+                setCollaboratorReason('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddCollaborator}
+              disabled={addingCollaborator || !selectedCollaborator || !collaboratorRole}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {addingCollaborator ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                'Add Collaborator'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

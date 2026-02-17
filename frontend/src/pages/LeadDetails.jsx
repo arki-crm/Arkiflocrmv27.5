@@ -682,6 +682,20 @@ const LeadDetails = () => {
   const [addingCollaborator, setAddingCollaborator] = useState(false);
   const [selectedCollaborator, setSelectedCollaborator] = useState('');
   const [collaboratorReason, setCollaboratorReason] = useState('');
+  const [collaboratorRole, setCollaboratorRole] = useState('');
+  const [showCollaboratorDetails, setShowCollaboratorDetails] = useState(false);
+  
+  // Collaborator role options
+  const COLLABORATOR_ROLES = [
+    'Pre-Sales Executive',
+    'Designer',
+    'Sales Manager',
+    'Telecaller',
+    'Trainee',
+    'Site Engineer',
+    'Coordinator',
+    'Other'
+  ];
   
   // Hold/Activate/Deactivate state
   const [showHoldModal, setShowHoldModal] = useState(false);

@@ -15113,6 +15113,176 @@ async def delete_presales_file(presales_id: str, file_id: str, request: Request)
     
     return {"success": True}
 
+# ============ PRESALES COLLABORATORS ============
+
+@api_router.get("/presales/{presales_id}/collaborators")
+async def get_presales_collaborators(presales_id: str, request: Request):
+    """Get collaborators for a pre-sales lead"""
+    user = await get_current_user(request)
+    
+    presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
+    if not presales_lead:
+        raise HTTPException(status_code=404, detail="Pre-sales lead not found")
+    
+    collaborators = presales_lead.get("collaborators", [])
+    
+    # Enrich with user details
+    enriched = []
+    for collab in collaborators:
+        user_doc = await db.users.find_one({"user_id": collab.get("user_id")}, {"_id": 0})
+        if user_doc:
+            enriched.append({
+                **collab,
+                "name": user_doc.get("name", "Unknown"),
+                "email": user_doc.get("email", ""),
+                "picture": user_doc.get("picture")
+            })
+        else:
+            enriched.append(collab)
+    
+    return {"collaborators": enriched}
+
+@api_router.post("/presales/{presales_id}/collaborators")
+async def add_presales_collaborator(presales_id: str, request: Request):
+    """Add collaborator to a pre-sales lead - requires presales.update permission"""
+    user = await get_current_user(request)
+    body = await request.json()
+    
+    collaborator_user_id = body.get("user_id")
+    custom_role = body.get("role")  # Custom collaboration role
+    reason = body.get("reason", "Added by user")
+    
+    if not collaborator_user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+    
+    presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
+    if not presales_lead:
+        raise HTTPException(status_code=404, detail="Pre-sales lead not found")
+    
+    # Get user document for permission check
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not user_doc:
+        raise HTTPException(status_code=403, detail="User not found")
+    
+    # Permission check - owners can add, or need presales.update
+    is_owner = presales_lead.get("assigned_to") == user.user_id or presales_lead.get("created_by") == user.user_id
+    has_update = has_permission(user_doc, "presales.update")
+    has_view_all = has_permission(user_doc, "presales.view_all")
+    
+    if not is_owner and not has_update:
+        raise HTTPException(status_code=403, detail="Access denied - no presales.update permission")
+    
+    # Verify collaborator exists
+    collab_user = await db.users.find_one({"user_id": collaborator_user_id}, {"_id": 0})
+    if not collab_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if already a collaborator
+    existing_collaborators = presales_lead.get("collaborators", [])
+    if any(c.get("user_id") == collaborator_user_id for c in existing_collaborators):
+        raise HTTPException(status_code=400, detail="User is already a collaborator")
+    
+    now = datetime.now(timezone.utc)
+    
+    new_collaborator = {
+        "user_id": collaborator_user_id,
+        "role": custom_role or collab_user.get("role", "Collaborator"),
+        "system_role": collab_user.get("role", "Unknown"),
+        "added_at": now.isoformat(),
+        "added_by": user.user_id,
+        "added_by_name": user.name,
+        "reason": reason,
+        "can_edit": True
+    }
+    
+    # System comment
+    system_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": f"Added {collab_user.get('name', 'Unknown')} as {custom_role or 'collaborator'}",
+        "is_system": True,
+        "created_at": now.isoformat()
+    }
+    
+    await db.leads.update_one(
+        {"lead_id": presales_id},
+        {
+            "$push": {
+                "collaborators": new_collaborator,
+                "comments": system_comment
+            },
+            "$set": {"updated_at": now.isoformat()}
+        }
+    )
+    
+    return {
+        "success": True,
+        "collaborator": {
+            **new_collaborator,
+            "name": collab_user.get("name"),
+            "email": collab_user.get("email"),
+            "picture": collab_user.get("picture")
+        }
+    }
+
+@api_router.delete("/presales/{presales_id}/collaborators/{collaborator_user_id}")
+async def remove_presales_collaborator(presales_id: str, collaborator_user_id: str, request: Request):
+    """Remove collaborator from a pre-sales lead - requires presales.update permission"""
+    user = await get_current_user(request)
+    
+    presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
+    if not presales_lead:
+        raise HTTPException(status_code=404, detail="Pre-sales lead not found")
+    
+    # Get user document for permission check
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not user_doc:
+        raise HTTPException(status_code=403, detail="User not found")
+    
+    # Permission check - owners can remove, or need presales.update
+    is_owner = presales_lead.get("assigned_to") == user.user_id or presales_lead.get("created_by") == user.user_id
+    has_update = has_permission(user_doc, "presales.update")
+    
+    if not is_owner and not has_update:
+        raise HTTPException(status_code=403, detail="Access denied - no presales.update permission")
+    
+    # Find collaborator to remove
+    collaborators = presales_lead.get("collaborators", [])
+    collab_to_remove = next((c for c in collaborators if c.get("user_id") == collaborator_user_id), None)
+    
+    if not collab_to_remove:
+        raise HTTPException(status_code=404, detail="Collaborator not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Get name for comment
+    collab_user = await db.users.find_one({"user_id": collaborator_user_id}, {"_id": 0})
+    collab_name = collab_user.get("name", "Unknown") if collab_user else "Unknown"
+    
+    # System comment
+    system_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": f"Removed {collab_name} from collaborators",
+        "is_system": True,
+        "created_at": now.isoformat()
+    }
+    
+    await db.leads.update_one(
+        {"lead_id": presales_id},
+        {
+            "$pull": {"collaborators": {"user_id": collaborator_user_id}},
+            "$push": {"comments": system_comment},
+            "$set": {"updated_at": now.isoformat()}
+        }
+    )
+    
+    return {"success": True, "message": f"Removed {collab_name} from collaborators"}
+
 @api_router.post("/presales/{presales_id}/convert-to-lead")
 async def convert_presales_to_lead(presales_id: str, request: Request):
     """Convert qualified pre-sales lead to regular lead with PID generation (requires presales.convert)"""

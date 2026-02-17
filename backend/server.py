@@ -32165,7 +32165,7 @@ async def create_commission(data: CommissionRequest, request: Request):
         final_amount = (data.percentage_of * data.amount) / 100
     
     # Determine initial status (draft if explicitly set, else pending_approval)
-    initial_status = getattr(data, 'status', None) or "pending_approval"
+    initial_status = data.status or "pending_approval"
     if initial_status not in ["draft", "pending_approval"]:
         initial_status = "pending_approval"
     

@@ -712,6 +712,8 @@ const PreSalesDetail = () => {
   const [collaboratorRole, setCollaboratorRole] = useState('');
   const [collaboratorReason, setCollaboratorReason] = useState('');
   const [showCollaboratorDetails, setShowCollaboratorDetails] = useState(false);
+  const [collaboratorToRemove, setCollaboratorToRemove] = useState(null);
+  const [showRemoveCollaboratorDialog, setShowRemoveCollaboratorDialog] = useState(false);
 
   // Fetch pre-sales lead
   const fetchLead = async () => {

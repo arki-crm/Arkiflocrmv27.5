@@ -702,6 +702,17 @@ const PreSalesDetail = () => {
   const [isConverting, setIsConverting] = useState(false);
   const [showConvertDialog, setShowConvertDialog] = useState(false);
 
+  // Collaborators state
+  const [collaborators, setCollaborators] = useState([]);
+  const [showCollaboratorModal, setShowCollaboratorModal] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [addingCollaborator, setAddingCollaborator] = useState(false);
+  const [selectedCollaborator, setSelectedCollaborator] = useState('');
+  const [collaboratorRole, setCollaboratorRole] = useState('');
+  const [collaboratorReason, setCollaboratorReason] = useState('');
+  const [showCollaboratorDetails, setShowCollaboratorDetails] = useState(false);
+
   // Fetch pre-sales lead
   const fetchLead = async () => {
     try {

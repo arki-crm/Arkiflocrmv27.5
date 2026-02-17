@@ -1502,33 +1502,83 @@ const LeadDetails = () => {
                 canConfirmBookingPayment={canConfirmBookingPayment()}
               />
 
-              {/* 2. Collaborators Section - Compact */}
+              {/* 2. Collaborators Section - Enhanced */}
               <div className="border-t border-slate-200 pt-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5" />
                     Collaborators ({collaborators.length})
                   </h4>
-                  {canAddCollaborator() && (
-                    <Button 
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setShowCollaboratorModal(true);
-                        fetchAllUsers();
-                      }}
-                      className="h-6 text-xs px-2"
-                      data-testid="add-collaborator-btn"
-                    >
-                      <Plus className="w-3 h-3 mr-1" />
-                      Add
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {collaborators.length > 0 && (
+                      <Button 
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowCollaboratorDetails(!showCollaboratorDetails)}
+                        className="h-6 text-xs px-2"
+                        title={showCollaboratorDetails ? "Show compact view" : "Show details"}
+                      >
+                        {showCollaboratorDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      </Button>
+                    )}
+                    {canAddCollaborator() && (
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowCollaboratorModal(true);
+                          fetchAllUsers();
+                        }}
+                        className="h-6 text-xs px-2"
+                        data-testid="add-collaborator-btn"
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        Add
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 
                 {collaborators.length === 0 ? (
                   <p className="text-xs text-slate-400 text-center py-2">No collaborators</p>
+                ) : showCollaboratorDetails ? (
+                  /* Detailed View */
+                  <div className="space-y-2">
+                    {collaborators.map((collab, idx) => (
+                      <div 
+                        key={collab.user_id || idx}
+                        className="flex items-center justify-between p-2 bg-slate-50 rounded-lg group"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white",
+                            getAvatarColor(collab.name || 'U')
+                          )}>
+                            {getInitials(collab.name || 'U')}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-slate-700">{collab.name || 'Unknown'}</span>
+                            <span className="text-xs text-blue-600">{collab.role || 'Collaborator'}</span>
+                            <span className="text-[10px] text-slate-400">
+                              Added {collab.added_at ? new Date(collab.added_at).toLocaleDateString() : 'N/A'}
+                              {collab.added_by_name && ` by ${collab.added_by_name}`}
+                            </span>
+                          </div>
+                        </div>
+                        {canAddCollaborator() && (
+                          <button
+                            onClick={() => handleRemoveCollaborator(collab.user_id)}
+                            className="p-1 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Remove collaborator"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 ) : (
+                  /* Compact Avatar View */
                   <div className="flex flex-wrap gap-1.5">
                     {collaborators.slice(0, 5).map((collab, idx) => (
                       <div 

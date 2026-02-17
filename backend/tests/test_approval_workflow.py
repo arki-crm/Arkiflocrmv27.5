@@ -65,7 +65,7 @@ class TestIncentiveApprovalWorkflow:
             f"{BASE_URL}/finance/incentives",
             json={
                 "employee_id": test_employee.get("user_id"),
-                "incentive_type": "general_performance",
+                "incentive_type": "performance",
                 "amount": 5000,
                 "calculation_type": "fixed",
                 "notes": "Test incentive for approval workflow",
@@ -91,7 +91,7 @@ class TestIncentiveApprovalWorkflow:
             f"{BASE_URL}/finance/incentives",
             json={
                 "employee_id": test_employee.get("user_id"),
-                "incentive_type": "general_performance",
+                "incentive_type": "performance",
                 "amount": 3000,
                 "calculation_type": "fixed",
                 "notes": "Test incentive pending approval"
@@ -113,7 +113,7 @@ class TestIncentiveApprovalWorkflow:
             f"{BASE_URL}/finance/incentives",
             json={
                 "employee_id": test_employee.get("user_id"),
-                "incentive_type": "general_performance",
+                "incentive_type": "performance",
                 "amount": 2500,
                 "calculation_type": "fixed",
                 "notes": "Full lifecycle test",
@@ -183,7 +183,7 @@ class TestIncentiveApprovalWorkflow:
             f"{BASE_URL}/finance/incentives",
             json={
                 "employee_id": test_employee.get("user_id"),
-                "incentive_type": "general_performance",
+                "incentive_type": "performance",
                 "amount": 1500,
                 "calculation_type": "fixed",
                 "notes": "Rejection test"
@@ -220,7 +220,7 @@ class TestIncentiveApprovalWorkflow:
             f"{BASE_URL}/finance/incentives",
             json={
                 "employee_id": test_employee.get("user_id"),
-                "incentive_type": "general_performance",
+                "incentive_type": "performance",
                 "amount": 1000,
                 "calculation_type": "fixed",
                 "notes": "Edit lock test"
@@ -258,7 +258,7 @@ class TestIncentiveApprovalWorkflow:
             f"{BASE_URL}/finance/incentives",
             json={
                 "employee_id": test_employee.get("user_id"),
-                "incentive_type": "general_performance",
+                "incentive_type": "performance",
                 "amount": 1000,
                 "calculation_type": "fixed",
                 "notes": "Delete lock test"
@@ -502,7 +502,7 @@ class TestAuditTrail:
             f"{BASE_URL}/finance/incentives",
             json={
                 "employee_id": test_employee.get("user_id"),
-                "incentive_type": "general_performance",
+                "incentive_type": "performance",
                 "amount": 500,
                 "calculation_type": "fixed",
                 "notes": "Audit trail test"

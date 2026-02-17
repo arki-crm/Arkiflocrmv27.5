@@ -684,6 +684,8 @@ const LeadDetails = () => {
   const [collaboratorReason, setCollaboratorReason] = useState('');
   const [collaboratorRole, setCollaboratorRole] = useState('');
   const [showCollaboratorDetails, setShowCollaboratorDetails] = useState(false);
+  const [collaboratorToRemove, setCollaboratorToRemove] = useState(null);
+  const [showRemoveCollaboratorDialog, setShowRemoveCollaboratorDialog] = useState(false);
   
   // Collaborator role options
   const COLLABORATOR_ROLES = [

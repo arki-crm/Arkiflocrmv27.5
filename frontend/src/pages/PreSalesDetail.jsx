@@ -1355,6 +1355,32 @@ const PreSalesDetail = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Remove Collaborator Confirmation Dialog */}
+      <AlertDialog open={showRemoveCollaboratorDialog} onOpenChange={setShowRemoveCollaboratorDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Collaborator</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove <strong>{collaboratorToRemove?.name || 'this collaborator'}</strong> from this lead?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowRemoveCollaboratorDialog(false);
+              setCollaboratorToRemove(null);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemoveCollaborator}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -32095,21 +32095,34 @@ async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, requ
         {"$inc": {"current_balance": -incentive.get("amount", 0)}}
     )
     
+    # Add history entry for payout
+    history_entry = {
+        "action": "paid",
+        "status": "paid",
+        "by": user.user_id,
+        "by_name": user_doc.get("name", "Unknown"),
+        "at": now.isoformat(),
+        "notes": f"Paid ₹{incentive.get('amount', 0)} via {data.account_id}"
+    }
+    
     # Update incentive record
     await db.finance_incentives.update_one(
         {"incentive_id": incentive_id},
-        {"$set": {
-            "status": "paid",
-            "payment_id": payment_id,
-            "transaction_id": transaction_id,
-            "paid_by": user.user_id,
-            "paid_by_name": user_doc.get("name", "Unknown"),
-            "paid_at": now,
-            "payment_date": data.payment_date,
-            "payment_account_id": data.account_id,
-            "payment_notes": data.notes,
-            "updated_at": now
-        }}
+        {
+            "$set": {
+                "status": "paid",
+                "payment_id": payment_id,
+                "transaction_id": transaction_id,
+                "paid_by": user.user_id,
+                "paid_by_name": user_doc.get("name", "Unknown"),
+                "paid_at": now,
+                "payment_date": data.payment_date,
+                "payment_account_id": data.account_id,
+                "payment_notes": data.notes,
+                "updated_at": now
+            },
+            "$push": {"history": history_entry}
+        }
     )
     
     return {

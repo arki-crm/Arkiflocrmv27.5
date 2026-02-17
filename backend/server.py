@@ -17600,7 +17600,8 @@ async def create_design_submission(
         submitted_by_name=user.name,
         version=version,
         deadline=deadline,
-        previous_submission_id=previous_submission_id
+        previous_submission_id=previous_submission_id,
+        drive_link=submission_data.drive_link
     )
     
     await db.design_submissions.insert_one(submission_doc)

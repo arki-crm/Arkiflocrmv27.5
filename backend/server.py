@@ -32026,8 +32026,9 @@ async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, requ
     if not incentive:
         raise HTTPException(status_code=404, detail="Incentive not found")
     
-    if incentive.get("status") not in ["pending", "approved"]:
-        raise HTTPException(status_code=400, detail=f"Incentive status is {incentive.get('status')}, cannot payout")
+    # Can only payout from approved status (or pending for backward compatibility)
+    if incentive.get("status") not in ["pending", "pending_approval", "approved"]:
+        raise HTTPException(status_code=400, detail=f"Incentive status is '{incentive.get('status')}'. Can only pay when status is 'approved'.")
     
     # Verify account
     account = await db.accounting_accounts.find_one({"account_id": data.account_id})

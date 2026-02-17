@@ -1410,7 +1410,7 @@ export default function Salaries() {
             <CardContent>
               <div className="space-y-4">
                 {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="bg-indigo-50 p-4 rounded-lg">
                     <p className="text-xs text-indigo-600">Total Commissions</p>
                     <p className="text-xl font-bold text-indigo-700">
@@ -1418,9 +1418,15 @@ export default function Salaries() {
                     </p>
                   </div>
                   <div className="bg-amber-50 p-4 rounded-lg">
-                    <p className="text-xs text-amber-600">Pending</p>
+                    <p className="text-xs text-amber-600">Pending Approval</p>
                     <p className="text-xl font-bold text-amber-700">
-                      {formatCurrency(commissions.filter(c => c.status === 'pending').reduce((sum, c) => sum + (c.amount || 0), 0))}
+                      {formatCurrency(commissions.filter(c => ['pending', 'pending_approval', 'draft'].includes(c.status)).reduce((sum, c) => sum + (c.amount || 0), 0))}
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <p className="text-xs text-blue-600">Approved</p>
+                    <p className="text-xl font-bold text-blue-700">
+                      {formatCurrency(commissions.filter(c => c.status === 'approved').reduce((sum, c) => sum + (c.amount || 0), 0))}
                     </p>
                   </div>
                   <div className="bg-green-50 p-4 rounded-lg">

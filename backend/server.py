@@ -31098,7 +31098,6 @@ class CommissionRequest(BaseModel):
 
 class CommissionPayoutRequest(BaseModel):
     """Process commission payout"""
-    commission_id: str
     account_id: str
     payment_date: str
     notes: Optional[str] = None

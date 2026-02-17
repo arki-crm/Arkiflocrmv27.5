@@ -8536,6 +8536,7 @@ async def add_lead_collaborator(lead_id: str, request: Request):
     body = await request.json()
     
     collaborator_user_id = body.get("user_id")
+    custom_role = body.get("role")  # Custom collaboration role
     reason = body.get("reason", "Added by user")
     
     if not collaborator_user_id:

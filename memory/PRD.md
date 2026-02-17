@@ -1353,7 +1353,9 @@ Lead Allocated → BC Call Done → BOQ Shared → Site Meeting → Revised BOQ 
 
 ### CRM Modules
 - [x] Pre-Sales management
+- [x] **Pre-Sales Collaborators** - Add collaborators to presales leads with searchable user picker and role assignment
 - [x] Lead management with conversion flow
+- [x] **Lead Collaborators** - Add collaborators to leads with searchable user picker and role assignment
 - [x] **Lead actions (comments, stage updates)** - permission-based enforcement
 - [x] Project management with multi-stage milestones
 - [x] Files, Notes, Collaborators per project

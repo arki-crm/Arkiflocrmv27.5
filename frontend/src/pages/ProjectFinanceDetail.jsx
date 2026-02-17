@@ -136,6 +136,81 @@ const ProjectFinanceDetail = () => {
 
   const isAdmin = user?.role === 'Admin';
 
+  // Normalize payment schedule to ensure total matches signoff/contract value
+  const normalizedPaymentSchedule = useMemo(() => {
+    if (!paymentSchedule) return null;
+    
+    const signoffValue = paymentSchedule.signoff_value || paymentSchedule.contract_value || 0;
+    const stages = paymentSchedule.stages || [];
+    
+    if (stages.length === 0 || signoffValue <= 0) {
+      return paymentSchedule;
+    }
+    
+    // Calculate total fixed amounts and total percentage
+    let totalFixed = 0;
+    let totalPercentage = 0;
+    
+    stages.forEach(stage => {
+      if (stage.fixed_amount && !stage.percentage) {
+        totalFixed += stage.fixed_amount;
+      } else if (stage.percentage) {
+        totalPercentage += stage.percentage;
+      }
+    });
+    
+    // Remaining amount after fixed amounts
+    const remainingForPercentages = signoffValue - totalFixed;
+    
+    // Recalculate amounts
+    const normalizedStages = stages.map(stage => {
+      let calculatedAmount;
+      if (stage.fixed_amount && !stage.percentage) {
+        // Fixed amount stays the same
+        calculatedAmount = stage.fixed_amount;
+      } else if (stage.percentage) {
+        // Calculate percentage of remaining amount (after fixed amounts)
+        // Normalize: if percentages = 95%, each stage gets (percentage/95) * remaining
+        if (totalPercentage > 0) {
+          const normalizedPct = stage.percentage / totalPercentage;
+          calculatedAmount = Math.round(remainingForPercentages * normalizedPct);
+        } else {
+          calculatedAmount = 0;
+        }
+      } else {
+        calculatedAmount = stage.calculated_amount || 0;
+      }
+      
+      return {
+        ...stage,
+        calculated_amount: calculatedAmount
+      };
+    });
+    
+    // Ensure exact total by adjusting the last percentage-based stage
+    const currentTotal = normalizedStages.reduce((sum, s) => sum + (s.calculated_amount || 0), 0);
+    const diff = signoffValue - currentTotal;
+    
+    if (diff !== 0) {
+      // Find last percentage-based stage to adjust
+      for (let i = normalizedStages.length - 1; i >= 0; i--) {
+        if (normalizedStages[i].percentage) {
+          normalizedStages[i].calculated_amount += diff;
+          break;
+        }
+      }
+    }
+    
+    const newTotal = normalizedStages.reduce((sum, s) => sum + (s.calculated_amount || 0), 0);
+    
+    return {
+      ...paymentSchedule,
+      stages: normalizedStages,
+      total_expected: newTotal,
+      balance_remaining: signoffValue - paymentSchedule.total_received
+    };
+  }, [paymentSchedule]);
+
   const fetchData = async () => {
     try {
       setLoading(true);

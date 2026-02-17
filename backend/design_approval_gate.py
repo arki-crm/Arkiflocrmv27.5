@@ -168,7 +168,8 @@ def create_submission_document(
     submitted_by_name: str,
     version: int = 1,
     deadline: str = None,
-    previous_submission_id: str = None
+    previous_submission_id: str = None,
+    drive_link: str = None
 ) -> Dict:
     """Create a submission document for storage"""
     now = datetime.now(timezone.utc)
@@ -214,6 +215,7 @@ def create_submission_document(
         "design_notes": design_notes,
         "concept_summary": concept_summary,
         "constraints_notes": constraints_notes,
+        "drive_link": drive_link,
         
         # Submission info
         "submitted_by": submitted_by,

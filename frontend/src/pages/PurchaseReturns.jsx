@@ -244,6 +244,41 @@ export default function PurchaseReturns() {
       setSubmittingRefund(false);
     }
   };
+  
+  // Open disposition modal
+  const openDispositionModal = (returnItem) => {
+    setDispositionReturn(returnItem);
+    setDispositionData({
+      item_disposition: returnItem.item_disposition || 'pending_decision',
+      disposition_location: returnItem.disposition_location || '',
+      disposition_notes: returnItem.disposition_notes || ''
+    });
+    setShowDispositionModal(true);
+  };
+  
+  // Submit disposition update
+  const handleSubmitDisposition = async () => {
+    if (!dispositionReturn) return;
+    
+    try {
+      setSubmittingDisposition(true);
+      await axios.put(`${API}/finance/purchase-returns/${dispositionReturn.return_id}/disposition`, {
+        item_disposition: dispositionData.item_disposition,
+        disposition_location: dispositionData.disposition_location,
+        disposition_notes: dispositionData.disposition_notes
+      }, { withCredentials: true });
+      
+      toast.success('Item status updated');
+      setShowDispositionModal(false);
+      setDispositionReturn(null);
+      fetchReturns();
+    } catch (err) {
+      console.error('Failed to update disposition:', err);
+      toast.error(err.response?.data?.detail || 'Failed to update item status');
+    } finally {
+      setSubmittingDisposition(false);
+    }
+  };
 
   const handleInvoiceSelect = (invoiceId) => {
     const invoice = invoices.find(i => i.execution_id === invoiceId);

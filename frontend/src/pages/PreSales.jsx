@@ -110,6 +110,7 @@ const PreSales = () => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [seeding, setSeeding] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
   
   // Advanced filters - loaded from localStorage
   const [advancedFilters, setAdvancedFilters] = useState(() => loadFiltersFromStorage('presales'));
@@ -121,6 +122,20 @@ const PreSales = () => {
       navigate('/dashboard', { replace: true });
     }
   }, [user, navigate]);
+  
+  // Fetch all users for collaborator filter
+  const fetchUsers = async () => {
+    try {
+      const response = await axios.get(`${API}/users`, { withCredentials: true });
+      setAllUsers(response.data || []);
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
+    }
+  };
+  
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   // Fetch leads
   const fetchLeads = async () => {

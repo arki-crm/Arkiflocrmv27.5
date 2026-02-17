@@ -426,12 +426,41 @@ const DesignApprovalPanel = ({ projectId, canSubmit = false, isManager = false, 
             </DialogHeader>
 
             <div className="space-y-6 py-4">
-              {/* File Upload */}
+              {/* Drive Link Input (Required for all gates) */}
               <div>
-                <Label className="text-sm font-medium">Design Files *</Label>
-                <p className="text-xs text-slate-500 mb-2">Upload renders, drawings, PDFs</p>
+                <Label className="text-sm font-medium">Google Drive Link *</Label>
+                <p className="text-xs text-slate-500 mb-2">Share folder link with design files</p>
+                <Input
+                  type="url"
+                  value={submitForm.drive_link}
+                  onChange={(e) => setSubmitForm(prev => ({ ...prev, drive_link: e.target.value }))}
+                  placeholder="https://drive.google.com/drive/folders/..."
+                  className="font-mono text-sm"
+                />
+              </div>
+              
+              {/* File Upload - Only enabled for KWS Sign Off Document */}
+              <div>
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  PDF Upload
+                  {selectedMilestone?.milestone_key === 'kws_signoff_document' ? (
+                    <span className="text-red-500">*</span>
+                  ) : (
+                    <Badge variant="outline" className="text-xs text-slate-400">Optional</Badge>
+                  )}
+                </Label>
+                <p className="text-xs text-slate-500 mb-2">
+                  {selectedMilestone?.milestone_key === 'kws_signoff_document' 
+                    ? 'Upload signed KWS document (PDF required)'
+                    : 'PDF upload disabled - use Drive Link above'}
+                </p>
                 
-                <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center hover:border-indigo-300 transition-colors">
+                <div className={cn(
+                  "border-2 border-dashed rounded-lg p-4 text-center transition-colors",
+                  selectedMilestone?.milestone_key === 'kws_signoff_document'
+                    ? "border-slate-200 hover:border-indigo-300 cursor-pointer"
+                    : "border-slate-100 bg-slate-50 cursor-not-allowed opacity-60"
+                )}>
                   <Input
                     type="file"
                     multiple
@@ -439,11 +468,23 @@ const DesignApprovalPanel = ({ projectId, canSubmit = false, isManager = false, 
                     onChange={handleFileUpload}
                     className="hidden"
                     id="design-file-upload"
+                    disabled={selectedMilestone?.milestone_key !== 'kws_signoff_document'}
                   />
-                  <label htmlFor="design-file-upload" className="cursor-pointer">
+                  <label 
+                    htmlFor="design-file-upload" 
+                    className={selectedMilestone?.milestone_key === 'kws_signoff_document' ? "cursor-pointer" : "cursor-not-allowed"}
+                  >
                     <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                    <p className="text-sm text-slate-600">Click to upload files</p>
-                    <p className="text-xs text-slate-400">Images, PDFs, CAD files</p>
+                    <p className="text-sm text-slate-600">
+                      {selectedMilestone?.milestone_key === 'kws_signoff_document' 
+                        ? 'Click to upload signed PDF'
+                        : 'Upload disabled for this gate'}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {selectedMilestone?.milestone_key === 'kws_signoff_document' 
+                        ? 'Signed KWS document required'
+                        : 'Use Drive Link instead'}
+                    </p>
                   </label>
                 </div>
 

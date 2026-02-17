@@ -77,17 +77,21 @@ const HOLD_STATUS_OPTIONS = [
  * @param {Object} filters - Current filter state
  * @param {Function} onFiltersChange - Callback when filters change
  * @param {Array} designers - List of designers for dropdown
+ * @param {Array} users - List of users for collaborator filter
  * @param {string} type - 'leads' | 'projects' | 'presales'
  * @param {boolean} showDesignerFilter - Whether to show designer filter
  * @param {boolean} showHoldStatus - Whether to show hold status filter (projects only)
+ * @param {boolean} showCollaboratorFilter - Whether to show collaborator filter
  */
 export const AdvancedFilters = ({
   filters,
   onFiltersChange,
   designers = [],
+  users = [],
   type = 'leads',
   showDesignerFilter = false,
   showHoldStatus = false,
+  showCollaboratorFilter = false,
   className
 }) => {
   const sortOptions = SORT_OPTIONS[type] || SORT_OPTIONS.leads;

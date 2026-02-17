@@ -219,6 +219,32 @@ export const AdvancedFilters = ({
         </Select>
       )}
 
+      {/* Collaborator / Team Member Filter */}
+      {showCollaboratorFilter && users.length > 0 && (
+        <Select 
+          value={filters.collaboratorId || 'all'} 
+          onValueChange={(v) => updateFilter('collaboratorId', v)}
+        >
+          <SelectTrigger 
+            className={cn(
+              "h-8 w-[180px]",
+              (filters.collaboratorId && filters.collaboratorId !== 'all') && "border-blue-500 bg-blue-50"
+            )}
+          >
+            <Users className="h-3.5 w-3.5 mr-1.5" />
+            <SelectValue placeholder="Team Member" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Team Members</SelectItem>
+            {users.map(u => (
+              <SelectItem key={u.user_id} value={u.user_id}>
+                {u.name} ({u.role})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
       {/* Hold Status Filter (Projects only) */}
       {showHoldStatus && (
         <Select 

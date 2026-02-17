@@ -35,7 +35,8 @@ import {
   Calendar,
   ChevronRight,
   Shield,
-  History
+  History,
+  Link
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';

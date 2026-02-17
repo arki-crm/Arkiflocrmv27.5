@@ -158,6 +158,7 @@ const Projects = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [seeding, setSeeding] = useState(false);
   const [designers, setDesigners] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   
   // Advanced filters - loaded from localStorage
   const [advancedFilters, setAdvancedFilters] = useState(() => loadFiltersFromStorage('projects'));
@@ -170,6 +171,16 @@ const Projects = () => {
       setDesigners(response.data || []);
     } catch (error) {
       console.warn('Failed to fetch designers:', error);
+    }
+  };
+  
+  // Fetch all users for collaborator filter
+  const fetchUsers = async () => {
+    try {
+      const response = await axios.get(`${API}/users`, { withCredentials: true });
+      setAllUsers(response.data || []);
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
     }
   };
 

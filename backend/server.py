@@ -31669,6 +31669,11 @@ async def create_incentive(data: IncentiveRequest, request: Request):
     if data.calculation_type == "percentage" and data.percentage_of:
         final_amount = (data.percentage_of * data.amount) / 100
     
+    # Determine initial status (draft if explicitly set, else pending_approval)
+    initial_status = getattr(data, 'status', None) or "pending_approval"
+    if initial_status not in ["draft", "pending_approval"]:
+        initial_status = "pending_approval"
+    
     incentive_record = {
         "incentive_id": incentive_id,
         "employee_id": data.employee_id,
@@ -31685,9 +31690,30 @@ async def create_incentive(data: IncentiveRequest, request: Request):
         "amount": final_amount,
         "trigger_event": data.trigger_event,
         "notes": data.notes,
-        "status": "pending",  # pending, approved, paid, cancelled
+        # Enhanced status: draft, pending_approval, approved, paid, rejected
+        "status": initial_status,
         "payment_id": None,
         "transaction_id": None,
+        # Audit fields
+        "approved_by": None,
+        "approved_by_name": None,
+        "approved_at": None,
+        "rejected_by": None,
+        "rejected_by_name": None,
+        "rejected_at": None,
+        "rejection_reason": None,
+        "paid_by": None,
+        "paid_by_name": None,
+        "paid_at": None,
+        # History log
+        "history": [{
+            "action": "created",
+            "status": initial_status,
+            "by": user.user_id,
+            "by_name": user_doc.get("name", "Unknown"),
+            "at": now.isoformat(),
+            "notes": f"Created as {initial_status}"
+        }],
         "created_by": user.user_id,
         "created_by_name": user_doc.get("name", "Unknown"),
         "created_at": now,

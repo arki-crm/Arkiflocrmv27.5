@@ -1458,14 +1458,50 @@ export default function Salaries() {
                           <p className="font-bold text-lg">{formatCurrency(com.amount)}</p>
                           <p className="text-xs text-slate-400">{com.recipient_type}</p>
                         </div>
-                        <div>
-                          {com.status === 'pending' && (
+                        <div className="flex gap-2">
+                          {/* Pending: Approve + Reject + Edit + Delete */}
+                          {(com.status === 'pending' || com.status === 'pending_approval' || com.status === 'draft') && (
+                            <>
+                              <Button size="sm" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleApproveCommission(com.commission_id)}>
+                                <Check className="w-3 h-3 mr-1" /> Approve
+                              </Button>
+                              <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => openRejectModal('commission', com.commission_id)}>
+                                <X className="w-3 h-3 mr-1" /> Reject
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => {
+                                setEditCommissionData({ ...com });
+                                setShowEditCommissionModal(true);
+                              }}>
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => handleDeleteCommission(com.commission_id)}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
+                          {/* Approved: Payout only */}
+                          {com.status === 'approved' && (
                             <Button size="sm" onClick={() => {
                               setSelectedCommission(com);
                               setShowPayoutModal(true);
                             }}>
-                              Pay
+                              <DollarSign className="w-3 h-3 mr-1" /> Pay
                             </Button>
+                          )}
+                          {/* Rejected: Delete only */}
+                          {com.status === 'rejected' && (
+                            <>
+                              <Badge variant="destructive" className="text-xs">{com.rejection_reason || 'Rejected'}</Badge>
+                              <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => handleDeleteCommission(com.commission_id)}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
+                          {/* Paid: View only (locked) */}
+                          {com.status === 'paid' && (
+                            <Badge variant="default" className="bg-green-100 text-green-700">
+                              <CheckCircle className="w-3 h-3 mr-1" /> Paid
+                            </Badge>
                           )}
                         </div>
                       </div>

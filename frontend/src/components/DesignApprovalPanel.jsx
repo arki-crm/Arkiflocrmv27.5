@@ -59,7 +59,8 @@ const DesignApprovalPanel = ({ projectId, canSubmit = false, isManager = false, 
     checklist: [],
     design_notes: '',
     concept_summary: '',
-    constraints_notes: ''
+    constraints_notes: '',
+    drive_link: ''
   });
 
   // Review form state

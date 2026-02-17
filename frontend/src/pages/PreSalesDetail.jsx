@@ -55,6 +55,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
+import { SearchableSelect } from '../components/ui/searchable-select';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 

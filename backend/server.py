@@ -4629,7 +4629,9 @@ async def complete_substage(project_id: str, request: Request):
     DESIGN_APPROVAL_GATED_MILESTONES = {
         "design_meeting_2": "design_meeting_2",  # Maps substage_id to gated_milestone_key
         "design_meeting_3": "design_meeting_3_final",
-        "final_design_presentation": "pre_production_signoff"
+        "validation_internal_check": "validation_internal_check",
+        "final_design_presentation": "pre_production_signoff",
+        "kws_signoff_document": "kws_signoff_document"
     }
     
     if substage_id in DESIGN_APPROVAL_GATED_MILESTONES:
@@ -5042,7 +5044,9 @@ async def update_percentage_substage(project_id: str, request: Request):
     DESIGN_APPROVAL_GATED_MILESTONES = {
         "design_meeting_2": "design_meeting_2",  # Maps substage_id to gated_milestone_key
         "design_meeting_3": "design_meeting_3_final",
-        "final_design_presentation": "pre_production_signoff"
+        "validation_internal_check": "validation_internal_check",
+        "final_design_presentation": "pre_production_signoff",
+        "kws_signoff_document": "kws_signoff_document"
     }
     
     if substage_id in DESIGN_APPROVAL_GATED_MILESTONES:

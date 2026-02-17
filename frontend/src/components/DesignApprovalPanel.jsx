@@ -116,7 +116,8 @@ const DesignApprovalPanel = ({ projectId, canSubmit = false, isManager = false, 
       checklist: checklistTemplate.map(item => ({ ...item, checked: false, notes: '' })),
       design_notes: '',
       concept_summary: '',
-      constraints_notes: ''
+      constraints_notes: '',
+      drive_link: ''
     });
     setShowSubmitModal(true);
   };

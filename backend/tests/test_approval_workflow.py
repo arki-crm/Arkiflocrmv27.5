@@ -7,7 +7,7 @@ import pytest
 import requests
 from datetime import datetime
 
-BASE_URL = "https://crm-finance-hub-1.preview.emergentagent.com/api"
+BASE_URL = "https://team-collab-45.preview.emergentagent.com/api"
 
 # Test credentials
 FOUNDER_EMAIL = "sidheeq.arkidots@gmail.com"

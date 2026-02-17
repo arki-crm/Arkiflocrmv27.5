@@ -663,18 +663,25 @@ const DesignApprovalPanel = ({ projectId, canSubmit = false, isManager = false, 
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Checklist Status</Label>
                   <div className="space-y-1">
-                    {selectedSubmission.checklist?.map((item) => (
-                      <div key={item.key} className="flex items-center gap-2 text-sm">
-                        {item.checked ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-slate-300" />
-                        )}
-                        <span className={item.checked ? "text-slate-700" : "text-slate-400"}>
-                          {item.label}
-                        </span>
-                      </div>
-                    ))}
+                    {selectedSubmission.checklist && selectedSubmission.checklist.length > 0 ? (
+                      selectedSubmission.checklist.map((item, idx) => (
+                        <div key={item.key || idx} className="flex items-center gap-2 text-sm">
+                          {item.checked ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-slate-300" />
+                          )}
+                          <span className={item.checked ? "text-slate-700" : "text-slate-400"}>
+                            {item.label}
+                          </span>
+                          {item.required && !item.checked && (
+                            <span className="text-xs text-red-400">(Required)</span>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-400 italic">No checklist items</p>
+                    )}
                   </div>
                 </div>
 

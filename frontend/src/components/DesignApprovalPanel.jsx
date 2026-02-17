@@ -618,24 +618,46 @@ const DesignApprovalPanel = ({ projectId, canSubmit = false, isManager = false, 
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Uploaded Files</Label>
                   <div className="space-y-1">
-                    {selectedSubmission.files?.map((file) => (
-                      <a
-                        key={file.file_id}
-                        href={file.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 p-2 bg-slate-50 rounded hover:bg-slate-100"
-                      >
-                        {file.file_type === 'render' ? (
-                          <Image className="w-4 h-4 text-indigo-500" />
-                        ) : (
-                          <FileText className="w-4 h-4 text-indigo-500" />
-                        )}
-                        <span className="text-sm text-indigo-600 hover:underline">{file.file_name}</span>
-                      </a>
-                    ))}
+                    {selectedSubmission.files?.length > 0 ? (
+                      selectedSubmission.files.map((file) => (
+                        <a
+                          key={file.file_id}
+                          href={file.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 p-2 bg-slate-50 rounded hover:bg-slate-100"
+                        >
+                          {file.file_type === 'render' ? (
+                            <Image className="w-4 h-4 text-indigo-500" />
+                          ) : (
+                            <FileText className="w-4 h-4 text-indigo-500" />
+                          )}
+                          <span className="text-sm text-indigo-600 hover:underline">{file.file_name}</span>
+                        </a>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-400 italic">No files uploaded</p>
+                    )}
                   </div>
                 </div>
+                
+                {/* Drive Link */}
+                {selectedSubmission.drive_link && (
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Google Drive Link</Label>
+                    <a
+                      href={selectedSubmission.drive_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 p-2 bg-blue-50 rounded hover:bg-blue-100 border border-blue-200"
+                    >
+                      <Link className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm text-blue-600 hover:underline truncate">
+                        {selectedSubmission.drive_link}
+                      </span>
+                    </a>
+                  </div>
+                )}
 
                 {/* Checklist */}
                 <div>

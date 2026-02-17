@@ -1769,7 +1769,7 @@ const LeadDetails = () => {
               ) : (
                 <>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">Select User</label>
+                    <label className="text-sm font-medium text-slate-700">Select User *</label>
                     <select
                       value={selectedCollaborator}
                       onChange={(e) => setSelectedCollaborator(e.target.value)}
@@ -1793,6 +1793,21 @@ const LeadDetails = () => {
                   </div>
                   
                   <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">Collaboration Role *</label>
+                    <select
+                      value={collaboratorRole}
+                      onChange={(e) => setCollaboratorRole(e.target.value)}
+                      className="w-full p-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Select role --</option>
+                      {COLLABORATOR_ROLES.map(role => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500">This defines the collaborator's role for this lead specifically</p>
+                  </div>
+                  
+                  <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700">Reason (optional)</label>
                     <Input
                       value={collaboratorReason}
@@ -1813,7 +1828,7 @@ const LeadDetails = () => {
               </Button>
               <Button
                 onClick={handleAddCollaborator}
-                disabled={!selectedCollaborator || addingCollaborator}
+                disabled={!selectedCollaborator || !collaboratorRole || addingCollaborator}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 {addingCollaborator ? (

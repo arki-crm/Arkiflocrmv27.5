@@ -316,7 +316,7 @@ class TestCommissionApprovalWorkflow:
                 "recipient_id": "cp_002",
                 "recipient_name": "Channel Partner ABC",
                 "recipient_contact": "9876543211",
-                "commission_type": "channel_partner_commission",
+                "commission_type": "channel_partner",
                 "amount": 15000,
                 "calculation_type": "fixed",
                 "notes": "Full lifecycle test commission",

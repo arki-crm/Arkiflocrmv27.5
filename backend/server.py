@@ -17970,7 +17970,7 @@ async def get_project_design_approval_status(project_id: str, request: Request):
     
     return {
         "project_id": project_id,
-        "milestones": result,
+        "milestones": sorted(result, key=lambda x: GATED_MILESTONES.get(x["milestone_key"], {}).get("order", 99)),
         "all_approved": all(m["status"] == "approved" for m in result),
         "any_pending": any(m["status"] == "pending_review" for m in result)
     }

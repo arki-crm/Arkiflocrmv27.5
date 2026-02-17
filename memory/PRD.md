@@ -1374,7 +1374,7 @@ Lead Allocated → BC Call Done → BOQ Shared → Site Meeting → Revised BOQ 
 ## Test Credentials
 
 **Local Admin Login:**
-- **URL**: https://interior-composer.preview.emergentagent.com/login
+- **URL**: https://crm-finance-hub-1.preview.emergentagent.com/login
 - **Email**: thaha.pakayil@gmail.com
 - **Password**: password123
 - **Access**: Full Admin permissions

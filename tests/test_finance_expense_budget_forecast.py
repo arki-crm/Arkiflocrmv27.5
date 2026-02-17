@@ -16,7 +16,7 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://interior-composer.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://crm-finance-hub-1.preview.emergentagent.com')
 
 class TestFinanceModule:
     """Finance Module API Tests"""

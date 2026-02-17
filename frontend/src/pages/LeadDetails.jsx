@@ -1514,13 +1514,13 @@ const LeadDetails = () => {
               />
 
               {/* 2. Collaborators Section - Enhanced */}
-              <div className="border-t border-slate-200 pt-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              <div className="border-t border-slate-200 pt-4 overflow-hidden">
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 flex-shrink-0">
                     <Users className="w-3.5 h-3.5" />
                     Collaborators ({collaborators.length})
                   </h4>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     {collaborators.length > 0 && (
                       <Button 
                         variant="ghost"
@@ -1560,17 +1560,17 @@ const LeadDetails = () => {
                         key={collab.user_id || idx}
                         className="flex items-center justify-between p-2 bg-slate-50 rounded-lg group"
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <div className={cn(
-                            "w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white",
+                            "w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white flex-shrink-0",
                             getAvatarColor(collab.name || 'U')
                           )}>
                             {getInitials(collab.name || 'U')}
                           </div>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium text-slate-700">{collab.name || 'Unknown'}</span>
-                            <span className="text-xs text-blue-600">{collab.role || 'Collaborator'}</span>
-                            <span className="text-[10px] text-slate-400">
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-sm font-medium text-slate-700 truncate">{collab.name || 'Unknown'}</span>
+                            <span className="text-xs text-blue-600 truncate">{collab.role || 'Collaborator'}</span>
+                            <span className="text-[10px] text-slate-400 truncate">
                               Added {collab.added_at ? new Date(collab.added_at).toLocaleDateString() : 'N/A'}
                               {collab.added_by_name && ` by ${collab.added_by_name}`}
                             </span>
@@ -1578,8 +1578,8 @@ const LeadDetails = () => {
                         </div>
                         {canAddCollaborator() && (
                           <button
-                            onClick={() => handleRemoveCollaborator(collab.user_id)}
-                            className="p-1 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => openRemoveCollaboratorDialog(collab)}
+                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
                             title="Remove collaborator"
                           >
                             <X className="w-4 h-4" />
@@ -1590,11 +1590,11 @@ const LeadDetails = () => {
                   </div>
                 ) : (
                   /* Compact Avatar View */
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-1.5 items-center">
                     {collaborators.slice(0, 5).map((collab, idx) => (
                       <div 
                         key={collab.user_id || idx}
-                        className="group relative"
+                        className="group relative flex-shrink-0"
                         title={`${collab.name || 'Unknown'} (${collab.role || 'Collaborator'})`}
                       >
                         <div className={cn(
@@ -1605,8 +1605,8 @@ const LeadDetails = () => {
                         </div>
                         {canAddCollaborator() && (
                           <button
-                            onClick={() => handleRemoveCollaborator(collab.user_id)}
-                            className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white rounded-full items-center justify-center text-[8px] hidden group-hover:flex"
+                            onClick={() => openRemoveCollaboratorDialog(collab)}
+                            className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-full items-center justify-center text-[10px] hidden group-hover:flex transition-colors"
                           >
                             ×
                           </button>
@@ -1614,7 +1614,7 @@ const LeadDetails = () => {
                       </div>
                     ))}
                     {collaborators.length > 5 && (
-                      <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-medium text-slate-600 border-2 border-white">
+                      <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-medium text-slate-600 border-2 border-white flex-shrink-0">
                         +{collaborators.length - 5}
                       </div>
                     )}

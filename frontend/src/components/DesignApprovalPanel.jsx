@@ -178,8 +178,15 @@ const DesignApprovalPanel = ({ projectId, canSubmit = false, isManager = false, 
       return;
     }
     
-    if (submitForm.files.length === 0) {
-      toast.error('Please upload at least one design file');
+    // Drive link required for all gates
+    if (!submitForm.drive_link.trim()) {
+      toast.error('Please provide a Google Drive link');
+      return;
+    }
+    
+    // PDF required only for KWS Sign Off Document
+    if (selectedMilestone?.milestone_key === 'kws_signoff_document' && submitForm.files.length === 0) {
+      toast.error('Please upload the signed KWS PDF document');
       return;
     }
 
@@ -202,7 +209,8 @@ const DesignApprovalPanel = ({ projectId, canSubmit = false, isManager = false, 
         checklist: submitForm.checklist,
         design_notes: submitForm.design_notes,
         concept_summary: submitForm.concept_summary,
-        constraints_notes: submitForm.constraints_notes
+        constraints_notes: submitForm.constraints_notes,
+        drive_link: submitForm.drive_link
       }, { withCredentials: true });
 
       toast.success('Design submission created successfully');

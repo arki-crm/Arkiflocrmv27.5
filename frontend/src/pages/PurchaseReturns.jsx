@@ -98,6 +98,16 @@ export default function PurchaseReturns() {
   });
   const [submittingRefund, setSubmittingRefund] = useState(false);
   
+  // Item disposition update state
+  const [showDispositionModal, setShowDispositionModal] = useState(false);
+  const [dispositionReturn, setDispositionReturn] = useState(null);
+  const [dispositionData, setDispositionData] = useState({
+    item_disposition: '',
+    disposition_location: '',
+    disposition_notes: ''
+  });
+  const [submittingDisposition, setSubmittingDisposition] = useState(false);
+  
   // Filters
   const [filters, setFilters] = useState({
     refund_status: '',

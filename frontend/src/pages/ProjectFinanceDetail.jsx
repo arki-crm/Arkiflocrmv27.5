@@ -1244,7 +1244,7 @@ const ProjectFinanceDetail = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {paymentSchedule.stages.map((stage, index) => (
+                    {normalizedPaymentSchedule.stages.map((stage, index) => (
                       <tr key={index} className="hover:bg-slate-50" data-testid={`schedule-stage-${index}`}>
                         <td className="px-4 py-3 text-sm text-slate-500">{stage.order}</td>
                         <td className="px-4 py-3">
@@ -1287,14 +1287,14 @@ const ProjectFinanceDetail = () => {
                     <tr>
                       <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-slate-700">Total</td>
                       <td className="px-4 py-3 text-right font-bold text-slate-900">
-                        {formatCurrency(paymentSchedule.total_expected)}
+                        {formatCurrency(normalizedPaymentSchedule.total_expected)}
                       </td>
                       <td className="px-4 py-3 text-right font-bold text-green-600">
-                        {formatCurrency(paymentSchedule.total_received)}
+                        {formatCurrency(normalizedPaymentSchedule.total_received)}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className="text-xs text-slate-500">
-                          Balance: {formatCurrency(paymentSchedule.balance_remaining)}
+                          Balance: {formatCurrency(normalizedPaymentSchedule.balance_remaining)}
                         </span>
                       </td>
                     </tr>
@@ -1307,6 +1307,7 @@ const ProjectFinanceDetail = () => {
                 <div className="text-sm text-slate-500 bg-amber-50 p-3 rounded-lg">
                   <AlertTriangle className="w-4 h-4 inline mr-1 text-amber-600" />
                   Stages with payments cannot be removed. Edit percentages or add new stages.
+                </div>
                 </div>
                 <div className="space-y-3">
                   {editedSchedule.map((stage, index) => {

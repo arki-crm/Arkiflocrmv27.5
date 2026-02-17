@@ -409,7 +409,8 @@ class TestCommissionApprovalWorkflow:
         
         # Verify rejected status
         response = session.get(f"{BASE_URL}/finance/commissions")
-        commissions = response.json()
+        data = response.json()
+        commissions = data.get("commissions", [])
         rejected_commission = next(
             (c for c in commissions if c.get("commission_id") == commission_id),
             None

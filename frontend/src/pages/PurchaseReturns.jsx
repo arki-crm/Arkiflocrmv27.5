@@ -445,6 +445,7 @@ export default function PurchaseReturns() {
                     <th className="text-right p-3 text-xs font-medium text-slate-500">Value</th>
                     <th className="text-center p-3 text-xs font-medium text-slate-500">Refund Status</th>
                     <th className="text-center p-3 text-xs font-medium text-slate-500">Item Status</th>
+                    <th className="text-center p-3 text-xs font-medium text-slate-500">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -452,6 +453,7 @@ export default function PurchaseReturns() {
                     const refundInfo = REFUND_STATUSES[ret.refund_status] || REFUND_STATUSES.pending;
                     const RefundIcon = refundInfo.icon;
                     const DispositionIcon = DISPOSITION_ICONS[ret.item_disposition] || Package;
+                    const canRecordRefund = !['completed', 'no_refund'].includes(ret.refund_status);
                     
                     return (
                       <tr key={ret.return_id} className="hover:bg-slate-50" data-testid={`return-row-${ret.return_id}`}>
@@ -473,6 +475,24 @@ export default function PurchaseReturns() {
                             <DispositionIcon className="w-3 h-3 mr-1" />
                             {ITEM_DISPOSITIONS.find(d => d.value === ret.item_disposition)?.label || ret.item_disposition}
                           </Badge>
+                        </td>
+                        <td className="p-3 text-center">
+                          {canRecordRefund ? (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              className="text-green-600 border-green-200 hover:bg-green-50"
+                              onClick={() => openRefundModal(ret)}
+                              data-testid={`record-refund-${ret.return_id}`}
+                            >
+                              <Banknote className="w-3 h-3 mr-1" />
+                              Record Refund
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-slate-400">
+                              {ret.refund_status === 'completed' ? '✓ Settled' : 'No Refund'}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );

@@ -806,12 +806,17 @@ const LeadDetails = () => {
       toast.error('Please select a user');
       return;
     }
+    if (!collaboratorRole) {
+      toast.error('Please select a role');
+      return;
+    }
     
     try {
       setAddingCollaborator(true);
       await axios.post(`${API}/leads/${id}/collaborators`, 
         { 
           user_id: selectedCollaborator,
+          role: collaboratorRole,
           reason: collaboratorReason || 'Added as collaborator'
         },
         { withCredentials: true }
@@ -819,6 +824,7 @@ const LeadDetails = () => {
       toast.success('Collaborator added');
       setShowCollaboratorModal(false);
       setSelectedCollaborator('');
+      setCollaboratorRole('');
       setCollaboratorReason('');
       fetchCollaborators();
       fetchLead(); // Refresh to get updated comments

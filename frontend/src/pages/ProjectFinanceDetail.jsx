@@ -1181,14 +1181,14 @@ const ProjectFinanceDetail = () => {
       </Card>
 
       {/* Payment Schedule Section */}
-      {paymentSchedule && (
+      {normalizedPaymentSchedule && (
         <Card className="border-slate-200" data-testid="payment-schedule-section">
           <CardHeader className="border-b border-slate-200">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-indigo-600" />
                 Payment Schedule
-                {paymentSchedule.is_custom && (
+                {normalizedPaymentSchedule.is_custom && (
                   <Badge variant="outline" className="text-xs ml-2">Custom</Badge>
                 )}
               </CardTitle>

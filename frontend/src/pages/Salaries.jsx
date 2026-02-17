@@ -434,6 +434,127 @@ export default function Salaries() {
     }
   };
   
+  const handleRejectIncentive = async () => {
+    if (!rejectTarget.id || !rejectReason.trim()) {
+      toast.error('Please provide a rejection reason');
+      return;
+    }
+    try {
+      await axios.put(`${API}/api/finance/incentives/${rejectTarget.id}/reject`, 
+        { reason: rejectReason }, 
+        { withCredentials: true }
+      );
+      toast.success('Incentive rejected');
+      setShowRejectModal(false);
+      setRejectReason('');
+      setRejectTarget({ type: null, id: null });
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to reject incentive');
+    }
+  };
+  
+  const handleEditIncentive = async (e) => {
+    e.preventDefault();
+    if (!editIncentiveData) return;
+    try {
+      await axios.put(`${API}/api/finance/incentives/${editIncentiveData.incentive_id}`, {
+        amount: parseFloat(editIncentiveData.amount) || 0,
+        notes: editIncentiveData.notes || ''
+      }, { withCredentials: true });
+      toast.success('Incentive updated');
+      setShowEditIncentiveModal(false);
+      setEditIncentiveData(null);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update incentive');
+    }
+  };
+  
+  const handleDeleteIncentive = async (incentiveId) => {
+    if (!window.confirm('Are you sure you want to delete this incentive?')) return;
+    try {
+      await axios.delete(`${API}/api/finance/incentives/${incentiveId}`, { withCredentials: true });
+      toast.success('Incentive deleted');
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete incentive');
+    }
+  };
+  
+  const handleApproveCommission = async (commissionId) => {
+    try {
+      await axios.put(`${API}/api/finance/commissions/${commissionId}/approve`, {}, { withCredentials: true });
+      toast.success('Commission approved');
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to approve commission');
+    }
+  };
+  
+  const handleRejectCommission = async () => {
+    if (!rejectTarget.id || !rejectReason.trim()) {
+      toast.error('Please provide a rejection reason');
+      return;
+    }
+    try {
+      await axios.put(`${API}/api/finance/commissions/${rejectTarget.id}/reject`, 
+        { reason: rejectReason }, 
+        { withCredentials: true }
+      );
+      toast.success('Commission rejected');
+      setShowRejectModal(false);
+      setRejectReason('');
+      setRejectTarget({ type: null, id: null });
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to reject commission');
+    }
+  };
+  
+  const handleEditCommission = async (e) => {
+    e.preventDefault();
+    if (!editCommissionData) return;
+    try {
+      await axios.put(`${API}/api/finance/commissions/${editCommissionData.commission_id}`, {
+        amount: parseFloat(editCommissionData.amount) || 0,
+        notes: editCommissionData.notes || '',
+        recipient_name: editCommissionData.recipient_name || ''
+      }, { withCredentials: true });
+      toast.success('Commission updated');
+      setShowEditCommissionModal(false);
+      setEditCommissionData(null);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update commission');
+    }
+  };
+  
+  const handleDeleteCommission = async (commissionId) => {
+    if (!window.confirm('Are you sure you want to delete this commission?')) return;
+    try {
+      await axios.delete(`${API}/api/finance/commissions/${commissionId}`, { withCredentials: true });
+      toast.success('Commission deleted');
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete commission');
+    }
+  };
+  
+  const openRejectModal = (type, id) => {
+    setRejectTarget({ type, id });
+    setRejectReason('');
+    setShowRejectModal(true);
+  };
+  
+  const handleRejectSubmit = () => {
+    if (rejectTarget.type === 'incentive') {
+      handleRejectIncentive();
+    } else if (rejectTarget.type === 'commission') {
+      handleRejectCommission();
+    }
+  };
+  
   const handlePayoutIncentive = async (e) => {
     e.preventDefault();
     if (!selectedIncentive) return;

@@ -31094,6 +31094,7 @@ class CommissionRequest(BaseModel):
     calculation_type: str = "fixed"  # fixed or percentage
     percentage_of: Optional[float] = None
     notes: Optional[str] = None
+    status: Optional[str] = None  # draft or pending_approval (default)
 
 
 class CommissionPayoutRequest(BaseModel):

@@ -366,7 +366,8 @@ class TestCommissionApprovalWorkflow:
         
         # Verify final status is paid and history has all actions
         response = session.get(f"{BASE_URL}/finance/commissions")
-        commissions = response.json()
+        data = response.json()
+        commissions = data.get("commissions", [])
         paid_commission = next(
             (c for c in commissions if c.get("commission_id") == commission_id),
             None

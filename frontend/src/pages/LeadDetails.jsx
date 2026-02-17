@@ -838,13 +838,22 @@ const LeadDetails = () => {
     }
   };
 
-  // Remove collaborator
-  const handleRemoveCollaborator = async (collaboratorUserId) => {
+  // Open remove collaborator confirmation dialog
+  const openRemoveCollaboratorDialog = (collab) => {
+    setCollaboratorToRemove(collab);
+    setShowRemoveCollaboratorDialog(true);
+  };
+
+  // Remove collaborator (called after confirmation)
+  const handleRemoveCollaborator = async () => {
+    if (!collaboratorToRemove) return;
     try {
-      await axios.delete(`${API}/leads/${id}/collaborators/${collaboratorUserId}`, {
+      await axios.delete(`${API}/leads/${id}/collaborators/${collaboratorToRemove.user_id}`, {
         withCredentials: true
       });
       toast.success('Collaborator removed');
+      setShowRemoveCollaboratorDialog(false);
+      setCollaboratorToRemove(null);
       fetchCollaborators();
       fetchLead();
     } catch (err) {

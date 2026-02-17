@@ -31071,6 +31071,7 @@ class IncentiveRequest(BaseModel):
     percentage_of: Optional[float] = None  # Base amount if percentage
     trigger_event: Optional[str] = None  # booking, 50_collection, completion, review
     notes: Optional[str] = None
+    status: Optional[str] = None  # draft or pending_approval (default)
 
 
 class IncentivePayoutRequest(BaseModel):

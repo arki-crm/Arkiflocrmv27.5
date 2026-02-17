@@ -194,56 +194,46 @@ export const AdvancedFilters = ({
         </PopoverContent>
       </Popover>
 
-      {/* Designer Filter */}
+      {/* Designer Filter - Searchable */}
       {showDesignerFilter && designers.length > 0 && (
-        <Select 
-          value={filters.designerId || 'all'} 
-          onValueChange={(v) => updateFilter('designerId', v)}
-        >
-          <SelectTrigger 
-            className={cn(
-              "h-8 w-[180px]",
-              (filters.designerId && filters.designerId !== 'all') && "border-blue-500 bg-blue-50"
-            )}
-          >
-            <Users className="h-3.5 w-3.5 mr-1.5" />
-            <SelectValue placeholder="All Designers" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Designers</SelectItem>
-            {designers.map(d => (
-              <SelectItem key={d.user_id} value={d.user_id}>
-                {d.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          options={[
+            { value: 'all', label: 'All Designers' },
+            ...designers.map(d => ({
+              value: d.user_id,
+              label: d.name,
+              sublabel: d.role || d.email
+            }))
+          ]}
+          value={filters.designerId || 'all'}
+          onValueChange={(v) => updateFilter('designerId', v || 'all')}
+          placeholder="All Designers"
+          searchPlaceholder="Search designers..."
+          emptyText="No designers found"
+          icon={<Users className="h-3.5 w-3.5" />}
+          className="h-8 w-[180px]"
+        />
       )}
 
-      {/* Collaborator / Team Member Filter */}
+      {/* Collaborator / Team Member Filter - Searchable */}
       {showCollaboratorFilter && users.length > 0 && (
-        <Select 
-          value={filters.collaboratorId || 'all'} 
-          onValueChange={(v) => updateFilter('collaboratorId', v)}
-        >
-          <SelectTrigger 
-            className={cn(
-              "h-8 w-[180px]",
-              (filters.collaboratorId && filters.collaboratorId !== 'all') && "border-blue-500 bg-blue-50"
-            )}
-          >
-            <Users className="h-3.5 w-3.5 mr-1.5" />
-            <SelectValue placeholder="Team Member" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Team Members</SelectItem>
-            {users.map(u => (
-              <SelectItem key={u.user_id} value={u.user_id}>
-                {u.name} ({u.role})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          options={[
+            { value: 'all', label: 'All Team Members' },
+            ...users.map(u => ({
+              value: u.user_id,
+              label: u.name,
+              sublabel: u.role || u.email
+            }))
+          ]}
+          value={filters.collaboratorId || 'all'}
+          onValueChange={(v) => updateFilter('collaboratorId', v || 'all')}
+          placeholder="All Team Members"
+          searchPlaceholder="Search team members..."
+          emptyText="No team members found"
+          icon={<Users className="h-3.5 w-3.5" />}
+          className="h-8 w-[180px]"
+        />
       )}
 
       {/* Hold Status Filter (Projects only) */}

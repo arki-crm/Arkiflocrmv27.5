@@ -31789,22 +31789,228 @@ async def approve_incentive(incentive_id: str, request: Request):
     if not incentive:
         raise HTTPException(status_code=404, detail="Incentive not found")
     
-    if incentive.get("status") != "pending":
-        raise HTTPException(status_code=400, detail=f"Incentive status is {incentive.get('status')}, cannot approve")
+    # Can only approve from draft or pending_approval status
+    if incentive.get("status") not in ["draft", "pending", "pending_approval"]:
+        raise HTTPException(status_code=400, detail=f"Incentive status is '{incentive.get('status')}', cannot approve. Only draft/pending can be approved.")
     
     now = datetime.now(timezone.utc)
+    
+    # Add to history log
+    history_entry = {
+        "action": "approved",
+        "status": "approved",
+        "by": user.user_id,
+        "by_name": user_doc.get("name", "Unknown"),
+        "at": now.isoformat(),
+        "notes": "Approved for payment"
+    }
+    
     await db.finance_incentives.update_one(
         {"incentive_id": incentive_id},
-        {"$set": {
-            "status": "approved",
-            "approved_by": user.user_id,
-            "approved_by_name": user_doc.get("name", "Unknown"),
-            "approved_at": now,
-            "updated_at": now
-        }}
+        {
+            "$set": {
+                "status": "approved",
+                "approved_by": user.user_id,
+                "approved_by_name": user_doc.get("name", "Unknown"),
+                "approved_at": now,
+                "updated_at": now
+            },
+            "$push": {"history": history_entry}
+        }
     )
     
     return {"success": True, "message": "Incentive approved"}
+
+
+@api_router.put("/finance/incentives/{incentive_id}/reject")
+async def reject_incentive(incentive_id: str, request: Request):
+    """Reject an incentive with reason"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.incentives.approve") and not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    body = await request.json()
+    rejection_reason = body.get("reason", "")
+    
+    incentive = await db.finance_incentives.find_one({"incentive_id": incentive_id})
+    if not incentive:
+        raise HTTPException(status_code=404, detail="Incentive not found")
+    
+    # Can only reject from draft, pending, pending_approval, or approved status
+    if incentive.get("status") not in ["draft", "pending", "pending_approval", "approved"]:
+        raise HTTPException(status_code=400, detail=f"Incentive status is '{incentive.get('status')}', cannot reject.")
+    
+    now = datetime.now(timezone.utc)
+    
+    history_entry = {
+        "action": "rejected",
+        "status": "rejected",
+        "by": user.user_id,
+        "by_name": user_doc.get("name", "Unknown"),
+        "at": now.isoformat(),
+        "notes": rejection_reason or "Rejected"
+    }
+    
+    await db.finance_incentives.update_one(
+        {"incentive_id": incentive_id},
+        {
+            "$set": {
+                "status": "rejected",
+                "rejected_by": user.user_id,
+                "rejected_by_name": user_doc.get("name", "Unknown"),
+                "rejected_at": now,
+                "rejection_reason": rejection_reason,
+                "updated_at": now
+            },
+            "$push": {"history": history_entry}
+        }
+    )
+    
+    return {"success": True, "message": "Incentive rejected"}
+
+
+@api_router.put("/finance/incentives/{incentive_id}")
+async def update_incentive(incentive_id: str, request: Request):
+    """Edit an incentive (only allowed for draft, pending_approval, or rejected status)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.incentives.create") and not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    incentive = await db.finance_incentives.find_one({"incentive_id": incentive_id})
+    if not incentive:
+        raise HTTPException(status_code=404, detail="Incentive not found")
+    
+    # Can only edit draft, pending, pending_approval, or rejected status
+    editable_statuses = ["draft", "pending", "pending_approval", "rejected"]
+    if incentive.get("status") not in editable_statuses:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Incentive status is '{incentive.get('status')}'. Can only edit when status is: {', '.join(editable_statuses)}"
+        )
+    
+    body = await request.json()
+    now = datetime.now(timezone.utc)
+    
+    # Allowed fields to update
+    update_fields = {}
+    allowed_fields = ["amount", "notes", "trigger_event", "calculation_type", "percentage_of"]
+    for field in allowed_fields:
+        if field in body:
+            update_fields[field] = body[field]
+    
+    # Recalculate amount if percentage-based
+    if "calculation_type" in update_fields or "percentage_of" in update_fields or "amount" in update_fields:
+        calc_type = update_fields.get("calculation_type", incentive.get("calculation_type"))
+        pct_of = update_fields.get("percentage_of", incentive.get("percentage_of"))
+        amount = update_fields.get("amount", incentive.get("amount"))
+        
+        if calc_type == "percentage" and pct_of:
+            final_amount = (pct_of * amount) / 100
+            update_fields["calculated_amount"] = final_amount
+            update_fields["amount"] = final_amount
+    
+    # If rejected, move back to pending_approval on edit
+    new_status = incentive.get("status")
+    if incentive.get("status") == "rejected":
+        new_status = "pending_approval"
+        update_fields["status"] = new_status
+        update_fields["rejected_by"] = None
+        update_fields["rejected_by_name"] = None
+        update_fields["rejected_at"] = None
+        update_fields["rejection_reason"] = None
+    
+    update_fields["updated_at"] = now
+    
+    history_entry = {
+        "action": "edited",
+        "status": new_status,
+        "by": user.user_id,
+        "by_name": user_doc.get("name", "Unknown"),
+        "at": now.isoformat(),
+        "notes": f"Updated fields: {', '.join(update_fields.keys())}"
+    }
+    
+    await db.finance_incentives.update_one(
+        {"incentive_id": incentive_id},
+        {
+            "$set": update_fields,
+            "$push": {"history": history_entry}
+        }
+    )
+    
+    updated = await db.finance_incentives.find_one({"incentive_id": incentive_id}, {"_id": 0})
+    return {"success": True, "incentive": updated}
+
+
+@api_router.delete("/finance/incentives/{incentive_id}")
+async def delete_incentive(incentive_id: str, request: Request):
+    """Delete an incentive (only allowed for draft or pending_approval status)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.incentives.create") and not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    incentive = await db.finance_incentives.find_one({"incentive_id": incentive_id})
+    if not incentive:
+        raise HTTPException(status_code=404, detail="Incentive not found")
+    
+    # Can only delete draft or pending_approval status
+    deletable_statuses = ["draft", "pending", "pending_approval"]
+    if incentive.get("status") not in deletable_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Incentive status is '{incentive.get('status')}'. Can only delete when status is: {', '.join(deletable_statuses)}"
+        )
+    
+    await db.finance_incentives.delete_one({"incentive_id": incentive_id})
+    
+    return {"success": True, "message": "Incentive deleted"}
+
+
+@api_router.put("/finance/incentives/{incentive_id}/submit")
+async def submit_incentive_for_approval(incentive_id: str, request: Request):
+    """Submit a draft incentive for approval"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.incentives.create") and not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    incentive = await db.finance_incentives.find_one({"incentive_id": incentive_id})
+    if not incentive:
+        raise HTTPException(status_code=404, detail="Incentive not found")
+    
+    if incentive.get("status") != "draft":
+        raise HTTPException(status_code=400, detail=f"Only draft incentives can be submitted. Current status: {incentive.get('status')}")
+    
+    now = datetime.now(timezone.utc)
+    
+    history_entry = {
+        "action": "submitted",
+        "status": "pending_approval",
+        "by": user.user_id,
+        "by_name": user_doc.get("name", "Unknown"),
+        "at": now.isoformat(),
+        "notes": "Submitted for approval"
+    }
+    
+    await db.finance_incentives.update_one(
+        {"incentive_id": incentive_id},
+        {
+            "$set": {
+                "status": "pending_approval",
+                "updated_at": now
+            },
+            "$push": {"history": history_entry}
+        }
+    )
+    
+    return {"success": True, "message": "Incentive submitted for approval"}
 
 
 @api_router.post("/finance/incentives/{incentive_id}/payout")

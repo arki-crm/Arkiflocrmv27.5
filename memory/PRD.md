@@ -3677,6 +3677,89 @@ Added a status filter dropdown (Active, Hold, Deactivated) to the Leads page, ma
 
 ---
 
+## ✅ Incentive & Commission Approval Workflow - COMPLETED Feb 17, 2026
+
+Implemented a full approval lifecycle for Incentives and Commissions modules with audit trail tracking.
+
+### Features Implemented:
+
+| # | Feature | Description | Status |
+|---|---------|-------------|--------|
+| 1 | **Draft Status** | Create incentives/commissions as draft for later submission | ✅ |
+| 2 | **Pending Approval Status** | Default status when created without explicit draft | ✅ |
+| 3 | **Submit for Approval** | Draft → Pending Approval transition | ✅ |
+| 4 | **Approve Action** | Managers can approve pending items for payment | ✅ |
+| 5 | **Reject Action** | Managers can reject with mandatory reason | ✅ |
+| 6 | **Payout Action** | Only approved items can be paid out | ✅ |
+| 7 | **Edit Restrictions** | Cannot edit paid or approved items | ✅ |
+| 8 | **Delete Restrictions** | Cannot delete approved/paid items | ✅ |
+| 9 | **Re-submission Flow** | Rejected items auto-resubmit when edited | ✅ |
+| 10 | **Full Audit Trail** | History array tracks all status changes with user info | ✅ |
+
+### Status Lifecycle:
+```
+draft → pending_approval → approved → paid
+                       ↘ rejected → (edit) → pending_approval
+```
+
+### Data Model Updates:
+```json
+{
+  "status": "draft | pending_approval | approved | paid | rejected",
+  "approved_by": "user_id",
+  "approved_by_name": "User Name",
+  "approved_at": "datetime",
+  "rejected_by": "user_id",
+  "rejected_by_name": "User Name",
+  "rejected_at": "datetime",
+  "rejection_reason": "string",
+  "paid_by": "user_id",
+  "paid_by_name": "User Name",
+  "paid_at": "datetime",
+  "history": [
+    {
+      "action": "created | submitted | approved | rejected | edited | paid",
+      "status": "current_status",
+      "by": "user_id",
+      "by_name": "User Name",
+      "at": "datetime",
+      "notes": "optional notes"
+    }
+  ]
+}
+```
+
+### API Endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/incentives` | POST | Create incentive (status: draft/pending_approval) |
+| `/api/finance/incentives/{id}/submit` | PUT | Submit draft for approval |
+| `/api/finance/incentives/{id}/approve` | PUT | Approve incentive |
+| `/api/finance/incentives/{id}/reject` | PUT | Reject with reason |
+| `/api/finance/incentives/{id}` | PUT | Edit (draft/pending/rejected only) |
+| `/api/finance/incentives/{id}` | DELETE | Delete (draft/pending only) |
+| `/api/finance/incentives/{id}/payout` | POST | Process payout (approved only) |
+| `/api/finance/commissions` | POST | Create commission |
+| `/api/finance/commissions/{id}/submit` | PUT | Submit draft for approval |
+| `/api/finance/commissions/{id}/approve` | PUT | Approve commission |
+| `/api/finance/commissions/{id}/reject` | PUT | Reject with reason |
+| `/api/finance/commissions/{id}` | PUT | Edit (draft/pending/rejected only) |
+| `/api/finance/commissions/{id}` | DELETE | Delete (draft/pending only) |
+| `/api/finance/commissions/{id}/payout` | POST | Process payout (approved only) |
+
+### Files Modified:
+- `/app/backend/server.py` - Added status field to Pydantic models, fixed commission payout history tracking, updated payout request models
+
+### Test File Created:
+- `/app/backend/tests/test_approval_workflow.py` - 13 comprehensive tests for approval lifecycle
+
+### Testing Results:
+- 13/13 tests passed
+- Covers: create, submit, approve, reject, edit restrictions, delete restrictions, payout, audit trail
+
+---
+
 ## Next Priority Tasks
 
 ### P1 - Quotation Builder Module

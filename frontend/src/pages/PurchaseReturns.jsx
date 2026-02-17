@@ -675,6 +675,157 @@ export default function PurchaseReturns() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Record Refund Modal */}
+      <Dialog open={showRefundModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowRefundModal(false);
+          setSelectedReturn(null);
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-green-600" />
+              Record Refund Settlement
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedReturn && (
+            <div className="space-y-4 py-2">
+              {/* Return Summary */}
+              <div className="bg-slate-50 p-3 rounded-lg space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Return ID:</span>
+                  <span className="font-mono font-medium">{selectedReturn.return_id}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Vendor:</span>
+                  <span className="font-medium">{selectedReturn.vendor_name}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Return Value:</span>
+                  <span className="font-medium">{formatCurrency(selectedReturn.total_return_value)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Expected Refund:</span>
+                  <span className="font-medium text-green-600">{formatCurrency(selectedReturn.expected_refund_amount || selectedReturn.total_return_value)}</span>
+                </div>
+              </div>
+              
+              {/* Refund Status */}
+              <div>
+                <Label>Refund Status *</Label>
+                <Select value={refundData.refund_status} onValueChange={(v) => setRefundData(prev => ({ ...prev, refund_status: v }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="completed">Completed (Full Refund Received)</SelectItem>
+                    <SelectItem value="partial">Partial (Some Amount Received)</SelectItem>
+                    <SelectItem value="no_refund">No Refund (Write-off as Loss)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {refundData.refund_status !== 'no_refund' && (
+                <>
+                  {/* Amount Received */}
+                  <div>
+                    <Label>Amount Received *</Label>
+                    <Input
+                      type="number"
+                      placeholder="0.00"
+                      value={refundData.actual_refund_received}
+                      onChange={(e) => handleRefundAmountChange(e.target.value)}
+                    />
+                    {refundData.loss_amount > 0 && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        ⚠️ Loss of {formatCurrency(refundData.loss_amount)} will be recorded
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Refund Date */}
+                  <div>
+                    <Label>Refund Date *</Label>
+                    <Input
+                      type="date"
+                      value={refundData.refund_date}
+                      onChange={(e) => setRefundData(prev => ({ ...prev, refund_date: e.target.value }))}
+                    />
+                  </div>
+                  
+                  {/* Refund Mode */}
+                  <div>
+                    <Label>Refund Mode</Label>
+                    <Select value={refundData.refund_mode} onValueChange={(v) => setRefundData(prev => ({ ...prev, refund_mode: v }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                        <SelectItem value="cheque">Cheque</SelectItem>
+                        <SelectItem value="credit_adjustment">Credit Adjustment</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Account Selection */}
+                  <div>
+                    <Label>Receive Into Account *</Label>
+                    <Select value={refundData.refund_account_id} onValueChange={(v) => setRefundData(prev => ({ ...prev, refund_account_id: v }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accounts.map(acc => (
+                          <SelectItem key={acc.account_id} value={acc.account_id}>
+                            {acc.account_name} ({acc.account_type})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+              
+              {/* Loss Reason (if partial or no_refund) */}
+              {(refundData.loss_amount > 0 || refundData.refund_status === 'no_refund') && (
+                <div>
+                  <Label>Reason for Loss/Write-off</Label>
+                  <Textarea
+                    placeholder="e.g., Vendor refused refund, negotiated settlement..."
+                    value={refundData.loss_reason}
+                    onChange={(e) => setRefundData(prev => ({ ...prev, loss_reason: e.target.value }))}
+                  />
+                </div>
+              )}
+              
+              {/* Remarks */}
+              <div>
+                <Label>Remarks</Label>
+                <Textarea
+                  placeholder="Additional notes..."
+                  value={refundData.remarks}
+                  onChange={(e) => setRefundData(prev => ({ ...prev, remarks: e.target.value }))}
+                />
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRefundModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitRefund} disabled={submittingRefund} className="bg-green-600 hover:bg-green-700">
+              {submittingRefund && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Record Refund
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

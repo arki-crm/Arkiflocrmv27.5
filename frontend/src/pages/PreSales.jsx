@@ -175,16 +175,32 @@ const PreSales = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilter, advancedFilters]);
 
-  // Client-side search
+  // Client-side search and collaborator filter
   const filteredLeads = useMemo(() => {
-    if (!searchQuery.trim()) return leads;
+    let result = leads;
     
-    const query = searchQuery.toLowerCase();
-    return leads.filter(lead => 
-      lead.customer_name.toLowerCase().includes(query) ||
-      lead.customer_phone.replace(/\s/g, '').includes(query.replace(/\s/g, ''))
-    );
-  }, [leads, searchQuery]);
+    // Search query filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(lead => 
+        lead.customer_name.toLowerCase().includes(query) ||
+        lead.customer_phone.replace(/\s/g, '').includes(query.replace(/\s/g, '')) ||
+        // Also search in collaborator names
+        lead.collaborators?.some(c => c.name?.toLowerCase().includes(query))
+      );
+    }
+    
+    // Collaborator filter (from advanced filters)
+    if (advancedFilters.collaboratorId && advancedFilters.collaboratorId !== 'all') {
+      result = result.filter(lead => 
+        lead.collaborators?.some(c => c.user_id === advancedFilters.collaboratorId) ||
+        lead.assigned_to === advancedFilters.collaboratorId ||
+        lead.designer_id === advancedFilters.collaboratorId
+      );
+    }
+    
+    return result;
+  }, [leads, searchQuery, advancedFilters.collaboratorId]);
 
   // Seed sample data
   const handleSeedData = async () => {

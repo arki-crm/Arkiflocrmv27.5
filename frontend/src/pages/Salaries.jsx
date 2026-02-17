@@ -4,7 +4,8 @@ import axios from 'axios';
 import { 
   Users, Plus, DollarSign, Calendar, AlertTriangle, CheckCircle, 
   Clock, ArrowRight, XCircle, Wallet, Edit, History, LogOut,
-  TrendingUp, PiggyBank, Settings, Star, Award, Target, Gift, Percent, Minus, UserCheck, Briefcase
+  TrendingUp, PiggyBank, Settings, Star, Award, Target, Gift, Percent, Minus, UserCheck, Briefcase,
+  Trash2, Check, X, Eye
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';

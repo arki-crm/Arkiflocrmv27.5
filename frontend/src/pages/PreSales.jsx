@@ -328,6 +328,8 @@ const PreSales = () => {
           onFiltersChange={handleFiltersChange}
           type="presales"
           showDesignerFilter={false}
+          showCollaboratorFilter={true}
+          users={allUsers}
         />
       </div>
 

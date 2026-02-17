@@ -32574,21 +32574,34 @@ async def payout_commission(commission_id: str, data: CommissionPayoutRequest, r
         {"$inc": {"current_balance": -commission.get("amount", 0)}}
     )
     
+    # Add history entry for payout
+    history_entry = {
+        "action": "paid",
+        "status": "paid",
+        "by": user.user_id,
+        "by_name": user_doc.get("name", "Unknown"),
+        "at": now.isoformat(),
+        "notes": f"Paid ₹{commission.get('amount', 0)} via {data.account_id}"
+    }
+    
     # Update commission record
     await db.finance_commissions.update_one(
         {"commission_id": commission_id},
-        {"$set": {
-            "status": "paid",
-            "payment_id": payment_id,
-            "transaction_id": transaction_id,
-            "paid_by": user.user_id,
-            "paid_by_name": user_doc.get("name", "Unknown"),
-            "paid_at": now,
-            "payment_date": data.payment_date,
-            "payment_account_id": data.account_id,
-            "payment_notes": data.notes,
-            "updated_at": now
-        }}
+        {
+            "$set": {
+                "status": "paid",
+                "payment_id": payment_id,
+                "transaction_id": transaction_id,
+                "paid_by": user.user_id,
+                "paid_by_name": user_doc.get("name", "Unknown"),
+                "paid_at": now,
+                "payment_date": data.payment_date,
+                "payment_account_id": data.account_id,
+                "payment_notes": data.notes,
+                "updated_at": now
+            },
+            "$push": {"history": history_entry}
+        }
     )
     
     return {

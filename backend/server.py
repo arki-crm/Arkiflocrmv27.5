@@ -31076,7 +31076,6 @@ class IncentiveRequest(BaseModel):
 
 class IncentivePayoutRequest(BaseModel):
     """Process incentive payout"""
-    incentive_id: str
     account_id: str
     payment_date: str
     notes: Optional[str] = None

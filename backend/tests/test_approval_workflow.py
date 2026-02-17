@@ -201,7 +201,8 @@ class TestIncentiveApprovalWorkflow:
         
         # Verify rejected status
         response = session.get(f"{BASE_URL}/finance/incentives")
-        incentives = response.json()
+        data = response.json()
+        incentives = data.get("incentives", [])
         rejected_incentive = next(
             (i for i in incentives if i.get("incentive_id") == incentive_id),
             None

@@ -129,6 +129,7 @@ class DesignSubmissionCreate(BaseModel):
     design_notes: str
     concept_summary: Optional[str] = None
     constraints_notes: Optional[str] = None
+    drive_link: Optional[str] = None
 
 
 class DesignSubmissionReview(BaseModel):

@@ -18,7 +18,7 @@ async def auth_headers():
     """Authenticate and return headers with token"""
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
-            f"{BASE_URL}/auth/login",
+            f"{BASE_URL}/auth/local-login",
             json={"email": FOUNDER_EMAIL, "password": FOUNDER_PASSWORD}
         )
         assert response.status_code == 200, f"Login failed: {response.text}"

@@ -3677,6 +3677,35 @@ Added a status filter dropdown (Active, Hold, Deactivated) to the Leads page, ma
 
 ---
 
+## ✅ Purchase Return Refund Settlement UI - COMPLETED Feb 17, 2026
+
+Added UI trigger to record refund settlements for purchase returns. Backend logic was already complete.
+
+### Features Added:
+
+| # | Feature | Description |
+|---|---------|-------------|
+| 1 | **Record Refund Button** | Visible for returns with `pending` or `partial` status |
+| 2 | **Settlement Modal** | Shows return summary + refund form |
+| 3 | **Status Selection** | Completed / Partial / No Refund |
+| 4 | **Amount Tracking** | Pre-fills expected amount, calculates loss |
+| 5 | **Account Selection** | Choose which bank/cash account receives refund |
+| 6 | **Loss Recording** | Optional loss reason for partial/no refunds |
+
+### Status Flow:
+- `pending` → Can record refund
+- `partial` → Can record additional refund
+- `completed` → Shows "✓ Settled" (locked)
+- `no_refund` → Shows "No Refund" (locked)
+
+### Files Modified:
+- `/app/frontend/src/pages/PurchaseReturns.jsx` - Added refund modal, state, and handlers
+
+### Backend Endpoint Used:
+- `PUT /api/finance/purchase-returns/{return_id}/refund` (existing, no changes)
+
+---
+
 ## ✅ Incentive & Commission Approval Workflow - COMPLETED Feb 17, 2026
 
 Implemented a full approval lifecycle for Incentives and Commissions modules with audit trail tracking.

@@ -72,6 +72,15 @@ export default function Salaries() {
   const [selectedIncentive, setSelectedIncentive] = useState(null);
   const [selectedCommission, setSelectedCommission] = useState(null);
   
+  // Approval workflow states
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectTarget, setRejectTarget] = useState({ type: null, id: null }); // { type: 'incentive'|'commission', id: string }
+  const [showEditIncentiveModal, setShowEditIncentiveModal] = useState(false);
+  const [showEditCommissionModal, setShowEditCommissionModal] = useState(false);
+  const [editIncentiveData, setEditIncentiveData] = useState(null);
+  const [editCommissionData, setEditCommissionData] = useState(null);
+  
   // Classification management states
   const [classificationSummary, setClassificationSummary] = useState(null);
   const [showClassificationModal, setShowClassificationModal] = useState(false);

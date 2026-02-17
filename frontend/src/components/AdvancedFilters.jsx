@@ -15,6 +15,7 @@ import {
   PopoverTrigger,
 } from './ui/popover';
 import { Badge } from './ui/badge';
+import { SearchableSelect } from './ui/searchable-select';
 import { 
   Filter, 
   X, 

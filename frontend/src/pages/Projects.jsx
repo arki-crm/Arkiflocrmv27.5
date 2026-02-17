@@ -355,8 +355,10 @@ const Projects = () => {
           filters={advancedFilters}
           onFiltersChange={handleFiltersChange}
           designers={designers}
+          users={allUsers}
           type="projects"
           showDesignerFilter={['Admin', 'SalesManager', 'DesignManager', 'Manager'].includes(user?.role)}
+          showCollaboratorFilter={true}
           showHoldStatus={true}
         />
       </div>

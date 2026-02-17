@@ -160,7 +160,8 @@ class TestIncentiveApprovalWorkflow:
         
         # Verify final status is paid
         response = session.get(f"{BASE_URL}/finance/incentives")
-        incentives = response.json()
+        data = response.json()
+        incentives = data.get("incentives", [])
         paid_incentive = next(
             (i for i in incentives if i.get("incentive_id") == incentive_id),
             None

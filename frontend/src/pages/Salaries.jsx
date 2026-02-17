@@ -2443,6 +2443,150 @@ export default function Salaries() {
         </DialogContent>
       </Dialog>
       
+      {/* Reject Modal (for both incentives and commissions) */}
+      <Dialog open={showRejectModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowRejectModal(false);
+          setRejectReason('');
+          setRejectTarget({ type: null, id: null });
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <XCircle className="w-5 h-5" />
+              Reject {rejectTarget.type === 'incentive' ? 'Incentive' : 'Commission'}
+            </DialogTitle>
+            <DialogDescription>Please provide a reason for rejection. This will be recorded in the audit log.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Rejection Reason <span className="text-red-500">*</span></Label>
+              <Textarea 
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                placeholder="Enter reason for rejection..."
+                className="min-h-[100px]"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowRejectModal(false)}>Cancel</Button>
+              <Button 
+                type="button" 
+                variant="destructive" 
+                onClick={handleRejectSubmit}
+                disabled={!rejectReason.trim()}
+              >
+                Confirm Rejection
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Edit Incentive Modal */}
+      <Dialog open={showEditIncentiveModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowEditIncentiveModal(false);
+          setEditIncentiveData(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5" />
+              Edit Incentive
+            </DialogTitle>
+            <DialogDescription>Update incentive details. Changes will be logged.</DialogDescription>
+          </DialogHeader>
+          {editIncentiveData && (
+            <form onSubmit={handleEditIncentive} className="space-y-4">
+              <div>
+                <Label>Employee</Label>
+                <Input value={editIncentiveData.employee_name || ''} disabled className="bg-slate-50" />
+              </div>
+              <div>
+                <Label>Incentive Type</Label>
+                <Input value={editIncentiveData.incentive_type_name || ''} disabled className="bg-slate-50" />
+              </div>
+              <div>
+                <Label>Amount</Label>
+                <Input 
+                  type="number" 
+                  value={editIncentiveData.amount || ''} 
+                  onChange={e => setEditIncentiveData(prev => ({ ...prev, amount: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Notes</Label>
+                <Textarea 
+                  value={editIncentiveData.notes || ''} 
+                  onChange={e => setEditIncentiveData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Optional notes..."
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowEditIncentiveModal(false)}>Cancel</Button>
+                <Button type="submit">Save Changes</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* Edit Commission Modal */}
+      <Dialog open={showEditCommissionModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowEditCommissionModal(false);
+          setEditCommissionData(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5" />
+              Edit Commission
+            </DialogTitle>
+            <DialogDescription>Update commission details. Changes will be logged.</DialogDescription>
+          </DialogHeader>
+          {editCommissionData && (
+            <form onSubmit={handleEditCommission} className="space-y-4">
+              <div>
+                <Label>Recipient Name</Label>
+                <Input 
+                  value={editCommissionData.recipient_name || ''} 
+                  onChange={e => setEditCommissionData(prev => ({ ...prev, recipient_name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Commission Type</Label>
+                <Input value={editCommissionData.commission_type_name || ''} disabled className="bg-slate-50" />
+              </div>
+              <div>
+                <Label>Amount</Label>
+                <Input 
+                  type="number" 
+                  value={editCommissionData.amount || ''} 
+                  onChange={e => setEditCommissionData(prev => ({ ...prev, amount: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Notes</Label>
+                <Textarea 
+                  value={editCommissionData.notes || ''} 
+                  onChange={e => setEditCommissionData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Optional notes..."
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowEditCommissionModal(false)}>Cancel</Button>
+                <Button type="submit">Save Changes</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+      
       {/* Salary Deduction Modal */}
       <Dialog open={showDeductionModal} onOpenChange={setShowDeductionModal}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

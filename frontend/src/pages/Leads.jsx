@@ -345,8 +345,10 @@ const Leads = () => {
           filters={advancedFilters}
           onFiltersChange={handleFiltersChange}
           designers={designers}
+          users={allUsers}
           type="leads"
           showDesignerFilter={['Admin', 'SalesManager', 'DesignManager'].includes(user?.role)}
+          showCollaboratorFilter={true}
           showHoldStatus={true}
         />
       </div>

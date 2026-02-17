@@ -32246,17 +32246,250 @@ async def get_commissions(
     
     commissions = await db.finance_commissions.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
     
-    total_pending = sum(c.get("amount", 0) for c in commissions if c.get("status") == "pending")
+    total_pending = sum(c.get("amount", 0) for c in commissions if c.get("status") in ["pending", "pending_approval"])
+    total_approved = sum(c.get("amount", 0) for c in commissions if c.get("status") == "approved")
     total_paid = sum(c.get("amount", 0) for c in commissions if c.get("status") == "paid")
     
     return {
         "commissions": commissions,
         "summary": {
             "total_pending": total_pending,
+            "total_approved": total_approved,
             "total_paid": total_paid,
             "total_count": len(commissions)
         }
     }
+
+
+@api_router.put("/finance/commissions/{commission_id}/approve")
+async def approve_commission(commission_id: str, request: Request):
+    """Approve a pending commission"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.commissions.approve") and not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    commission = await db.finance_commissions.find_one({"commission_id": commission_id})
+    if not commission:
+        raise HTTPException(status_code=404, detail="Commission not found")
+    
+    if commission.get("status") not in ["draft", "pending", "pending_approval"]:
+        raise HTTPException(status_code=400, detail=f"Commission status is '{commission.get('status')}', cannot approve. Only draft/pending can be approved.")
+    
+    now = datetime.now(timezone.utc)
+    
+    history_entry = {
+        "action": "approved",
+        "status": "approved",
+        "by": user.user_id,
+        "by_name": user_doc.get("name", "Unknown"),
+        "at": now.isoformat(),
+        "notes": "Approved for payment"
+    }
+    
+    await db.finance_commissions.update_one(
+        {"commission_id": commission_id},
+        {
+            "$set": {
+                "status": "approved",
+                "approved_by": user.user_id,
+                "approved_by_name": user_doc.get("name", "Unknown"),
+                "approved_at": now,
+                "updated_at": now
+            },
+            "$push": {"history": history_entry}
+        }
+    )
+    
+    return {"success": True, "message": "Commission approved"}
+
+
+@api_router.put("/finance/commissions/{commission_id}/reject")
+async def reject_commission(commission_id: str, request: Request):
+    """Reject a commission with reason"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.commissions.approve") and not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    body = await request.json()
+    rejection_reason = body.get("reason", "")
+    
+    commission = await db.finance_commissions.find_one({"commission_id": commission_id})
+    if not commission:
+        raise HTTPException(status_code=404, detail="Commission not found")
+    
+    if commission.get("status") not in ["draft", "pending", "pending_approval", "approved"]:
+        raise HTTPException(status_code=400, detail=f"Commission status is '{commission.get('status')}', cannot reject.")
+    
+    now = datetime.now(timezone.utc)
+    
+    history_entry = {
+        "action": "rejected",
+        "status": "rejected",
+        "by": user.user_id,
+        "by_name": user_doc.get("name", "Unknown"),
+        "at": now.isoformat(),
+        "notes": rejection_reason or "Rejected"
+    }
+    
+    await db.finance_commissions.update_one(
+        {"commission_id": commission_id},
+        {
+            "$set": {
+                "status": "rejected",
+                "rejected_by": user.user_id,
+                "rejected_by_name": user_doc.get("name", "Unknown"),
+                "rejected_at": now,
+                "rejection_reason": rejection_reason,
+                "updated_at": now
+            },
+            "$push": {"history": history_entry}
+        }
+    )
+    
+    return {"success": True, "message": "Commission rejected"}
+
+
+@api_router.put("/finance/commissions/{commission_id}")
+async def update_commission(commission_id: str, request: Request):
+    """Edit a commission (only allowed for draft, pending_approval, or rejected status)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.commissions.create") and not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    commission = await db.finance_commissions.find_one({"commission_id": commission_id})
+    if not commission:
+        raise HTTPException(status_code=404, detail="Commission not found")
+    
+    editable_statuses = ["draft", "pending", "pending_approval", "rejected"]
+    if commission.get("status") not in editable_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Commission status is '{commission.get('status')}'. Can only edit when status is: {', '.join(editable_statuses)}"
+        )
+    
+    body = await request.json()
+    now = datetime.now(timezone.utc)
+    
+    update_fields = {}
+    allowed_fields = ["amount", "notes", "calculation_type", "percentage_of", "recipient_name", "recipient_contact"]
+    for field in allowed_fields:
+        if field in body:
+            update_fields[field] = body[field]
+    
+    # Recalculate amount if percentage-based
+    if "calculation_type" in update_fields or "percentage_of" in update_fields or "amount" in update_fields:
+        calc_type = update_fields.get("calculation_type", commission.get("calculation_type"))
+        pct_of = update_fields.get("percentage_of", commission.get("percentage_of"))
+        amount = update_fields.get("amount", commission.get("amount"))
+        
+        if calc_type == "percentage" and pct_of:
+            final_amount = (pct_of * amount) / 100
+            update_fields["calculated_amount"] = final_amount
+            update_fields["amount"] = final_amount
+    
+    # If rejected, move back to pending_approval on edit
+    new_status = commission.get("status")
+    if commission.get("status") == "rejected":
+        new_status = "pending_approval"
+        update_fields["status"] = new_status
+        update_fields["rejected_by"] = None
+        update_fields["rejected_by_name"] = None
+        update_fields["rejected_at"] = None
+        update_fields["rejection_reason"] = None
+    
+    update_fields["updated_at"] = now
+    
+    history_entry = {
+        "action": "edited",
+        "status": new_status,
+        "by": user.user_id,
+        "by_name": user_doc.get("name", "Unknown"),
+        "at": now.isoformat(),
+        "notes": f"Updated fields: {', '.join(update_fields.keys())}"
+    }
+    
+    await db.finance_commissions.update_one(
+        {"commission_id": commission_id},
+        {
+            "$set": update_fields,
+            "$push": {"history": history_entry}
+        }
+    )
+    
+    updated = await db.finance_commissions.find_one({"commission_id": commission_id}, {"_id": 0})
+    return {"success": True, "commission": updated}
+
+
+@api_router.delete("/finance/commissions/{commission_id}")
+async def delete_commission(commission_id: str, request: Request):
+    """Delete a commission (only allowed for draft or pending_approval status)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.commissions.create") and not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    commission = await db.finance_commissions.find_one({"commission_id": commission_id})
+    if not commission:
+        raise HTTPException(status_code=404, detail="Commission not found")
+    
+    deletable_statuses = ["draft", "pending", "pending_approval"]
+    if commission.get("status") not in deletable_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Commission status is '{commission.get('status')}'. Can only delete when status is: {', '.join(deletable_statuses)}"
+        )
+    
+    await db.finance_commissions.delete_one({"commission_id": commission_id})
+    
+    return {"success": True, "message": "Commission deleted"}
+
+
+@api_router.put("/finance/commissions/{commission_id}/submit")
+async def submit_commission_for_approval(commission_id: str, request: Request):
+    """Submit a draft commission for approval"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.commissions.create") and not has_permission(user_doc, "finance.salaries.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    commission = await db.finance_commissions.find_one({"commission_id": commission_id})
+    if not commission:
+        raise HTTPException(status_code=404, detail="Commission not found")
+    
+    if commission.get("status") != "draft":
+        raise HTTPException(status_code=400, detail=f"Only draft commissions can be submitted. Current status: {commission.get('status')}")
+    
+    now = datetime.now(timezone.utc)
+    
+    history_entry = {
+        "action": "submitted",
+        "status": "pending_approval",
+        "by": user.user_id,
+        "by_name": user_doc.get("name", "Unknown"),
+        "at": now.isoformat(),
+        "notes": "Submitted for approval"
+    }
+    
+    await db.finance_commissions.update_one(
+        {"commission_id": commission_id},
+        {
+            "$set": {
+                "status": "pending_approval",
+                "updated_at": now
+            },
+            "$push": {"history": history_entry}
+        }
+    )
+    
+    return {"success": True, "message": "Commission submitted for approval"}
 
 
 @api_router.post("/finance/commissions/{commission_id}/payout")

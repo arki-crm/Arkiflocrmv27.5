@@ -1376,7 +1376,7 @@ Lead Allocated → BC Call Done → BOQ Shared → Site Meeting → Revised BOQ 
 ## Test Credentials
 
 **Local Admin Login:**
-- **URL**: https://team-collab-45.preview.emergentagent.com/login
+- **URL**: https://sign-off-manager.preview.emergentagent.com/login
 - **Email**: thaha.pakayil@gmail.com
 - **Password**: password123
 - **Access**: Full Admin permissions

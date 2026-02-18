@@ -28108,16 +28108,19 @@ class RefundCreate(BaseModel):
 async def get_payment_schedule(project_id: str, request: Request):
     """Get payment schedule for a project
     
-    Revenue Source Priority:
-    1. signoff_value (PRIMARY) - Locked after KWS Sign-Off
-    2. project_value (FALLBACK) - Only if signoff_value is null/0
+    GOVERNANCE RULE: Revenue baseline must be signoff_value ONLY.
+    No fallback to presales budget, contract_value, or booked_value.
+    
+    If signoff_value is not locked (missing or 0):
+    - Return status: "signoff_not_locked"
+    - Do NOT generate schedule
     
     Default Stage Calculation (when is_custom=false):
     - Stage 1: Booking (fixed amount)
     - Stage 2: 50% of signoff_value
     - Stage 3: Remaining balance = signoff_value - booking - stage2
     
-    Custom schedules are preserved as-is.
+    Custom schedules are preserved as-is but still require signoff_value.
     """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
@@ -28130,19 +28133,33 @@ async def get_payment_schedule(project_id: str, request: Request):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    # GOVERNANCE: Strict signoff_value enforcement - NO FALLBACKS
+    signoff_value = project.get("signoff_value") or 0
+    signoff_locked = project.get("signoff_locked", False)
+    
+    # Block schedule generation if signoff not locked
+    if signoff_value <= 0:
+        return {
+            "project_id": project_id,
+            "status": "signoff_not_locked",
+            "message": "Payment schedule cannot be generated before sign-off lock.",
+            "signoff_value": 0,
+            "signoff_locked": False,
+            "is_custom": False,
+            "stages": [],
+            "total_expected": 0,
+            "total_received": 0,
+            "balance_remaining": 0
+        }
+    
     # Check if custom schedule exists
     schedule = await db.finance_payment_schedules.find_one(
         {"project_id": project_id},
         {"_id": 0}
     )
     
-    # Revenue Source: signoff_value (PRIMARY), fallback to project_value
-    signoff_value = project.get("signoff_value") or 0
-    project_value = project.get("project_value") or 0
-    
-    # Use signoff_value if available and > 0, otherwise fallback to project_value
-    base_value = signoff_value if signoff_value > 0 else project_value
-    
+    # Revenue baseline: signoff_value ONLY (no fallbacks)
+    base_value = signoff_value
     is_custom = schedule is not None
     
     if is_custom:
@@ -28150,7 +28167,7 @@ async def get_payment_schedule(project_id: str, request: Request):
         stages = schedule.get("stages", [])
         
         # For custom schedules, recalculate amounts based on stored structure
-        # but anchored to signoff_value
+        # anchored strictly to signoff_value
         for stage in stages:
             if stage.get("percentage") and stage.get("percentage") > 0:
                 stage["calculated_amount"] = round(base_value * stage["percentage"] / 100, 0)
@@ -28231,14 +28248,14 @@ async def get_payment_schedule(project_id: str, request: Request):
     
     return {
         "project_id": project_id,
-        "signoff_value": signoff_value,  # Primary source
-        "contract_value": base_value,     # Effective value used for calculations
-        "project_value": project_value,   # Legacy reference
+        "status": "active",
+        "signoff_value": signoff_value,
+        "signoff_locked": signoff_locked,
         "is_custom": is_custom,
         "stages": stages,
         "total_expected": total_expected,
         "total_received": total_received,
-        "balance_remaining": base_value - total_received
+        "balance_remaining": signoff_value - total_received
     }
 
 

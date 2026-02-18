@@ -22852,7 +22852,11 @@ class VendorMappingUpdate(BaseModel):
 
 @api_router.get("/finance/project-finance")
 async def list_projects_with_finance(request: Request, search: Optional[str] = None):
-    """Get list of all projects with their financial summary"""
+    """Get list of all projects with their financial summary
+    
+    GOVERNANCE RULE: Revenue baseline must be signoff_value ONLY.
+    Projects without signoff_value will show status: "signoff_not_locked"
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
@@ -22868,11 +22872,11 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
             {"client_name": {"$regex": search, "$options": "i"}}
         ]
     
-    # Get projects with relevant fields including value lifecycle
+    # Get projects with relevant fields (signoff_value ONLY - no fallbacks)
     projects = await db.projects.find(
         query,
         {"_id": 0, "project_id": 1, "pid": 1, "project_name": 1, "client_name": 1, 
-         "project_value": 1, "booked_value": 1, "signoff_value": 1, "signoff_locked": 1,
+         "signoff_value": 1, "signoff_locked": 1,
          "status": 1, "current_stage": 1, "created_at": 1}
     ).sort("created_at", -1).to_list(500)
     
@@ -22880,6 +22884,10 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
     result = []
     for p in projects:
         project_id = p.get("project_id")
+        
+        # GOVERNANCE: Strict signoff_value enforcement - NO FALLBACKS
+        signoff_value = p.get("signoff_value") or 0
+        signoff_locked = p.get("signoff_locked", False)
         
         # Get vendor mappings total (planned cost)
         vendor_mappings = await db.finance_vendor_mappings.find(
@@ -22922,16 +22930,10 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         liability_result = await db.finance_liabilities.aggregate(liability_pipeline).to_list(1)
         remaining_liability = max(0, liability_result[0]["total"] if liability_result else 0)
         
-        # Financial value lifecycle:
-        # - presales_budget (project_value): Initial estimate from presales/lead
-        # - booked_value: Value at booking/agreement (locked at first payment)
-        # - signoff_value: Final BOQ value (locked at design sign-off) - PRIMARY for financials
-        presales_budget = p.get("project_value", 0) or 0
-        booked_value = p.get("booked_value", 0) or 0
-        signoff_value = p.get("signoff_value") or p.get("contract_value") or booked_value or presales_budget
-        signoff_locked = p.get("signoff_locked", False)
-        
         safe_surplus = total_received - actual_cost
+        
+        # Determine status based on signoff_value
+        finance_status = "active" if signoff_value > 0 else "signoff_not_locked"
         
         result.append({
             "project_id": project_id,
@@ -22941,17 +22943,15 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
             "client_name": p.get("client_name"),
             "status": p.get("status"),
             "current_stage": p.get("current_stage"),
-            # Value lifecycle fields
-            "presales_budget": presales_budget,
-            "booked_value": booked_value,
-            "signoff_value": signoff_value,  # PRIMARY: Use this for financial calculations
+            # Governance-safe revenue baseline
+            "finance_status": finance_status,
+            "signoff_value": signoff_value,
             "signoff_locked": signoff_locked,
-            "contract_value": signoff_value,  # DEPRECATED: Alias for backward compatibility
             # Financial summary
             "total_received": total_received,
             "planned_cost": planned_cost,
             "actual_cost": actual_cost,
-            "remaining_liability": remaining_liability,  # From actual liabilities, not calculated
+            "remaining_liability": remaining_liability,
             "safe_surplus": safe_surplus,
             "has_overspend": actual_cost > planned_cost if planned_cost > 0 else False
         })

@@ -27954,7 +27954,15 @@ async def get_pnl_snapshot(
 
 @api_router.get("/finance/project-profit/{project_id}")
 async def get_project_profit(project_id: str, request: Request):
-    """Get profit metrics for a project - anchored to Sign-off Locked BOQ Value"""
+    """Get profit metrics for a project
+    
+    GOVERNANCE RULE: Revenue baseline must be signoff_value ONLY.
+    No fallback to presales budget, contract_value, or booked_value.
+    
+    If signoff_value is not locked:
+    - Return status: "signoff_not_locked"
+    - Show 0 for all profit calculations
+    """
     user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -27963,22 +27971,34 @@ async def get_project_profit(project_id: str, request: Request):
     project = await db.projects.find_one(
         {"project_id": project_id}, 
         {"_id": 0, "project_id": 1, "project_name": 1, "name": 1,
-         "signoff_value": 1, "contract_value": 1, "booked_value": 1, 
-         "project_value": 1, "total_value": 1, "signoff_locked": 1}
+         "signoff_value": 1, "signoff_locked": 1}
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Revenue Baseline: Use signoff_value as primary (Sign-off Locked BOQ Value)
-    # Fallback chain: signoff_value → contract_value → booked_value → project_value
-    signoff_value = (
-        project.get("signoff_value") or 
-        project.get("contract_value") or 
-        project.get("booked_value") or 
-        project.get("project_value") or 
-        project.get("total_value") or 0
-    )
+    # GOVERNANCE: Strict signoff_value enforcement - NO FALLBACKS
+    signoff_value = project.get("signoff_value") or 0
     signoff_locked = project.get("signoff_locked", False)
+    
+    # Block profit calculations if signoff not locked
+    if signoff_value <= 0:
+        return {
+            "project_id": project_id,
+            "project_name": project.get("name") or project.get("project_name"),
+            "status": "signoff_not_locked",
+            "message": "Profit projections require sign-off lock.",
+            "signoff_value": 0,
+            "signoff_locked": False,
+            # Zero out all profit metrics
+            "planned_cost": 0,
+            "actual_cost": 0,
+            "total_received": 0,
+            "projected_profit": 0,
+            "projected_profit_pct": 0,
+            "realised_profit": 0,
+            "realised_profit_pct": 0,
+            "execution_margin_remaining": 0
+        }
     
     # Get planned cost from vendor mappings (check both collection names)
     vendor_mappings = await db.vendor_mappings.find(
@@ -28020,7 +28040,7 @@ async def get_project_profit(project_id: str, request: Request):
     
     total_received = max(receipts_total, inflows_total)  # Avoid double-counting
     
-    # Calculate profits based on Sign-off Locked BOQ Value
+    # Calculate profits based on Sign-off Locked BOQ Value (NO FALLBACKS)
     # Projected Profit = Sign-off Locked Value – Planned Cost
     projected_profit = signoff_value - planned_cost
     projected_profit_pct = (projected_profit / signoff_value * 100) if signoff_value > 0 else 0
@@ -28035,10 +28055,10 @@ async def get_project_profit(project_id: str, request: Request):
     return {
         "project_id": project_id,
         "project_name": project.get("name") or project.get("project_name"),
-        # Value lifecycle (all anchored to signoff_value)
+        "status": "active",
+        # Governance-safe revenue baseline
         "signoff_value": signoff_value,
         "signoff_locked": signoff_locked,
-        "contract_value": signoff_value,  # Deprecated alias for backward compatibility
         # Costs
         "planned_cost": planned_cost,
         "actual_cost": actual_cost,

@@ -22961,7 +22961,15 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
 
 @api_router.get("/finance/project-finance/{project_id}")
 async def get_project_finance_detail(project_id: str, request: Request):
-    """Get detailed financial view for a specific project"""
+    """Get detailed financial view for a specific project
+    
+    GOVERNANCE RULE: Revenue baseline must be signoff_value ONLY.
+    No fallback to presales budget, contract_value, or booked_value.
+    
+    If signoff_value is not locked:
+    - Return status: "signoff_not_locked"
+    - Financial calculations show 0 for revenue-dependent metrics
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
@@ -22972,12 +22980,16 @@ async def get_project_finance_detail(project_id: str, request: Request):
     project = await db.projects.find_one(
         {"project_id": project_id},
         {"_id": 0, "project_id": 1, "pid": 1, "project_name": 1, "client_name": 1,
-         "project_value": 1, "booked_value": 1, "signoff_value": 1, "signoff_locked": 1,
-         "contract_value": 1, "status": 1, "current_stage": 1, "stages": 1}
+         "signoff_value": 1, "signoff_locked": 1,
+         "status": 1, "current_stage": 1, "stages": 1}
     )
     
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    
+    # GOVERNANCE: Strict signoff_value enforcement - NO FALLBACKS
+    signoff_value = project.get("signoff_value") or 0
+    signoff_locked = project.get("signoff_locked", False)
     
     # Check if spending has started (any transactions exist)
     spending_started = await db.accounting_transactions.find_one({"project_id": project_id}) is not None
@@ -23013,8 +23025,6 @@ async def get_project_finance_detail(project_id: str, request: Request):
     total_open_liability = max(0, total_open_liability)
     
     # Get actual transactions from cashbook (EXCLUDE credit purchase daybook entries)
-    # P0-FIX: Credit purchases have is_cashbook_entry=False OR entry_type contains 'purchase_invoice'
-    # These should not count as actual cost until payment is made via liability settlement
     transactions = await db.accounting_transactions.find(
         {
             "project_id": project_id,
@@ -23067,16 +23077,43 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "over_budget": actual > planned if planned > 0 else False
         })
     
-    # Financial value lifecycle:
-    # - presales_budget (project_value): Initial estimate from presales/lead
-    # - booked_value: Value at booking/agreement (locked at first payment)
-    # - signoff_value: Final BOQ value (locked at design sign-off) - PRIMARY for financials
-    presales_budget = project.get("project_value", 0) or 0
-    booked_value = project.get("booked_value", 0) or 0
-    signoff_value = project.get("signoff_value") or project.get("contract_value") or booked_value or presales_budget
-    signoff_locked = project.get("signoff_locked", False)
+    # GOVERNANCE: If signoff not locked, zero out revenue-dependent calculations
+    if signoff_value <= 0:
+        return {
+            "project": {
+                "project_id": project.get("project_id"),
+                "pid": project.get("pid"),
+                "pid_display": (project.get("pid") or "").replace("ARKI-", ""),
+                "project_name": project.get("project_name"),
+                "client_name": project.get("client_name"),
+                "status": project.get("status"),
+                "current_stage": project.get("current_stage")
+            },
+            "summary": {
+                "status": "signoff_not_locked",
+                "message": "Financial metrics require sign-off lock.",
+                "signoff_value": 0,
+                "signoff_locked": False,
+                # Cost metrics (still valid)
+                "total_received": total_inflow,
+                "planned_cost": total_planned,
+                "actual_cost": total_outflow,
+                "remaining_liability": total_open_liability,
+                "safe_surplus": total_inflow - total_outflow,
+                "has_overspend": total_outflow > total_planned if total_planned > 0 else False,
+                # Revenue-dependent metrics zeroed
+                "gross_profit": 0,
+                "profit_margin": 0
+            },
+            "vendor_mappings": vendor_mappings,
+            "transactions": enriched_txns,
+            "comparison": comparison,
+            "can_edit_vendor_mapping": not spending_started and not production_started,
+            "spending_started": spending_started,
+            "production_started": production_started
+        }
     
-    # P0-FIX: Use actual open liabilities from liabilities collection, not calculated from planned
+    # Full financial summary with signoff_value
     remaining_liability = total_open_liability
     safe_surplus = total_inflow - total_outflow
     
@@ -23091,12 +23128,10 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "current_stage": project.get("current_stage")
         },
         "summary": {
-            # Value lifecycle
-            "presales_budget": presales_budget,
-            "booked_value": booked_value,
-            "signoff_value": signoff_value,  # PRIMARY: Use this for financial calculations
+            "status": "active",
+            # Governance-safe revenue baseline (signoff_value ONLY)
+            "signoff_value": signoff_value,
             "signoff_locked": signoff_locked,
-            "contract_value": signoff_value,  # DEPRECATED: Alias for backward compatibility
             # Financial metrics
             "total_received": total_inflow,
             "planned_cost": total_planned,
@@ -23105,7 +23140,7 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "safe_surplus": safe_surplus,
             "has_overspend": total_outflow > total_planned if total_planned > 0 else False,
             # Profitability (based on signoff_value as revenue baseline)
-            "gross_profit": signoff_value - total_outflow if signoff_value > 0 else 0,
+            "gross_profit": signoff_value - total_outflow,
             "profit_margin": round(((signoff_value - total_outflow) / signoff_value) * 100, 1) if signoff_value > 0 else 0
         },
         "vendor_mappings": vendor_mappings,

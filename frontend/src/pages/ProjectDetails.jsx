@@ -1274,6 +1274,7 @@ const ProjectDetails = () => {
             <FilesTab 
               projectId={id}
               files={files}
+              signoffDocuments={signoffDocuments}
               onFilesChange={setFiles}
               userRole={user?.role}
             />

@@ -1461,8 +1461,19 @@ const ProjectDetails = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {/* Default Schedule Display */}
-                  {!financials.custom_payment_schedule_enabled && (
+                  {/* Sign-off Pending Message for Milestones */}
+                  {financials.finance_status === 'signoff_pending' && (
+                    <div className="text-center py-8 text-slate-500">
+                      <AlertTriangle className="h-10 w-10 mx-auto text-amber-400 mb-3" />
+                      <p className="font-medium">Payment milestones unavailable</p>
+                      <p className="text-xs text-slate-400 mt-2">
+                        Complete design sign-off to calculate payment milestones
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Default Schedule Display - Only when signoff is locked */}
+                  {financials.finance_status !== 'signoff_pending' && !financials.custom_payment_schedule_enabled && (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {financials.payment_schedule?.map((milestone, index) => (
@@ -1470,7 +1481,7 @@ const ProjectDetails = () => {
                             <p className="text-sm font-semibold text-slate-700">{milestone.stage}</p>
                             <p className="text-xs text-slate-500 mt-1">
                               {milestone.type === 'fixed' && `Fixed: ₹${milestone.fixedAmount?.toLocaleString('en-IN')}`}
-                              {milestone.type === 'percentage' && `${milestone.percentage}% of project value`}
+                              {milestone.type === 'percentage' && `${milestone.percentage}% of sign-off value`}
                               {milestone.type === 'remaining' && 'Remaining balance'}
                             </p>
                             <p className="text-xl font-bold text-emerald-600 mt-2">

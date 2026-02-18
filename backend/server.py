@@ -5672,7 +5672,12 @@ async def get_project_timeline_history(project_id: str, request: Request):
 
 @api_router.get("/projects/{project_id}/files")
 async def get_project_files(project_id: str, request: Request):
-    """Get all files for a project"""
+    """Get all files for a project including approved sign-off documents
+    
+    Returns:
+    - Regular project files
+    - Approved sign-off documents from Design Approval Gate (linked, not duplicated)
+    """
     user = await get_current_user(request)
     
     if user.role == "PreSales":
@@ -5686,7 +5691,86 @@ async def get_project_files(project_id: str, request: Request):
     if user.role == "Designer" and user.user_id not in project.get("collaborators", []):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    return project.get("files", [])
+    # Get regular project files
+    regular_files = project.get("files", [])
+    
+    # Get approved sign-off documents from Design Approval Gate
+    # These are linked references, NOT duplicated storage
+    approved_submissions = await db.design_submissions.find(
+        {"project_id": project_id, "status": "approved"},
+        {"_id": 0}
+    ).sort("reviewed_at", -1).to_list(100)
+    
+    signoff_documents = []
+    for submission in approved_submissions:
+        # Get files from the approved submission
+        submission_files = submission.get("files", [])
+        for file in submission_files:
+            signoff_doc = {
+                "id": f"signoff_{submission.get('submission_id')}_{file.get('file_id', file.get('file_name', '')[:8])}",
+                "file_name": file.get("file_name"),
+                "file_url": file.get("file_url"),
+                "file_type": file.get("file_type", "pdf"),
+                # Governance metadata
+                "category": "Sign-Off Documents",
+                "locked": True,
+                "source": "Design Approval Gate",
+                "gate_name": submission.get("milestone_name"),
+                "gate_key": submission.get("milestone_key"),
+                "submission_id": submission.get("submission_id"),
+                # Upload info
+                "uploaded_by": submission.get("submitted_by"),
+                "uploaded_by_name": submission.get("submitted_by_name"),
+                "uploaded_at": submission.get("submitted_at"),
+                # Approval info
+                "approved_by": submission.get("reviewed_by"),
+                "approved_by_name": submission.get("reviewed_by_name"),
+                "approval_date": submission.get("reviewed_at"),
+                # Version info
+                "version": submission.get("version", 1),
+                # Mark as sign-off document for frontend
+                "is_signoff_document": True
+            }
+            signoff_documents.append(signoff_doc)
+        
+        # Also include drive_link if present (for KWS Sign-Off etc.)
+        if submission.get("drive_link"):
+            drive_doc = {
+                "id": f"drivelink_{submission.get('submission_id')}",
+                "file_name": f"{submission.get('milestone_name')} - Drive Link",
+                "file_url": submission.get("drive_link"),
+                "file_type": "drive_link",
+                # Governance metadata
+                "category": "Sign-Off Documents",
+                "locked": True,
+                "source": "Design Approval Gate",
+                "gate_name": submission.get("milestone_name"),
+                "gate_key": submission.get("milestone_key"),
+                "submission_id": submission.get("submission_id"),
+                # Upload info
+                "uploaded_by": submission.get("submitted_by"),
+                "uploaded_by_name": submission.get("submitted_by_name"),
+                "uploaded_at": submission.get("submitted_at"),
+                # Approval info
+                "approved_by": submission.get("reviewed_by"),
+                "approved_by_name": submission.get("reviewed_by_name"),
+                "approval_date": submission.get("reviewed_at"),
+                # Version info
+                "version": submission.get("version", 1),
+                # Mark as sign-off document
+                "is_signoff_document": True,
+                "is_drive_link": True
+            }
+            signoff_documents.append(drive_doc)
+    
+    # Combine and return both types
+    # Sign-off documents are shown first for visibility
+    return {
+        "files": regular_files,
+        "signoff_documents": signoff_documents,
+        "total_files": len(regular_files),
+        "total_signoff_documents": len(signoff_documents)
+    }
 
 @api_router.post("/projects/{project_id}/files")
 async def upload_file(project_id: str, file_data: FileUpload, request: Request):

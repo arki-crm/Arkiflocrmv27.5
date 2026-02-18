@@ -28062,9 +28062,9 @@ async def get_project_profit(project_id: str, request: Request):
 
 # Default payment stages (can be customized per project)
 DEFAULT_PAYMENT_STAGES = [
-    {"stage_name": "Booking Amount", "percentage": None, "fixed_amount": 25000, "trigger": "booking", "order": 1},
-    {"stage_name": "After Design Finalization", "percentage": 50, "fixed_amount": None, "trigger": "design_complete", "order": 2},
-    {"stage_name": "After Production Completion", "percentage": 45, "fixed_amount": None, "trigger": "production_complete", "order": 3}
+    {"stage_name": "Booking Amount", "percentage": None, "fixed_amount": 25000, "trigger": "booking", "order": 1, "stage_type": "fixed"},
+    {"stage_name": "After Design Finalization", "percentage": 50, "fixed_amount": None, "trigger": "design_complete", "order": 2, "stage_type": "percentage"},
+    {"stage_name": "After Production Completion", "percentage": None, "fixed_amount": None, "trigger": "production_complete", "order": 3, "stage_type": "remaining"}
 ]
 
 # Payment modes

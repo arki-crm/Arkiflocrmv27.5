@@ -1540,7 +1540,7 @@ const ProjectDetails = () => {
                                 }}
                                 className="text-emerald-600"
                               />
-                              <span>10% of Project Value</span>
+                              <span>10% of Sign-off Value</span>
                             </label>
                           </div>
                         </div>
@@ -1548,11 +1548,11 @@ const ProjectDetails = () => {
                     </div>
                   )}
 
-                  {/* Custom Schedule Editor */}
-                  {financials.custom_payment_schedule_enabled && (
+                  {/* Custom Schedule Editor - Only when signoff is locked */}
+                  {financials.finance_status !== 'signoff_pending' && financials.custom_payment_schedule_enabled && (
                     <CustomPaymentScheduleEditor
                       schedule={financials.custom_payment_schedule || []}
-                      projectValue={financials.project_value || 0}
+                      projectValue={financials.signoff_value || 0}
                       canEdit={financials.can_edit}
                       onSave={async (newSchedule) => {
                         try {

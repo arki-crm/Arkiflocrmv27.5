@@ -28106,7 +28106,19 @@ class RefundCreate(BaseModel):
 
 @api_router.get("/finance/payment-schedule/{project_id}")
 async def get_payment_schedule(project_id: str, request: Request):
-    """Get payment schedule for a project"""
+    """Get payment schedule for a project
+    
+    Revenue Source Priority:
+    1. signoff_value (PRIMARY) - Locked after KWS Sign-Off
+    2. project_value (FALLBACK) - Only if signoff_value is null/0
+    
+    Default Stage Calculation (when is_custom=false):
+    - Stage 1: Booking (fixed amount)
+    - Stage 2: 50% of signoff_value
+    - Stage 3: Remaining balance = signoff_value - booking - stage2
+    
+    Custom schedules are preserved as-is.
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
@@ -28124,27 +28136,73 @@ async def get_payment_schedule(project_id: str, request: Request):
         {"_id": 0}
     )
     
-    contract_value = project.get("project_value", 0) or 0
+    # Revenue Source: signoff_value (PRIMARY), fallback to project_value
+    signoff_value = project.get("signoff_value") or 0
+    project_value = project.get("project_value") or 0
     
-    if schedule:
+    # Use signoff_value if available and > 0, otherwise fallback to project_value
+    base_value = signoff_value if signoff_value > 0 else project_value
+    
+    is_custom = schedule is not None
+    
+    if is_custom:
+        # Custom schedules: Preserve existing stage structure as-is
         stages = schedule.get("stages", [])
-    else:
-        # Use default schedule
-        stages = []
-        for s in DEFAULT_PAYMENT_STAGES:
-            stage = s.copy()
-            if stage["percentage"]:
-                stage["calculated_amount"] = round(contract_value * stage["percentage"] / 100, 0)
-            else:
+        
+        # For custom schedules, recalculate amounts based on stored structure
+        # but anchored to signoff_value
+        for stage in stages:
+            if stage.get("percentage") and stage.get("percentage") > 0:
+                stage["calculated_amount"] = round(base_value * stage["percentage"] / 100, 0)
+            elif stage.get("fixed_amount") and stage.get("fixed_amount") > 0:
                 stage["calculated_amount"] = stage["fixed_amount"]
+            elif stage.get("stage_type") == "remaining":
+                # Will be calculated after all other stages
+                pass
+        
+        # Calculate remaining stage if exists
+        total_non_remaining = sum(
+            s.get("calculated_amount", 0) 
+            for s in stages 
+            if s.get("stage_type") != "remaining"
+        )
+        for stage in stages:
+            if stage.get("stage_type") == "remaining":
+                stage["calculated_amount"] = max(0, base_value - total_non_remaining)
+                
+    else:
+        # Default schedule: Apply correct calculation logic
+        # Stage 1: Fixed booking
+        # Stage 2: 50% of signoff_value
+        # Stage 3: Remaining balance (signoff_value - booking - stage2)
+        
+        stages = []
+        total_fixed_and_percentage = 0
+        remaining_stage_index = -1
+        
+        for i, s in enumerate(DEFAULT_PAYMENT_STAGES):
+            stage = s.copy()
+            stage_type = stage.get("stage_type", "percentage")
+            
+            if stage_type == "fixed":
+                # Fixed amount (e.g., Booking = ₹25,000)
+                stage["calculated_amount"] = stage.get("fixed_amount", 0)
+                total_fixed_and_percentage += stage["calculated_amount"]
+            elif stage_type == "percentage" and stage.get("percentage"):
+                # Percentage of signoff_value (e.g., 50% of signoff_value)
+                stage["calculated_amount"] = round(base_value * stage["percentage"] / 100, 0)
+                total_fixed_and_percentage += stage["calculated_amount"]
+            elif stage_type == "remaining":
+                # Mark for later calculation
+                remaining_stage_index = len(stages)
+                stage["calculated_amount"] = 0  # Placeholder
+            
             stages.append(stage)
-    
-    # Calculate amounts for percentage-based stages
-    for stage in stages:
-        if stage.get("percentage") and not stage.get("calculated_amount"):
-            stage["calculated_amount"] = round(contract_value * stage["percentage"] / 100, 0)
-        elif stage.get("fixed_amount") and not stage.get("calculated_amount"):
-            stage["calculated_amount"] = stage["fixed_amount"]
+        
+        # Calculate remaining stage: signoff_value - all other stages
+        if remaining_stage_index >= 0:
+            remaining_amount = max(0, base_value - total_fixed_and_percentage)
+            stages[remaining_stage_index]["calculated_amount"] = remaining_amount
     
     # Get receipts for this project to determine paid status
     receipts = await db.finance_receipts.find(
@@ -28154,7 +28212,7 @@ async def get_payment_schedule(project_id: str, request: Request):
     
     total_received = sum(r.get("amount", 0) for r in receipts)
     
-    # Mark stages as paid
+    # Mark stages as paid based on received amounts
     running_total = 0
     for stage in stages:
         stage_amount = stage.get("calculated_amount", 0)
@@ -28169,14 +28227,18 @@ async def get_payment_schedule(project_id: str, request: Request):
             stage["paid_amount"] = 0
         running_total += stage_amount
     
+    total_expected = sum(s.get("calculated_amount", 0) for s in stages)
+    
     return {
         "project_id": project_id,
-        "contract_value": contract_value,
-        "is_custom": schedule is not None,
+        "signoff_value": signoff_value,  # Primary source
+        "contract_value": base_value,     # Effective value used for calculations
+        "project_value": project_value,   # Legacy reference
+        "is_custom": is_custom,
         "stages": stages,
-        "total_expected": sum(s.get("calculated_amount", 0) for s in stages),
+        "total_expected": total_expected,
         "total_received": total_received,
-        "balance_remaining": contract_value - total_received
+        "balance_remaining": base_value - total_received
     }
 
 

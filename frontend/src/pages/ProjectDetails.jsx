@@ -123,6 +123,7 @@ const ProjectDetails = () => {
   
   // Files and Notes state
   const [files, setFiles] = useState([]);
+  const [signoffDocuments, setSignoffDocuments] = useState([]);
   const [notes, setNotes] = useState([]);
   const [collaborators, setCollaborators] = useState([]);
   

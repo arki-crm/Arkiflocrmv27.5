@@ -1352,47 +1352,40 @@ const ProjectDetails = () => {
             </div>
           ) : financials ? (
             <>
+              {/* Sign-off Pending Banner */}
+              {financials.finance_status === 'signoff_pending' && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+                    <div>
+                      <p className="font-medium text-amber-800">Sign-off Pending</p>
+                      <p className="text-sm text-amber-600">Financial calculations require sign-off lock. Complete design sign-off to enable payment milestones.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Project Value Card */}
+                {/* Sign-off Value Card (Execution Revenue Baseline) */}
                 <Card className="border-slate-200">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-500">Project Value</span>
-                      {financials.can_edit && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setEditingProjectValue(true)}
-                          className="h-7 text-xs"
-                        >
-                          <Edit2 className="h-3 w-3 mr-1" />
-                          Edit
-                        </Button>
+                      <span className="text-sm text-slate-500">Sign-off Value</span>
+                      {financials.signoff_locked && (
+                        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">Locked</span>
                       )}
                     </div>
-                    {editingProjectValue ? (
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center">
-                          <span className="text-lg font-bold text-slate-400 mr-1">₹</span>
-                          <Input
-                            type="number"
-                            value={newProjectValue}
-                            onChange={(e) => setNewProjectValue(e.target.value)}
-                            className="w-32 h-8"
-                            placeholder="0"
-                          />
-                        </div>
-                        <Button size="sm" onClick={handleUpdateProjectValue} className="h-8">
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingProjectValue(false)} className="h-8">
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
+                    {financials.signoff_value > 0 ? (
                       <p className="text-2xl font-bold text-slate-900">
-                        ₹{financials.project_value?.toLocaleString('en-IN') || '0'}
+                        ₹{financials.signoff_value?.toLocaleString('en-IN')}
+                      </p>
+                    ) : (
+                      <p className="text-lg font-medium text-amber-600">Sign-off Pending</p>
+                    )}
+                    {financials.presales_budget > 0 && financials.presales_budget !== financials.signoff_value && (
+                      <p className="text-xs text-slate-400 mt-1">
+                        Pre-sales estimate: ₹{financials.presales_budget?.toLocaleString('en-IN')}
                       </p>
                     )}
                   </CardContent>
@@ -1418,14 +1411,18 @@ const ProjectDetails = () => {
                       <Receipt className="h-4 w-4 text-amber-600" />
                       <span className="text-sm text-slate-500">Balance Pending</span>
                     </div>
-                    <p className={cn(
-                      "text-2xl font-bold",
-                      financials.balance_pending <= 0 ? "text-emerald-600" : "text-amber-600",
-                      financials.balance_pending < 0 && "text-red-600"
-                    )}>
-                      ₹{Math.abs(financials.balance_pending)?.toLocaleString('en-IN') || '0'}
-                      {financials.balance_pending < 0 && <span className="text-sm ml-1">(Overpaid)</span>}
-                    </p>
+                    {financials.signoff_value > 0 ? (
+                      <p className={cn(
+                        "text-2xl font-bold",
+                        financials.balance_pending <= 0 ? "text-emerald-600" : "text-amber-600",
+                        financials.balance_pending < 0 && "text-red-600"
+                      )}>
+                        ₹{Math.abs(financials.balance_pending)?.toLocaleString('en-IN') || '0'}
+                        {financials.balance_pending < 0 && <span className="text-sm ml-1">(Overpaid)</span>}
+                      </p>
+                    ) : (
+                      <p className="text-lg font-medium text-slate-400">—</p>
+                    )}
                   </CardContent>
                 </Card>
               </div>

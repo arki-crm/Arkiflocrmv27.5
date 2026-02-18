@@ -5810,12 +5810,23 @@ async def upload_file(project_id: str, file_data: FileUpload, request: Request):
 
 @api_router.delete("/projects/{project_id}/files/{file_id}")
 async def delete_file(project_id: str, file_id: str, request: Request):
-    """Delete a file (requires admin.delete_files permission)"""
+    """Delete a file (requires admin.delete_files permission)
+    
+    GOVERNANCE: Sign-off documents (file_id starting with 'signoff_' or 'drivelink_')
+    cannot be deleted from this endpoint. Deletion must be done through Design Approval Gate.
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
     if not has_permission(user_doc, "admin.delete_files"):
         raise HTTPException(status_code=403, detail="You don't have permission to delete files")
+    
+    # GOVERNANCE: Prevent deletion of sign-off documents from Files tab
+    if file_id.startswith("signoff_") or file_id.startswith("drivelink_"):
+        raise HTTPException(
+            status_code=403, 
+            detail="Sign-off documents cannot be deleted from Files. Deletion governance is managed through Design Approval Gate."
+        )
     
     result = await db.projects.update_one(
         {"project_id": project_id},

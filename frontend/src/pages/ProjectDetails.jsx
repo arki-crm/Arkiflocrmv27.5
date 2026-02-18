@@ -238,6 +238,27 @@ const ProjectDetails = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Fetch files for this project (includes sign-off documents)
+  const fetchFiles = async () => {
+    try {
+      const response = await axios.get(`${API}/projects/${id}/files`, {
+        withCredentials: true
+      });
+      setFiles(response.data.files || []);
+      setSignoffDocuments(response.data.signoff_documents || []);
+    } catch (err) {
+      console.error('Failed to fetch files:', err);
+    }
+  };
+
+  // Fetch files when tab changes to files
+  useEffect(() => {
+    if (activeTab === 'files' && id && user?.role !== 'PreSales') {
+      fetchFiles();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, id]);
+
   // Fetch meetings for this project
   const fetchMeetings = async () => {
     try {

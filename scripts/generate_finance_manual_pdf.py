@@ -467,7 +467,7 @@ def build_pdf(md_content, output_path):
             elif content.startswith('**IMPORTANT:**') or content.startswith('IMPORTANT:'):
                 story.append(Paragraph(format_text(content), styles['Important']))
             else:
-                story.append(Paragraph(format_text(content), styles['BodyText']))
+                story.append(Paragraph(format_text(content), styles['CustomBody']))
         
         elif elem_type == 'code':
             # Clean up code and preserve formatting

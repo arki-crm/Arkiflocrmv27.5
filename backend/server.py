@@ -11709,7 +11709,12 @@ def validate_payment_schedule(schedule):
 
 @api_router.get("/projects/{project_id}/financials")
 async def get_project_financials(project_id: str, request: Request):
-    """Get project financial details - payments derived from CashBook/Receipts"""
+    """Get project financial details - payments derived from CashBook/Receipts
+    
+    GOVERNANCE RULE: Execution Revenue Baseline = signoff_value ONLY
+    - No fallback to presales budget, booked_value, or contract_value
+    - If signoff_value not set, show "Sign-off Pending" status
+    """
     user = await get_current_user(request)
     
     # PreSales cannot access financials
@@ -11724,8 +11729,13 @@ async def get_project_financials(project_id: str, request: Request):
     if user.role == "Designer" and user.user_id not in project.get("collaborators", []):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Initialize financial fields if not present
-    project_value = project.get("project_value", 0)
+    # GOVERNANCE: Use signoff_value ONLY for financial calculations - NO FALLBACKS
+    signoff_value = project.get("signoff_value") or 0
+    signoff_locked = project.get("signoff_locked", False)
+    
+    # Keep project_value as informational only (presales estimate)
+    presales_budget = project.get("project_value", 0)
+    
     custom_enabled = project.get("custom_payment_schedule_enabled", False)
     custom_schedule = project.get("custom_payment_schedule", [])
     default_schedule = project.get("payment_schedule", DEFAULT_PAYMENT_SCHEDULE)
@@ -11765,20 +11775,39 @@ async def get_project_financials(project_id: str, request: Request):
     
     # Calculate totals from CashBook data
     total_collected = sum(p.get("amount", 0) for p in enriched_payments)
-    balance_pending = project_value - total_collected
     
-    # Calculate milestone amounts using the active schedule
+    # GOVERNANCE: Balance calculated from signoff_value ONLY (no fallbacks)
+    balance_pending = signoff_value - total_collected if signoff_value > 0 else 0
+    
+    # Calculate milestone amounts using signoff_value as base (GOVERNANCE)
     active_schedule = custom_schedule if (custom_enabled and custom_schedule) else default_schedule
-    milestone_amounts = calculate_schedule_amounts(active_schedule, project_value)
+    
+    # Only calculate milestones if signoff_value is set
+    if signoff_value > 0:
+        milestone_amounts = calculate_schedule_amounts(active_schedule, signoff_value)
+    else:
+        # Return empty milestones if signoff not locked
+        milestone_amounts = []
+    
+    # Determine finance status
+    finance_status = "active" if signoff_value > 0 else "signoff_pending"
     
     return {
         "project_id": project_id,
         "project_name": project.get("project_name"),
-        "project_value": project_value,
+        # Governance-safe revenue baseline
+        "finance_status": finance_status,
+        "signoff_value": signoff_value,
+        "signoff_locked": signoff_locked,
+        # Informational only (NOT for financial calculations)
+        "presales_budget": presales_budget,
+        "project_value": presales_budget,  # Deprecated alias - kept for backward compatibility
+        # Schedule configuration
         "custom_payment_schedule_enabled": custom_enabled,
         "custom_payment_schedule": custom_schedule,
         "default_payment_schedule": default_schedule,
         "payment_schedule": milestone_amounts,
+        # Payment data
         "payments": enriched_payments,
         "total_collected": total_collected,
         "balance_pending": balance_pending,

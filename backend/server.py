@@ -28452,16 +28452,20 @@ async def get_daily_closing_snapshot(
     if not accounts:
         return {
             "date": target_date.strftime("%Y-%m-%d"),
+            "date_display": target_date.strftime("%B %d, %Y"),
+            "is_today": target_date.date() == now.date(),
             "generated_at": now.isoformat(),
             "accounts": [],
             "summary": {
                 "total_cash": 0,
                 "total_bank": 0,
+                "total_upi_wallet": 0,
                 "total_other": 0,
                 "grand_total": 0
             },
             "by_type": {},
-            "by_custodian": []
+            "by_custodian": None,
+            "account_count": 0
         }
     
     # Calculate closing balance for each account as of selected date

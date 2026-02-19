@@ -28398,6 +28398,202 @@ async def get_trial_balance(
 
 
 # ============================================================================
+# ============ DAILY CLOSING SNAPSHOT (FOUNDER LIQUIDITY VIEW) ===============
+# ============================================================================
+# Read-only ledger-driven daily balance snapshot for founder visibility
+
+@api_router.get("/finance/daily-snapshot")
+async def get_daily_closing_snapshot(
+    request: Request,
+    date: Optional[str] = None  # ISO date string (YYYY-MM-DD), defaults to today
+):
+    """Get Daily Closing Snapshot - Founder Liquidity View
+    
+    Shows per-account closing balances as of selected date.
+    Visible only to Founder, CEO, FinanceManager roles.
+    
+    Data source: accounting_transactions + finance_accounts
+    Does NOT modify any data - read-only reporting.
+    """
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Permission check - only Founder, CEO, FinanceManager
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    allowed_roles = ["Founder", "Admin", "FinanceManager", "CharteredAccountant"]
+    if user_doc.get("role") not in allowed_roles:
+        raise HTTPException(
+            status_code=403, 
+            detail="Access denied - Daily Closing Snapshot is restricted to Founder, CEO, and Finance Manager roles"
+        )
+    
+    now = datetime.now(timezone.utc)
+    
+    # Parse target date (default to today)
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    else:
+        target_date = now
+    
+    # End of selected day
+    end_of_day = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    end_of_day_iso = end_of_day.isoformat()
+    
+    # Get all active accounts
+    accounts = await db.finance_accounts.find(
+        {"is_active": {"$ne": False}},
+        {"_id": 0}
+    ).to_list(100)
+    
+    if not accounts:
+        return {
+            "date": target_date.strftime("%Y-%m-%d"),
+            "generated_at": now.isoformat(),
+            "accounts": [],
+            "summary": {
+                "total_cash": 0,
+                "total_bank": 0,
+                "total_other": 0,
+                "grand_total": 0
+            },
+            "by_type": {},
+            "by_custodian": []
+        }
+    
+    # Calculate closing balance for each account as of selected date
+    account_balances = []
+    
+    for account in accounts:
+        account_id = account.get("account_id")
+        account_name = account.get("account_name") or account.get("name", "Unknown")
+        account_type = account.get("account_type", "other").lower()
+        opening_balance = account.get("opening_balance", 0) or 0
+        custodian = account.get("custodian") or account.get("owner") or None
+        
+        # Normalize account type
+        if account_type in ["bank", "current", "savings"]:
+            normalized_type = "bank"
+        elif account_type in ["cash", "petty_cash", "petty cash"]:
+            normalized_type = "cash"
+        elif account_type in ["upi", "wallet", "paytm", "gpay", "phonepe"]:
+            normalized_type = "upi_wallet"
+        else:
+            normalized_type = "other"
+        
+        # Get all transactions for this account up to end of selected day
+        inflows = await db.accounting_transactions.find({
+            "account_id": account_id,
+            "transaction_type": "inflow",
+            "created_at": {"$lte": end_of_day_iso}
+        }, {"_id": 0, "amount": 1}).to_list(50000)
+        
+        outflows = await db.accounting_transactions.find({
+            "account_id": account_id,
+            "transaction_type": "outflow",
+            "created_at": {"$lte": end_of_day_iso}
+        }, {"_id": 0, "amount": 1}).to_list(50000)
+        
+        total_inflows = sum(t.get("amount", 0) for t in inflows)
+        total_outflows = sum(t.get("amount", 0) for t in outflows)
+        
+        # Closing balance = Opening + Inflows - Outflows
+        closing_balance = opening_balance + total_inflows - total_outflows
+        
+        account_balances.append({
+            "account_id": account_id,
+            "account_name": account_name,
+            "account_type": normalized_type,
+            "account_type_display": account_type.replace("_", " ").title(),
+            "opening_balance": opening_balance,
+            "total_inflows": total_inflows,
+            "total_outflows": total_outflows,
+            "closing_balance": closing_balance,
+            "custodian": custodian,
+            "bank_name": account.get("bank_name"),
+            "account_number": account.get("account_number")
+        })
+    
+    # Sort by account type, then by closing balance (descending)
+    type_order = {"cash": 1, "bank": 2, "upi_wallet": 3, "other": 4}
+    account_balances.sort(key=lambda x: (type_order.get(x["account_type"], 99), -x["closing_balance"]))
+    
+    # Calculate summary totals by type
+    total_cash = sum(a["closing_balance"] for a in account_balances if a["account_type"] == "cash")
+    total_bank = sum(a["closing_balance"] for a in account_balances if a["account_type"] == "bank")
+    total_upi_wallet = sum(a["closing_balance"] for a in account_balances if a["account_type"] == "upi_wallet")
+    total_other = sum(a["closing_balance"] for a in account_balances if a["account_type"] == "other")
+    grand_total = total_cash + total_bank + total_upi_wallet + total_other
+    
+    # Group by type for detailed view
+    by_type = {}
+    for acc in account_balances:
+        acc_type = acc["account_type"]
+        if acc_type not in by_type:
+            by_type[acc_type] = {
+                "type": acc_type,
+                "type_display": {
+                    "cash": "Cash",
+                    "bank": "Bank",
+                    "upi_wallet": "UPI / Wallet",
+                    "other": "Other"
+                }.get(acc_type, acc_type.title()),
+                "accounts": [],
+                "total": 0
+            }
+        by_type[acc_type]["accounts"].append(acc)
+        by_type[acc_type]["total"] += acc["closing_balance"]
+    
+    # Custodian split (if custodian data exists)
+    by_custodian = []
+    custodians_exist = any(a.get("custodian") for a in account_balances)
+    
+    if custodians_exist:
+        custodian_totals = {}
+        for acc in account_balances:
+            cust = acc.get("custodian") or "Unassigned"
+            if cust not in custodian_totals:
+                custodian_totals[cust] = {
+                    "custodian": cust,
+                    "total_balance": 0,
+                    "account_count": 0
+                }
+            custodian_totals[cust]["total_balance"] += acc["closing_balance"]
+            custodian_totals[cust]["account_count"] += 1
+        
+        by_custodian = sorted(
+            custodian_totals.values(),
+            key=lambda x: x["total_balance"],
+            reverse=True
+        )
+    
+    return {
+        "date": target_date.strftime("%Y-%m-%d"),
+        "date_display": target_date.strftime("%B %d, %Y"),
+        "is_today": target_date.date() == now.date(),
+        "generated_at": now.isoformat(),
+        
+        "accounts": account_balances,
+        
+        "summary": {
+            "total_cash": total_cash,
+            "total_bank": total_bank,
+            "total_upi_wallet": total_upi_wallet,
+            "total_other": total_other,
+            "grand_total": grand_total
+        },
+        
+        "by_type": by_type,
+        "by_custodian": by_custodian if custodians_exist else None,
+        
+        "account_count": len(account_balances)
+    }
+
+
+# ============================================================================
 # ============ PROJECT PROFIT VISIBILITY =====================================
 # ============================================================================
 # Enhanced project finance metrics - projected vs realised profit

@@ -28107,6 +28107,297 @@ async def get_pnl_snapshot(
 
 
 # ============================================================================
+# ============ TRIAL BALANCE REPORT ==========================================
+# ============================================================================
+# Read-only report from existing accounting_transactions
+
+@api_router.get("/finance/trial-balance")
+async def get_trial_balance(
+    request: Request,
+    period: str = "month",  # month, quarter, fy (financial year), custom
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """Get Trial Balance report for a period
+    
+    Groups accounts by:
+    - Assets (Bank/Cash accounts, Receivables)
+    - Liabilities (Payables, Open liabilities)
+    - Income (Project revenue, Other income)
+    - Expenses (Project costs, Operating expenses)
+    - Equity (Retained earnings, if applicable)
+    
+    Shows Debit and Credit columns with totals.
+    """
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Determine date range
+    if period == "month":
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=now.month + 1, day=1) - timedelta(seconds=1)
+        period_label = now.strftime("%B %Y")
+    elif period == "quarter":
+        quarter = (now.month - 1) // 3
+        start = now.replace(month=quarter * 3 + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_month = (quarter + 1) * 3 + 1
+        if end_month > 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=end_month, day=1) - timedelta(seconds=1)
+        period_label = f"Q{quarter + 1} {now.year}"
+    elif period == "fy":
+        # Financial Year: April 1 to March 31 (India)
+        if now.month >= 4:
+            fy_start_year = now.year
+        else:
+            fy_start_year = now.year - 1
+        start = now.replace(year=fy_start_year, month=4, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = now.replace(year=fy_start_year + 1, month=3, day=31, hour=23, minute=59, second=59, microsecond=999999)
+        period_label = f"FY {fy_start_year}-{fy_start_year + 1}"
+    elif period == "custom" and start_date and end_date:
+        start = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        end = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        if not end.tzinfo:
+            end = end.replace(tzinfo=timezone.utc)
+        period_label = f"{start_date[:10]} to {end_date[:10]}"
+    else:
+        # Default to current month
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=now.month + 1, day=1) - timedelta(seconds=1)
+        period_label = now.strftime("%B %Y")
+    
+    start_iso = start.isoformat()
+    end_iso = end.isoformat()
+    
+    # Get all accounts
+    accounts = await db.finance_accounts.find({}, {"_id": 0}).to_list(100)
+    accounts_map = {a["account_id"]: a for a in accounts}
+    
+    # Get all categories
+    categories = await db.accounting_categories.find({}, {"_id": 0}).to_list(100)
+    categories_map = {c["category_id"]: c for c in categories}
+    
+    # Get transactions in the period
+    transactions = await db.accounting_transactions.find({
+        "created_at": {"$gte": start_iso, "$lte": end_iso}
+    }, {"_id": 0}).to_list(50000)
+    
+    # Initialize trial balance structure
+    trial_balance = {
+        "assets": [],
+        "liabilities": [],
+        "income": [],
+        "expenses": [],
+        "equity": []
+    }
+    
+    # Track totals
+    total_debit = 0
+    total_credit = 0
+    
+    # ===== ASSETS =====
+    # Bank and Cash accounts
+    for account in accounts:
+        acc_id = account.get("account_id")
+        acc_name = account.get("account_name") or account.get("name", "Unknown")
+        acc_type = account.get("account_type", "bank")
+        
+        # Calculate balance from transactions in period
+        acc_inflows = sum(t.get("amount", 0) for t in transactions 
+                        if t.get("account_id") == acc_id and t.get("transaction_type") == "inflow")
+        acc_outflows = sum(t.get("amount", 0) for t in transactions 
+                         if t.get("account_id") == acc_id and t.get("transaction_type") == "outflow")
+        
+        # For assets: Debit increases, Credit decreases
+        # Net debit balance = inflows - outflows (if positive, it's a debit)
+        net_movement = acc_inflows - acc_outflows
+        
+        debit = acc_inflows
+        credit = acc_outflows
+        
+        if debit > 0 or credit > 0:
+            trial_balance["assets"].append({
+                "account_name": f"{acc_name} ({acc_type.title()})",
+                "account_id": acc_id,
+                "debit": debit,
+                "credit": credit,
+                "net": net_movement
+            })
+            total_debit += debit
+            total_credit += credit
+    
+    # Accounts Receivable (from projects with pending payments)
+    projects_with_pending = await db.projects.find(
+        {"signoff_value": {"$gt": 0}},
+        {"_id": 0, "project_id": 1, "project_name": 1, "name": 1, "signoff_value": 1}
+    ).to_list(1000)
+    
+    receivables_total = 0
+    for proj in projects_with_pending:
+        proj_id = proj.get("project_id")
+        signoff = proj.get("signoff_value", 0)
+        
+        # Get total received for this project in period
+        received = sum(t.get("amount", 0) for t in transactions 
+                      if t.get("project_id") == proj_id and t.get("transaction_type") == "inflow")
+        
+        # Outstanding = signoff - received (simplified view)
+        # For trial balance, we track movement not balances
+        receivables_total += received
+    
+    if receivables_total > 0:
+        # Project receipts are recorded as debit to receivables (reducing AR) when cash comes in
+        # Here we show the cash received which reduces AR
+        trial_balance["assets"].append({
+            "account_name": "Accounts Receivable (Project Payments)",
+            "account_id": "receivables",
+            "debit": receivables_total,  # Cash received
+            "credit": 0,
+            "net": receivables_total
+        })
+        total_debit += receivables_total
+    
+    # ===== LIABILITIES =====
+    # Get open liabilities from the period
+    open_liabilities = await db.finance_liabilities.find({
+        "created_at": {"$gte": start_iso, "$lte": end_iso}
+    }, {"_id": 0, "amount": 1, "amount_remaining": 1, "vendor_name": 1, "liability_id": 1}).to_list(10000)
+    
+    liab_created = sum(l.get("amount", 0) for l in open_liabilities)
+    liab_paid = sum(l.get("amount", 0) - l.get("amount_remaining", 0) for l in open_liabilities)
+    
+    if liab_created > 0 or liab_paid > 0:
+        trial_balance["liabilities"].append({
+            "account_name": "Accounts Payable (Vendor Liabilities)",
+            "account_id": "payables",
+            "debit": liab_paid,  # Payments reduce liability (debit)
+            "credit": liab_created,  # New liabilities (credit)
+            "net": liab_created - liab_paid
+        })
+        total_debit += liab_paid
+        total_credit += liab_created
+    
+    # ===== INCOME =====
+    # Project Revenue (inflows linked to projects)
+    project_income = sum(t.get("amount", 0) for t in transactions 
+                        if t.get("project_id") and t.get("transaction_type") == "inflow")
+    
+    if project_income > 0:
+        trial_balance["income"].append({
+            "account_name": "Project Revenue",
+            "account_id": "project_revenue",
+            "debit": 0,
+            "credit": project_income,
+            "net": -project_income  # Credit balance
+        })
+        total_credit += project_income
+    
+    # Other Income (inflows not linked to projects)
+    other_income = sum(t.get("amount", 0) for t in transactions 
+                      if not t.get("project_id") and t.get("transaction_type") == "inflow"
+                      and t.get("category_id") != "internal_transfer")
+    
+    if other_income > 0:
+        trial_balance["income"].append({
+            "account_name": "Other Income",
+            "account_id": "other_income",
+            "debit": 0,
+            "credit": other_income,
+            "net": -other_income
+        })
+        total_credit += other_income
+    
+    # ===== EXPENSES =====
+    # Group expenses by category
+    expense_by_category = {}
+    for txn in transactions:
+        if txn.get("transaction_type") == "outflow" and txn.get("category_id") != "internal_transfer":
+            cat_id = txn.get("category_id", "uncategorized")
+            cat_name = categories_map.get(cat_id, {}).get("name", cat_id.replace("_", " ").title() if cat_id else "Uncategorized")
+            
+            if cat_id not in expense_by_category:
+                expense_by_category[cat_id] = {
+                    "account_name": cat_name,
+                    "account_id": cat_id,
+                    "debit": 0,
+                    "credit": 0
+                }
+            expense_by_category[cat_id]["debit"] += txn.get("amount", 0)
+    
+    for cat_id, exp in expense_by_category.items():
+        if exp["debit"] > 0:
+            exp["net"] = exp["debit"]  # Debit balance for expenses
+            trial_balance["expenses"].append(exp)
+            total_debit += exp["debit"]
+    
+    # Sort expenses by amount (descending)
+    trial_balance["expenses"].sort(key=lambda x: x["debit"], reverse=True)
+    
+    # ===== EQUITY =====
+    # Calculate retained earnings as balancing figure (simplified)
+    retained_earnings = total_credit - total_debit
+    if retained_earnings != 0:
+        trial_balance["equity"].append({
+            "account_name": "Retained Earnings / Net Movement",
+            "account_id": "retained_earnings",
+            "debit": max(0, -retained_earnings),
+            "credit": max(0, retained_earnings),
+            "net": retained_earnings
+        })
+        if retained_earnings > 0:
+            total_credit += retained_earnings
+        else:
+            total_debit += abs(retained_earnings)
+    
+    # Calculate final totals
+    final_total_debit = sum(
+        sum(item["debit"] for item in trial_balance[group])
+        for group in ["assets", "liabilities", "income", "expenses", "equity"]
+    )
+    final_total_credit = sum(
+        sum(item["credit"] for item in trial_balance[group])
+        for group in ["assets", "liabilities", "income", "expenses", "equity"]
+    )
+    
+    is_balanced = abs(final_total_debit - final_total_credit) < 1  # Allow small rounding
+    
+    return {
+        "period": period,
+        "period_label": period_label,
+        "start_date": start_iso[:10],
+        "end_date": end_iso[:10],
+        "generated_at": now.isoformat(),
+        
+        "trial_balance": trial_balance,
+        
+        "totals": {
+            "total_debit": final_total_debit,
+            "total_credit": final_total_credit,
+            "difference": final_total_debit - final_total_credit,
+            "is_balanced": is_balanced
+        },
+        
+        "summary": {
+            "total_assets_movement": sum(item["debit"] - item["credit"] for item in trial_balance["assets"]),
+            "total_liabilities_movement": sum(item["credit"] - item["debit"] for item in trial_balance["liabilities"]),
+            "total_income": sum(item["credit"] for item in trial_balance["income"]),
+            "total_expenses": sum(item["debit"] for item in trial_balance["expenses"]),
+            "net_profit_loss": sum(item["credit"] for item in trial_balance["income"]) - sum(item["debit"] for item in trial_balance["expenses"])
+        }
+    }
+
+
+# ============================================================================
 # ============ PROJECT PROFIT VISIBILITY =====================================
 # ============================================================================
 # Enhanced project finance metrics - projected vs realised profit

@@ -50,7 +50,8 @@ import {
   FileMinus,
   FilePlus,
   PackageCheck,
-  Scale
+  Scale,
+  Landmark
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 

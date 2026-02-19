@@ -101,6 +101,7 @@ const caFinanceSubItems = [
   { path: '/finance/liabilities', label: 'Liabilities', icon: FileText },
   { path: '/finance/receipts', label: 'Receipts', icon: Receipt },
   { path: '/finance/pnl-snapshot', label: 'P&L Snapshot', icon: TrendingUp },
+  { path: '/finance/trial-balance', label: 'Trial Balance', icon: Scale },
   { path: '/finance/reports', label: 'Reports', icon: BarChart3 },
   { path: '/admin/import-export', label: 'Export Data', icon: FileUp },
 ];

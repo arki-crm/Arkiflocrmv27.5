@@ -9,39 +9,39 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Trial Balance Report Feature COMPLETE ✅
+## Current Status: Daily Closing Snapshot Feature COMPLETE ✅
 **As of February 19, 2026**
 
-### Finance Module - Trial Balance Report
+### Finance Module - Daily Closing Snapshot (Founder Liquidity View)
 
-Implemented a comprehensive Trial Balance report feature for double-entry accounting verification.
+Implemented a read-only daily liquidity snapshot for founder-level visibility into account balances.
 
 | # | Feature | Description | Status |
 |---|---------|-------------|--------|
-| 1 | **Sidebar Navigation** | "Trial Balance" tab added under Finance menu with Scale icon | ✅ |
-| 2 | **Period Filters** | This Month, Quarter, Financial Year, Custom date range filters | ✅ |
-| 3 | **Account Groups** | Assets, Liabilities, Income, Expenses, Equity sections | ✅ |
-| 4 | **Debit/Credit Columns** | Standard accounting format with Debit and Credit columns | ✅ |
-| 5 | **Summary Cards** | Total Income, Total Expenses, Net Profit/Loss, Balance Status | ✅ |
-| 6 | **Grand Total Row** | Shows Total Debit and Total Credit with balance check | ✅ |
-| 7 | **Balance Status Indicator** | Green "Balanced" or Red "Mismatch" with difference amount | ✅ |
-| 8 | **Excel Export** | Downloads CSV file with all trial balance data | ✅ |
-| 9 | **PDF Export** | Opens print dialog with professionally formatted report | ✅ |
-| 10 | **Read-Only Report** | Does not modify any existing data or logic | ✅ |
+| 1 | **Sidebar Navigation** | "Daily Closing" tab added under Finance menu with Landmark icon | ✅ |
+| 2 | **Date Selector** | Date input with prev/next arrows, defaults to today | ✅ |
+| 3 | **Summary Cards** | Cash, Bank, UPI/Wallet, Other, Grand Total Liquidity | ✅ |
+| 4 | **Account Groups** | Accounts grouped by type (Cash, Bank, UPI/Wallet, Other) | ✅ |
+| 5 | **Closing Balance** | Per-account closing balance as of selected date | ✅ |
+| 6 | **Custodian Split** | Optional grouping by custodian (if data exists) | ✅ |
+| 7 | **Permission Restriction** | Access limited to Founder, Admin, FinanceManager, CA | ✅ |
+| 8 | **Read-Only** | No data modification - pure reporting layer | ✅ |
+| 9 | **Go to Today Button** | Quick navigation back to today's snapshot | ✅ |
+| 10 | **Empty State** | Graceful handling when no accounts exist | ✅ |
 
 **Technical Details:**
-- Backend API: `GET /api/finance/trial-balance?period={month|quarter|fy|custom}&start_date=&end_date=`
-- Frontend: `/app/frontend/src/pages/TrialBalance.jsx`
-- Route: `/finance/trial-balance`
-- Data Source: Reads from `accounting_transactions` collection
-- No modifications to cashbook, daybook, or payment schedule logic
+- Backend API: `GET /api/finance/daily-snapshot?date=YYYY-MM-DD` (defaults to today)
+- Frontend: `/app/frontend/src/pages/DailyClosingSnapshot.jsx`
+- Route: `/finance/daily-snapshot`
+- Data Source: Reads from `finance_accounts` + `accounting_transactions`
+- No modifications to cashbook, daybook, or any existing finance logic
 
-**Verification (iteration_72.json):** 100% pass rate - All backend API tests (9/9) and frontend UI tests passed.
+**Verification (iteration_73.json):** 100% pass rate - All backend API tests (11/11) and frontend UI tests passed.
 
 ---
 
-## Previous Status: Module Spatial Precision + Arc Wall COMPLETE ✅
-**As of February 14, 2026**
+## Previous Status: Trial Balance Report COMPLETE ✅
+**As of February 19, 2026**
 
 ### Composer (SpatialBOQCanvas) - Module Spatial Precision Fix
 

@@ -68,6 +68,7 @@ import Salaries from './pages/Salaries';
 import Liabilities from './pages/Liabilities';
 import PnLSnapshot from './pages/PnLSnapshot';
 import TrialBalance from './pages/TrialBalance';
+import DailyClosingSnapshot from './pages/DailyClosingSnapshot';
 import ImportExport from './pages/ImportExport';
 import FinanceReports from './pages/FinanceReports';
 import CashFlowReport from './pages/CashFlowReport';

@@ -49,7 +49,8 @@ import {
   ClipboardList,
   FileMinus,
   FilePlus,
-  PackageCheck
+  PackageCheck,
+  Scale
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 

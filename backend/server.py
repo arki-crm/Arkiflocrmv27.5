@@ -34967,6 +34967,183 @@ async def create_audit_log(
     return audit_entry
 
 
+# ============ PARTY SUB-LEDGER HELPER FUNCTIONS ============
+
+async def ensure_control_accounts_exist():
+    """Ensure all control accounts exist in the system"""
+    for key, ctrl in CONTROL_ACCOUNTS.items():
+        existing = await db.party_subledger_accounts.find_one({"account_id": ctrl["account_id"]})
+        if not existing:
+            await db.party_subledger_accounts.insert_one({
+                **ctrl,
+                "is_control": True,
+                "parent_account_id": None,
+                "party_id": None,
+                "opening_balance": 0,
+                "current_balance": 0,
+                "is_active": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_by": "system"
+            })
+            logger.info(f"Created control account: {ctrl['account_name']}")
+
+
+async def create_party_subledger_account(
+    party_type: str,
+    party_id: str,
+    party_name: str,
+    user_id: str = "system",
+    user_name: str = "System"
+) -> dict:
+    """
+    Create a sub-ledger account for a party (vendor/customer/employee).
+    Links to the appropriate control account.
+    
+    Returns the created account or existing account if already exists.
+    """
+    # Check if account already exists for this party
+    existing = await db.party_subledger_accounts.find_one({
+        "party_type": party_type,
+        "party_id": party_id,
+        "is_control": {"$ne": True}
+    })
+    if existing:
+        existing.pop("_id", None)
+        return existing
+    
+    # Determine control account based on party type
+    if party_type == "vendor":
+        control = CONTROL_ACCOUNTS["accounts_payable"]
+        ledger_type = "liability"
+        prefix = "Vendor"
+    elif party_type == "customer":
+        control = CONTROL_ACCOUNTS["accounts_receivable"]
+        ledger_type = "asset"
+        prefix = "Customer"
+    elif party_type == "employee":
+        control = CONTROL_ACCOUNTS["employee_control"]
+        ledger_type = "liability"  # Default to payable
+        prefix = "Employee"
+    else:
+        raise ValueError(f"Invalid party_type: {party_type}")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    account_id = f"party_{party_type[:3]}_{uuid.uuid4().hex[:8]}"
+    
+    new_account = {
+        "account_id": account_id,
+        "account_name": f"{prefix} – {party_name}",
+        "account_type": "party_subledger",
+        "ledger_type": ledger_type,
+        "party_type": party_type,
+        "party_id": party_id,
+        "party_name": party_name,
+        "parent_account_id": control["account_id"],
+        "is_control": False,
+        "opening_balance": 0,
+        "current_balance": 0,
+        "is_active": True,
+        "created_at": now,
+        "created_by": user_id,
+        "created_by_name": user_name
+    }
+    
+    await db.party_subledger_accounts.insert_one(new_account)
+    
+    # Audit log
+    await db.finance_audit_log.insert_one({
+        "audit_id": f"aud_{uuid.uuid4().hex[:12]}",
+        "entity_type": "party_subledger",
+        "entity_id": account_id,
+        "action": "create",
+        "details": f"Created {party_type} sub-ledger account: {party_name}",
+        "user_id": user_id,
+        "user_name": user_name,
+        "timestamp": now
+    })
+    
+    new_account.pop("_id", None)
+    return new_account
+
+
+async def get_party_subledger_account(party_type: str, party_id: str) -> Optional[dict]:
+    """Get the sub-ledger account for a party"""
+    account = await db.party_subledger_accounts.find_one({
+        "party_type": party_type,
+        "party_id": party_id,
+        "is_control": {"$ne": True}
+    }, {"_id": 0})
+    return account
+
+
+async def update_party_subledger_balance(account_id: str, amount_change: float):
+    """Update the balance of a party sub-ledger account"""
+    await db.party_subledger_accounts.update_one(
+        {"account_id": account_id},
+        {"$inc": {"current_balance": amount_change}}
+    )
+    
+    # Also update parent control account
+    account = await db.party_subledger_accounts.find_one({"account_id": account_id})
+    if account and account.get("parent_account_id"):
+        await db.party_subledger_accounts.update_one(
+            {"account_id": account["parent_account_id"]},
+            {"$inc": {"current_balance": amount_change}}
+        )
+
+
+async def post_party_transaction(
+    party_account_id: str,
+    transaction_type: str,  # "debit" or "credit"
+    amount: float,
+    transaction_id: str,
+    remarks: str,
+    transaction_date: str,
+    user_id: str,
+    user_name: str,
+    source_module: str = "manual"
+):
+    """
+    Post a transaction to a party sub-ledger.
+    This creates a double-entry style record.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    entry_id = f"ple_{uuid.uuid4().hex[:8]}"
+    
+    party_account = await db.party_subledger_accounts.find_one({"account_id": party_account_id})
+    if not party_account:
+        raise ValueError(f"Party account not found: {party_account_id}")
+    
+    ledger_entry = {
+        "entry_id": entry_id,
+        "party_account_id": party_account_id,
+        "party_type": party_account.get("party_type"),
+        "party_id": party_account.get("party_id"),
+        "party_name": party_account.get("party_name"),
+        "transaction_type": transaction_type,
+        "amount": amount,
+        "linked_transaction_id": transaction_id,
+        "transaction_date": transaction_date,
+        "remarks": remarks,
+        "source_module": source_module,
+        "created_at": now,
+        "created_by": user_id,
+        "created_by_name": user_name
+    }
+    
+    await db.party_ledger_entries.insert_one(ledger_entry)
+    
+    # Update balance - credits increase liability/decrease asset, debits decrease liability/increase asset
+    balance_change = amount if transaction_type == "credit" else -amount
+    if party_account.get("ledger_type") == "asset":
+        # For assets (receivables): debit increases, credit decreases
+        balance_change = -balance_change
+    
+    await update_party_subledger_balance(party_account_id, balance_change)
+    
+    return entry_id
+
+
 @api_router.get("/finance/audit-log")
 async def get_audit_log(
     request: Request,

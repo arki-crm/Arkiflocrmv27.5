@@ -21865,6 +21865,24 @@ async def create_vendor(vendor: VendorCreate, request: Request):
     
     await db.accounting_vendors.insert_one(new_vendor)
     
+    # Auto-create party sub-ledger account for this vendor
+    try:
+        subledger_account = await create_party_subledger_account(
+            party_type="vendor",
+            party_id=vendor_id,
+            party_name=vendor.vendor_name,
+            user_id=user.user_id,
+            user_name=user.name
+        )
+        new_vendor["subledger_account_id"] = subledger_account.get("account_id")
+        # Update vendor with linked account
+        await db.accounting_vendors.update_one(
+            {"vendor_id": vendor_id},
+            {"$set": {"subledger_account_id": subledger_account.get("account_id")}}
+        )
+    except Exception as e:
+        logger.warning(f"Failed to create sub-ledger for vendor {vendor_id}: {e}")
+    
     # Audit log
     await db.accounting_audit_log.insert_one({
         "action": "vendor_created",

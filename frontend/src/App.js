@@ -191,6 +191,7 @@ const AppRouter = () => {
         <Route path="/finance/pnl-snapshot" element={<PnLSnapshot />} />
         <Route path="/finance/trial-balance" element={<TrialBalance />} />
         <Route path="/finance/daily-snapshot" element={<DailyClosingSnapshot />} />
+        <Route path="/finance/journal-entry" element={<JournalEntry />} />
         <Route path="/finance/project-finance" element={<ProjectFinance />} />
         <Route path="/finance/project-finance/:projectId" element={<ProjectFinanceDetail />} />
         <Route path="/finance/daily-closing" element={<DailyClosing />} />

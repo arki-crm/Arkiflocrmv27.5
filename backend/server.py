@@ -2378,6 +2378,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.daily_closing.view",
         # Journal Entry - Full access
         "finance.journal_entry.view", "finance.journal_entry.create", "finance.journal_entry.edit", "finance.journal_entry.reverse",
+        # General Ledger - Full access
+        "finance.general_ledger.view", "finance.general_ledger.export",
         "finance.accounts.view",
         "finance.receipts.view", "finance.receipts.download",
         "finance.invoices.view", "finance.invoices.create", "finance.invoices.cancel",

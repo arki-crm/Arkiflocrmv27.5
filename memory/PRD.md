@@ -5,11 +5,62 @@ Build a full-stack CRM application for an interior design company, managing the 
 
 ## Architecture
 - **Frontend**: React 19 + TailwindCSS + Shadcn UI
-- **Backend**: FastAPI (Python) - Currently monolithic server.py (~20,000+ lines)
+- **Backend**: FastAPI (Python) - Currently monolithic server.py (~41,000+ lines)
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: General Ledger Module COMPLETE ✅
+## Current Status: Party Sub-Ledger System COMPLETE ✅
+**As of February 20, 2026**
+
+### Finance Module - Party Sub-Ledgers (Option B Upgrade)
+
+Implemented vendor-wise, customer-wise, and employee-wise sub-ledger tracking without restructuring the full Chart of Accounts.
+
+| # | Feature | Description | Status |
+|---|---------|-------------|--------|
+| 1 | **Control Accounts** | Created Accounts Receivable, Accounts Payable, Employee Control | ✅ |
+| 2 | **Vendor Sub-Ledgers** | Auto-created when vendors are added (19 vendors migrated) | ✅ |
+| 3 | **Customer Sub-Ledgers** | Auto-created when projects are converted (28 customers migrated) | ✅ |
+| 4 | **Employee Sub-Ledgers** | Auto-created when users are added (90 employees migrated) | ✅ |
+| 5 | **General Ledger Integration** | Dropdown shows Vendors (AP), Customers (AR), Employees | ✅ |
+| 6 | **Trial Balance Integration** | Party accounts roll up under Assets/Liabilities | ✅ |
+| 7 | **Outstanding Summary** | API returns outstanding by party type | ✅ |
+| 8 | **Party Ledger API** | Individual party transaction history with running balance | ✅ |
+| 9 | **Migration Endpoint** | Bulk create sub-ledgers for existing data | ✅ |
+| 10 | **Transaction Posting** | Vendor/customer transactions post to party sub-ledgers | ✅ |
+| 11 | **Permissions** | finance.party_subledger.view, finance.party_subledger.manage | ✅ |
+| 12 | **No Full CoA Restructure** | Simple enhancement without breaking existing modules | ✅ |
+
+**Technical Details:**
+- Backend APIs:
+  - `GET /api/finance/party-subledger/accounts` (list all party accounts)
+  - `GET /api/finance/party-subledger/outstanding-summary` (summary by type)
+  - `GET /api/finance/party-subledger/{account_id}` (account detail)
+  - `GET /api/finance/party-subledger/{account_id}/ledger` (party ledger)
+  - `POST /api/finance/party-subledger/migrate-existing` (data migration)
+- Collections: `party_subledger_accounts`, `party_ledger_entries`
+- Permissions: Granted to Admin, Founder, FinanceManager (full), CharteredAccountant (view-only)
+
+**Data Model:**
+```
+party_subledger_accounts: {
+  account_id: "party_ven_xxx",
+  account_name: "Vendor – ABC Traders",
+  account_type: "party_subledger" | "control",
+  ledger_type: "asset" | "liability",
+  party_type: "vendor" | "customer" | "employee",
+  party_id: "vendor_xxx" | "proj_xxx" | "user_xxx",
+  parent_account_id: "ctrl_accounts_payable",
+  current_balance: 0,
+  is_active: true
+}
+```
+
+**Verification (iteration_76.json):** 100% pass rate - All 16 backend API tests + all frontend UI tests passed.
+
+---
+
+## Previous Status: General Ledger Module COMPLETE ✅
 **As of February 20, 2026**
 
 ### Finance Module - General Ledger (Read-Only, Ledger-Driven)

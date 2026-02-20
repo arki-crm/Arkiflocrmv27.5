@@ -1828,6 +1828,17 @@ AVAILABLE_PERMISSIONS = {
         ]
     },
     
+    # Journal Entry (Manual Adjustments)
+    "finance_journal_entry": {
+        "name": "Journal Entry",
+        "permissions": [
+            {"id": "finance.journal_entry.view", "name": "View Journal Entries", "description": "View journal entry list and details"},
+            {"id": "finance.journal_entry.create", "name": "Create Journal Entry", "description": "Create new journal entries for adjustments"},
+            {"id": "finance.journal_entry.edit", "name": "Edit Journal Entry", "description": "Modify draft journal entries before posting"},
+            {"id": "finance.journal_entry.reverse", "name": "Reverse Journal Entry", "description": "Create reversal entries for posted JEs"}
+        ]
+    },
+    
     # Bank & Cash Accounts
     "finance_accounts": {
         "name": "Bank & Cash Accounts",

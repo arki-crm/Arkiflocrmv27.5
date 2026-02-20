@@ -29996,6 +29996,363 @@ async def export_general_ledger(
 
 
 # ============================================================================
+# ============ PARTY SUB-LEDGER MANAGEMENT APIS ==============================
+# ============================================================================
+# APIs for viewing and managing party sub-ledger accounts
+
+@api_router.get("/finance/party-subledger/accounts")
+async def list_party_subledger_accounts(
+    request: Request,
+    party_type: Optional[str] = None,  # vendor, customer, employee
+    include_control: bool = False
+):
+    """List all party sub-ledger accounts with optional filtering"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.party_subledger.view") and not has_permission(user_doc, "finance.general_ledger.view"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.party_subledger.view permission")
+    
+    # Ensure control accounts exist
+    await ensure_control_accounts_exist()
+    
+    query = {"is_active": {"$ne": False}}
+    if party_type and party_type in PARTY_TYPES:
+        query["party_type"] = party_type
+    if not include_control:
+        query["is_control"] = {"$ne": True}
+    
+    accounts = await db.party_subledger_accounts.find(query, {"_id": 0}).sort("account_name", 1).to_list(1000)
+    
+    # Group by party type for frontend convenience
+    grouped = {
+        "vendors": [],
+        "customers": [],
+        "employees": [],
+        "control": []
+    }
+    
+    for acc in accounts:
+        pt = acc.get("party_type")
+        if acc.get("is_control"):
+            grouped["control"].append(acc)
+        elif pt == "vendor":
+            grouped["vendors"].append(acc)
+        elif pt == "customer":
+            grouped["customers"].append(acc)
+        elif pt == "employee":
+            grouped["employees"].append(acc)
+    
+    return {
+        "accounts": accounts,
+        "grouped": grouped,
+        "total_count": len(accounts)
+    }
+
+
+@api_router.get("/finance/party-subledger/{account_id}")
+async def get_party_subledger_detail(account_id: str, request: Request):
+    """Get details of a specific party sub-ledger account"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.party_subledger.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    account = await db.party_subledger_accounts.find_one({"account_id": account_id}, {"_id": 0})
+    if not account:
+        raise HTTPException(status_code=404, detail="Party sub-ledger account not found")
+    
+    # Get linked entity details based on party type
+    party_details = None
+    if account.get("party_type") == "vendor":
+        party_details = await db.accounting_vendors.find_one({"vendor_id": account.get("party_id")}, {"_id": 0})
+    elif account.get("party_type") == "customer":
+        party_details = await db.projects.find_one({"project_id": account.get("party_id")}, {"_id": 0, "project_name": 1, "client_name": 1, "pid": 1})
+    elif account.get("party_type") == "employee":
+        party_details = await db.users.find_one({"user_id": account.get("party_id")}, {"_id": 0, "name": 1, "email": 1, "role": 1})
+    
+    # Get recent entries
+    recent_entries = await db.party_ledger_entries.find(
+        {"party_account_id": account_id},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(20).to_list(20)
+    
+    return {
+        "account": account,
+        "party_details": party_details,
+        "recent_entries": recent_entries
+    }
+
+
+@api_router.get("/finance/party-subledger/{account_id}/ledger")
+async def get_party_subledger_ledger(
+    account_id: str,
+    request: Request,
+    period: str = "month",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """Get full ledger entries for a party sub-ledger account - same as General Ledger for parties"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.party_subledger.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get party account
+    party_account = await db.party_subledger_accounts.find_one({"account_id": account_id}, {"_id": 0})
+    if not party_account:
+        raise HTTPException(status_code=404, detail="Party sub-ledger account not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Determine date range
+    if period == "month":
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=now.month + 1, day=1) - timedelta(seconds=1)
+        period_label = now.strftime("%B %Y")
+    elif period == "quarter":
+        quarter = (now.month - 1) // 3
+        start = now.replace(month=quarter * 3 + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_month = (quarter + 1) * 3 + 1
+        if end_month > 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=end_month, day=1) - timedelta(seconds=1)
+        period_label = f"Q{quarter + 1} {now.year}"
+    elif period == "fy":
+        if now.month >= 4:
+            fy_start_year = now.year
+        else:
+            fy_start_year = now.year - 1
+        start = now.replace(year=fy_start_year, month=4, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = now.replace(year=fy_start_year + 1, month=3, day=31, hour=23, minute=59, second=59, microsecond=999999)
+        period_label = f"FY {fy_start_year}-{fy_start_year + 1}"
+    elif period == "custom" and start_date and end_date:
+        start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        period_label = f"{start_date} to {end_date}"
+    else:
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=now.month + 1, day=1) - timedelta(seconds=1)
+        period_label = now.strftime("%B %Y")
+    
+    return await get_party_general_ledger(
+        account_id=account_id,
+        party_account=party_account,
+        start_iso=start.isoformat(),
+        end_iso=end.isoformat(),
+        period_label=period_label
+    )
+
+
+@api_router.post("/finance/party-subledger/migrate-existing")
+async def migrate_existing_to_subledgers(request: Request):
+    """
+    Data migration endpoint to create sub-ledger accounts for existing vendors, projects, and employees.
+    This is a one-time migration operation.
+    """
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.party_subledger.manage") and user_doc.get("role") not in ["Founder", "Admin"]:
+        raise HTTPException(status_code=403, detail="Access denied - Admin only")
+    
+    # Ensure control accounts exist
+    await ensure_control_accounts_exist()
+    
+    migration_stats = {
+        "vendors_created": 0,
+        "vendors_skipped": 0,
+        "customers_created": 0,
+        "customers_skipped": 0,
+        "employees_created": 0,
+        "employees_skipped": 0,
+        "errors": []
+    }
+    
+    # Migrate vendors
+    vendors = await db.accounting_vendors.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(1000)
+    for vendor in vendors:
+        try:
+            existing = await db.party_subledger_accounts.find_one({
+                "party_type": "vendor",
+                "party_id": vendor.get("vendor_id"),
+                "is_control": {"$ne": True}
+            })
+            if existing:
+                migration_stats["vendors_skipped"] += 1
+            else:
+                await create_party_subledger_account(
+                    party_type="vendor",
+                    party_id=vendor.get("vendor_id"),
+                    party_name=vendor.get("vendor_name", "Unknown"),
+                    user_id=user.user_id,
+                    user_name=user.name
+                )
+                migration_stats["vendors_created"] += 1
+        except Exception as e:
+            migration_stats["errors"].append(f"Vendor {vendor.get('vendor_id')}: {str(e)}")
+    
+    # Migrate projects (customers)
+    projects = await db.projects.find({"stage": {"$ne": "Cancelled"}}, {"_id": 0, "project_id": 1, "project_name": 1, "client_name": 1, "pid": 1}).to_list(5000)
+    for proj in projects:
+        try:
+            existing = await db.party_subledger_accounts.find_one({
+                "party_type": "customer",
+                "party_id": proj.get("project_id"),
+                "is_control": {"$ne": True}
+            })
+            if existing:
+                migration_stats["customers_skipped"] += 1
+            else:
+                customer_name = f"{proj.get('client_name', 'Unknown')} ({proj.get('pid', proj.get('project_id'))})"
+                await create_party_subledger_account(
+                    party_type="customer",
+                    party_id=proj.get("project_id"),
+                    party_name=customer_name,
+                    user_id=user.user_id,
+                    user_name=user.name
+                )
+                migration_stats["customers_created"] += 1
+        except Exception as e:
+            migration_stats["errors"].append(f"Project {proj.get('project_id')}: {str(e)}")
+    
+    # Migrate employees
+    employees = await db.users.find({"status": "Active"}, {"_id": 0, "user_id": 1, "name": 1}).to_list(500)
+    for emp in employees:
+        try:
+            existing = await db.party_subledger_accounts.find_one({
+                "party_type": "employee",
+                "party_id": emp.get("user_id"),
+                "is_control": {"$ne": True}
+            })
+            if existing:
+                migration_stats["employees_skipped"] += 1
+            else:
+                await create_party_subledger_account(
+                    party_type="employee",
+                    party_id=emp.get("user_id"),
+                    party_name=emp.get("name", "Unknown"),
+                    user_id=user.user_id,
+                    user_name=user.name
+                )
+                migration_stats["employees_created"] += 1
+        except Exception as e:
+            migration_stats["errors"].append(f"Employee {emp.get('user_id')}: {str(e)}")
+    
+    # Log migration
+    await db.finance_audit_log.insert_one({
+        "audit_id": f"aud_{uuid.uuid4().hex[:12]}",
+        "entity_type": "party_subledger_migration",
+        "entity_id": "migration",
+        "action": "bulk_migrate",
+        "details": f"Migrated existing entities to sub-ledgers",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "migration_stats": migration_stats
+    })
+    
+    return {
+        "success": True,
+        "message": "Migration completed",
+        "stats": migration_stats
+    }
+
+
+@api_router.get("/finance/party-subledger/outstanding-summary")
+async def get_party_outstanding_summary(request: Request):
+    """Get summary of outstanding balances across all party types"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.party_subledger.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get all party accounts with balances
+    party_accounts = await db.party_subledger_accounts.find(
+        {"is_control": {"$ne": True}, "is_active": {"$ne": False}},
+        {"_id": 0}
+    ).to_list(5000)
+    
+    summary = {
+        "accounts_payable": {
+            "total_balance": 0,
+            "count": 0,
+            "accounts": []
+        },
+        "accounts_receivable": {
+            "total_balance": 0,
+            "count": 0,
+            "accounts": []
+        },
+        "employee_payables": {
+            "total_balance": 0,
+            "count": 0,
+            "accounts": []
+        }
+    }
+    
+    for acc in party_accounts:
+        balance = acc.get("current_balance", 0)
+        party_type = acc.get("party_type")
+        
+        if party_type == "vendor":
+            summary["accounts_payable"]["total_balance"] += balance
+            summary["accounts_payable"]["count"] += 1
+            if balance != 0:
+                summary["accounts_payable"]["accounts"].append({
+                    "account_id": acc.get("account_id"),
+                    "party_name": acc.get("party_name"),
+                    "balance": balance
+                })
+        elif party_type == "customer":
+            summary["accounts_receivable"]["total_balance"] += balance
+            summary["accounts_receivable"]["count"] += 1
+            if balance != 0:
+                summary["accounts_receivable"]["accounts"].append({
+                    "account_id": acc.get("account_id"),
+                    "party_name": acc.get("party_name"),
+                    "balance": balance
+                })
+        elif party_type == "employee":
+            summary["employee_payables"]["total_balance"] += balance
+            summary["employee_payables"]["count"] += 1
+            if balance != 0:
+                summary["employee_payables"]["accounts"].append({
+                    "account_id": acc.get("account_id"),
+                    "party_name": acc.get("party_name"),
+                    "balance": balance
+                })
+    
+    # Sort accounts by balance (highest first)
+    for key in summary:
+        summary[key]["accounts"].sort(key=lambda x: abs(x["balance"]), reverse=True)
+        # Keep only top 10
+        summary[key]["accounts"] = summary[key]["accounts"][:10]
+    
+    return summary
+
+
+# ============================================================================
 # ============ PROJECT PROFIT VISIBILITY =====================================
 # ============================================================================
 # Enhanced project finance metrics - projected vs realised profit

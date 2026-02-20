@@ -28617,6 +28617,542 @@ async def get_daily_closing_snapshot(
 
 
 # ============================================================================
+# ============ JOURNAL ENTRY MODULE ==========================================
+# ============================================================================
+# Manual accounting adjustments - Posts to accounting_transactions
+# source_module = "journal_entry", is_daybook_entry = true
+
+from pydantic import BaseModel, validator
+
+class JournalEntryLineCreate(BaseModel):
+    """Single line item in a journal entry"""
+    account_id: str
+    account_name: Optional[str] = None
+    debit: float = 0
+    credit: float = 0
+    narration: Optional[str] = None
+    
+    @validator('debit', 'credit', pre=True, always=True)
+    def ensure_non_negative(cls, v):
+        if v is None:
+            return 0
+        if v < 0:
+            raise ValueError("Amount cannot be negative")
+        return v
+
+class JournalEntryCreate(BaseModel):
+    """Create a new journal entry"""
+    date: str  # YYYY-MM-DD
+    narration: str
+    lines: list  # List of JournalEntryLineCreate
+    
+    @validator('lines')
+    def validate_lines(cls, v):
+        if len(v) < 2:
+            raise ValueError("Journal entry must have at least 2 lines")
+        return v
+
+
+async def generate_je_reference_number():
+    """Generate auto-incrementing JE reference number"""
+    # Find the latest JE number
+    latest = await db.journal_entries.find_one(
+        {},
+        sort=[("created_at", -1)],
+        projection={"reference_number": 1}
+    )
+    
+    if latest and latest.get("reference_number"):
+        # Extract number from format JE-YYYYMM-XXXX
+        try:
+            last_num = int(latest["reference_number"].split("-")[-1])
+        except:
+            last_num = 0
+    else:
+        last_num = 0
+    
+    now = datetime.now(timezone.utc)
+    new_num = last_num + 1
+    return f"JE-{now.strftime('%Y%m')}-{new_num:04d}"
+
+
+@api_router.get("/finance/journal-entries")
+async def list_journal_entries(
+    request: Request,
+    status: Optional[str] = None,  # "posted", "reversed", "all"
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    account_id: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50
+):
+    """List all journal entries with filters"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.journal_entry.view"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.journal_entry.view permission")
+    
+    # Build query
+    query = {}
+    
+    if status and status != "all":
+        if status == "posted":
+            query["status"] = "posted"
+            query["is_reversed"] = {"$ne": True}
+        elif status == "reversed":
+            query["is_reversed"] = True
+    
+    if start_date:
+        query["date"] = query.get("date", {})
+        query["date"]["$gte"] = start_date
+    
+    if end_date:
+        query["date"] = query.get("date", {})
+        query["date"]["$lte"] = end_date
+    
+    if account_id:
+        query["lines.account_id"] = account_id
+    
+    if search:
+        query["$or"] = [
+            {"reference_number": {"$regex": search, "$options": "i"}},
+            {"narration": {"$regex": search, "$options": "i"}}
+        ]
+    
+    # Get total count
+    total = await db.journal_entries.count_documents(query)
+    
+    # Get entries with pagination
+    skip = (page - 1) * limit
+    entries = await db.journal_entries.find(
+        query,
+        {"_id": 0}
+    ).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    
+    return {
+        "entries": entries,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit
+    }
+
+
+@api_router.get("/finance/journal-entries/{je_id}")
+async def get_journal_entry(je_id: str, request: Request):
+    """Get a single journal entry by ID"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.journal_entry.view"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.journal_entry.view permission")
+    
+    entry = await db.journal_entries.find_one({"je_id": je_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+    
+    return entry
+
+
+@api_router.post("/finance/journal-entries")
+async def create_journal_entry(request: Request):
+    """Create and post a new journal entry"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.journal_entry.create"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.journal_entry.create permission")
+    
+    body = await request.json()
+    
+    # Validate required fields
+    je_date = body.get("date")
+    narration = body.get("narration")
+    lines = body.get("lines", [])
+    
+    if not je_date:
+        raise HTTPException(status_code=400, detail="Date is required")
+    if not narration:
+        raise HTTPException(status_code=400, detail="Narration is required")
+    if len(lines) < 2:
+        raise HTTPException(status_code=400, detail="Journal entry must have at least 2 lines")
+    
+    # Validate debit/credit balance
+    total_debit = sum(line.get("debit", 0) or 0 for line in lines)
+    total_credit = sum(line.get("credit", 0) or 0 for line in lines)
+    
+    if abs(total_debit - total_credit) > 0.01:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Total Debit ({total_debit:,.2f}) must equal Total Credit ({total_credit:,.2f})"
+        )
+    
+    # Ensure at least one debit and one credit
+    has_debit = any((line.get("debit") or 0) > 0 for line in lines)
+    has_credit = any((line.get("credit") or 0) > 0 for line in lines)
+    
+    if not has_debit or not has_credit:
+        raise HTTPException(
+            status_code=400,
+            detail="Journal entry must have at least one Debit and one Credit line"
+        )
+    
+    # Check if date is locked (daybook locked)
+    daily_closing = await db.accounting_daily_closings.find_one({
+        "date": je_date,
+        "is_locked": True
+    })
+    if daily_closing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot create journal entry for {je_date} - day is locked"
+        )
+    
+    # Generate reference number
+    reference_number = await generate_je_reference_number()
+    je_id = f"je_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    # Validate and enrich lines with account details
+    enriched_lines = []
+    for idx, line in enumerate(lines):
+        account_id = line.get("account_id")
+        if not account_id:
+            raise HTTPException(status_code=400, detail=f"Line {idx+1}: account_id is required")
+        
+        # Get account details
+        account = await db.finance_accounts.find_one({"account_id": account_id})
+        if not account:
+            # Try accounting_categories
+            category = await db.accounting_categories.find_one({"category_id": account_id})
+            if category:
+                account_name = category.get("name", account_id)
+            else:
+                account_name = line.get("account_name", account_id)
+        else:
+            account_name = account.get("account_name") or account.get("name", account_id)
+        
+        enriched_lines.append({
+            "line_id": f"jel_{uuid.uuid4().hex[:8]}",
+            "account_id": account_id,
+            "account_name": account_name,
+            "debit": line.get("debit", 0) or 0,
+            "credit": line.get("credit", 0) or 0,
+            "narration": line.get("narration", "")
+        })
+    
+    # Create journal entry document
+    je_doc = {
+        "je_id": je_id,
+        "reference_number": reference_number,
+        "date": je_date,
+        "narration": narration,
+        "lines": enriched_lines,
+        "total_debit": total_debit,
+        "total_credit": total_credit,
+        "status": "posted",
+        "is_reversed": False,
+        "reversed_by_je": None,
+        "reversal_of_je": None,
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", user.email),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    # Insert journal entry
+    await db.journal_entries.insert_one(je_doc)
+    
+    # Create accounting_transactions for each line
+    for line in enriched_lines:
+        if line["debit"] > 0:
+            # Debit entry = outflow
+            txn_doc = {
+                "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+                "account_id": line["account_id"],
+                "transaction_type": "outflow",
+                "amount": line["debit"],
+                "date": je_date,
+                "category_id": "journal_entry",
+                "source_module": "journal_entry",
+                "reference_id": reference_number,
+                "is_daybook_entry": True,
+                "remarks": f"JE: {narration} - {line.get('narration', '')}",
+                "je_id": je_id,
+                "je_line_id": line["line_id"],
+                "created_by": user.user_id,
+                "created_at": now.isoformat(),
+                "is_verified": True  # JE entries are auto-verified
+            }
+            await db.accounting_transactions.insert_one(txn_doc)
+        
+        if line["credit"] > 0:
+            # Credit entry = inflow
+            txn_doc = {
+                "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+                "account_id": line["account_id"],
+                "transaction_type": "inflow",
+                "amount": line["credit"],
+                "date": je_date,
+                "category_id": "journal_entry",
+                "source_module": "journal_entry",
+                "reference_id": reference_number,
+                "is_daybook_entry": True,
+                "remarks": f"JE: {narration} - {line.get('narration', '')}",
+                "je_id": je_id,
+                "je_line_id": line["line_id"],
+                "created_by": user.user_id,
+                "created_at": now.isoformat(),
+                "is_verified": True
+            }
+            await db.accounting_transactions.insert_one(txn_doc)
+    
+    # Audit log
+    await db.audit_logs.insert_one({
+        "audit_id": f"audit_{uuid.uuid4().hex[:12]}",
+        "entity_type": "journal_entry",
+        "entity_id": je_id,
+        "action": "create",
+        "user_id": user.user_id,
+        "user_name": user_doc.get("name", user.email),
+        "details": f"Created Journal Entry {reference_number}: {narration} (Debit: ₹{total_debit:,.2f})",
+        "timestamp": now.isoformat()
+    })
+    
+    # Remove _id before returning
+    je_doc.pop("_id", None)
+    
+    return {
+        "success": True,
+        "message": f"Journal Entry {reference_number} posted successfully",
+        "journal_entry": je_doc
+    }
+
+
+@api_router.post("/finance/journal-entries/{je_id}/reverse")
+async def reverse_journal_entry(je_id: str, request: Request):
+    """Create a reversal entry for a posted journal entry"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.journal_entry.reverse"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.journal_entry.reverse permission")
+    
+    # Get the original JE
+    original = await db.journal_entries.find_one({"je_id": je_id})
+    if not original:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+    
+    if original.get("is_reversed"):
+        raise HTTPException(status_code=400, detail="Journal entry is already reversed")
+    
+    if original.get("status") != "posted":
+        raise HTTPException(status_code=400, detail="Only posted journal entries can be reversed")
+    
+    body = await request.json()
+    reversal_reason = body.get("reason", "Reversal entry")
+    reversal_date = body.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    
+    # Check if reversal date is locked
+    daily_closing = await db.accounting_daily_closings.find_one({
+        "date": reversal_date,
+        "is_locked": True
+    })
+    if daily_closing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot create reversal for {reversal_date} - day is locked"
+        )
+    
+    # Generate new reference number for reversal
+    reference_number = await generate_je_reference_number()
+    reversal_je_id = f"je_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    # Create reversed lines (swap debit/credit)
+    reversed_lines = []
+    for line in original.get("lines", []):
+        reversed_lines.append({
+            "line_id": f"jel_{uuid.uuid4().hex[:8]}",
+            "account_id": line["account_id"],
+            "account_name": line["account_name"],
+            "debit": line.get("credit", 0),  # Swap
+            "credit": line.get("debit", 0),  # Swap
+            "narration": f"Reversal: {line.get('narration', '')}"
+        })
+    
+    # Create reversal JE document
+    reversal_doc = {
+        "je_id": reversal_je_id,
+        "reference_number": reference_number,
+        "date": reversal_date,
+        "narration": f"REVERSAL of {original['reference_number']}: {reversal_reason}",
+        "lines": reversed_lines,
+        "total_debit": original.get("total_credit", 0),  # Swapped
+        "total_credit": original.get("total_debit", 0),  # Swapped
+        "status": "posted",
+        "is_reversed": False,
+        "reversed_by_je": None,
+        "reversal_of_je": original["je_id"],  # Link to original
+        "created_by": user.user_id,
+        "created_by_name": user_doc.get("name", user.email),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "reversed_by": user.user_id,
+        "reversed_by_name": user_doc.get("name", user.email),
+        "reversed_at": now.isoformat()
+    }
+    
+    # Insert reversal JE
+    await db.journal_entries.insert_one(reversal_doc)
+    
+    # Mark original as reversed
+    await db.journal_entries.update_one(
+        {"je_id": je_id},
+        {
+            "$set": {
+                "is_reversed": True,
+                "reversed_by_je": reversal_je_id,
+                "reversed_by": user.user_id,
+                "reversed_by_name": user_doc.get("name", user.email),
+                "reversed_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            }
+        }
+    )
+    
+    # Create accounting_transactions for reversal lines
+    for line in reversed_lines:
+        if line["debit"] > 0:
+            txn_doc = {
+                "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+                "account_id": line["account_id"],
+                "transaction_type": "outflow",
+                "amount": line["debit"],
+                "date": reversal_date,
+                "category_id": "journal_entry_reversal",
+                "source_module": "journal_entry",
+                "reference_id": reference_number,
+                "is_daybook_entry": True,
+                "remarks": f"JE Reversal: {reversal_doc['narration']}",
+                "je_id": reversal_je_id,
+                "je_line_id": line["line_id"],
+                "created_by": user.user_id,
+                "created_at": now.isoformat(),
+                "is_verified": True
+            }
+            await db.accounting_transactions.insert_one(txn_doc)
+        
+        if line["credit"] > 0:
+            txn_doc = {
+                "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+                "account_id": line["account_id"],
+                "transaction_type": "inflow",
+                "amount": line["credit"],
+                "date": reversal_date,
+                "category_id": "journal_entry_reversal",
+                "source_module": "journal_entry",
+                "reference_id": reference_number,
+                "is_daybook_entry": True,
+                "remarks": f"JE Reversal: {reversal_doc['narration']}",
+                "je_id": reversal_je_id,
+                "je_line_id": line["line_id"],
+                "created_by": user.user_id,
+                "created_at": now.isoformat(),
+                "is_verified": True
+            }
+            await db.accounting_transactions.insert_one(txn_doc)
+    
+    # Audit log for reversal
+    await db.audit_logs.insert_one({
+        "audit_id": f"audit_{uuid.uuid4().hex[:12]}",
+        "entity_type": "journal_entry",
+        "entity_id": reversal_je_id,
+        "action": "reverse",
+        "user_id": user.user_id,
+        "user_name": user_doc.get("name", user.email),
+        "details": f"Created Reversal {reference_number} for {original['reference_number']}: {reversal_reason}",
+        "timestamp": now.isoformat(),
+        "original_je_id": je_id
+    })
+    
+    reversal_doc.pop("_id", None)
+    
+    return {
+        "success": True,
+        "message": f"Reversal entry {reference_number} created successfully",
+        "reversal_entry": reversal_doc,
+        "original_je_id": je_id
+    }
+
+
+@api_router.get("/finance/journal-entries/export/excel")
+async def export_journal_entries_excel(
+    request: Request,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    status: Optional[str] = None
+):
+    """Export journal entries to Excel/CSV format"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.journal_entry.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Build query
+    query = {}
+    if start_date:
+        query["date"] = query.get("date", {})
+        query["date"]["$gte"] = start_date
+    if end_date:
+        query["date"] = query.get("date", {})
+        query["date"]["$lte"] = end_date
+    if status and status != "all":
+        if status == "posted":
+            query["status"] = "posted"
+            query["is_reversed"] = {"$ne": True}
+        elif status == "reversed":
+            query["is_reversed"] = True
+    
+    entries = await db.journal_entries.find(query, {"_id": 0}).sort("date", -1).to_list(10000)
+    
+    # Build CSV rows
+    rows = []
+    for entry in entries:
+        for line in entry.get("lines", []):
+            rows.append({
+                "reference_number": entry.get("reference_number"),
+                "date": entry.get("date"),
+                "narration": entry.get("narration"),
+                "account_name": line.get("account_name"),
+                "debit": line.get("debit", 0),
+                "credit": line.get("credit", 0),
+                "status": "Reversed" if entry.get("is_reversed") else "Posted",
+                "created_by": entry.get("created_by_name"),
+                "created_at": entry.get("created_at", "")[:10]
+            })
+    
+    return {
+        "rows": rows,
+        "total": len(entries),
+        "exported_at": datetime.now(timezone.utc).isoformat()
+    }
+
+
+# ============================================================================
 # ============ PROJECT PROFIT VISIBILITY =====================================
 # ============================================================================
 # Enhanced project finance metrics - projected vs realised profit

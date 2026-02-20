@@ -29399,7 +29399,22 @@ async def get_general_ledger(
             account_type = "category"
             opening_balance_from_master = 0  # Categories don't have opening balance
         else:
-            raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
+            # Try party sub-ledger accounts
+            party_account = await db.party_subledger_accounts.find_one({"account_id": account_id}, {"_id": 0})
+            if party_account:
+                account_name = party_account.get("account_name", account_id)
+                account_type = party_account.get("account_type", "party_subledger")
+                opening_balance_from_master = party_account.get("opening_balance", 0) or 0
+                # For party accounts, use party_ledger_entries instead of accounting_transactions
+                return await get_party_general_ledger(
+                    account_id=account_id,
+                    party_account=party_account,
+                    start_iso=start_iso,
+                    end_iso=end_iso,
+                    period_label=period_label
+                )
+            else:
+                raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
     else:
         account_name = account.get("account_name") or account.get("name", account_id)
         account_type = account.get("account_type", "unknown")

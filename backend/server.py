@@ -2955,6 +2955,24 @@ async def create_local_user(user_data: LocalUserCreate, request: Request):
     
     await db.users.insert_one(new_user)
     
+    # ========== CREATE EMPLOYEE SUB-LEDGER ACCOUNT ==========
+    # Auto-create a sub-ledger account for this employee (for salary/advances)
+    try:
+        employee_subledger = await create_party_subledger_account(
+            party_type="employee",
+            party_id=new_user_id,
+            party_name=user_data.name,
+            user_id=user.user_id,
+            user_name=user.name
+        )
+        await db.users.update_one(
+            {"user_id": new_user_id},
+            {"$set": {"subledger_account_id": employee_subledger.get("account_id")}}
+        )
+        logger.info(f"Created employee sub-ledger for user {new_user_id}")
+    except Exception as e:
+        logger.warning(f"Failed to create employee sub-ledger for user {new_user_id}: {e}")
+    
     # Don't return password in response
     new_user.pop("local_password", None)
     new_user.pop("_id", None)

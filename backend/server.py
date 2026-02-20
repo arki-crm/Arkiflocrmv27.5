@@ -9032,6 +9032,24 @@ async def convert_to_project(lead_id: str, request: Request):
     
     await db.projects.insert_one(new_project)
     
+    # ========== CREATE CUSTOMER SUB-LEDGER ACCOUNT ==========
+    # Auto-create a receivables sub-ledger for this customer/project
+    try:
+        customer_subledger = await create_party_subledger_account(
+            party_type="customer",
+            party_id=project_id,
+            party_name=f"{lead['customer_name']} ({pid})",
+            user_id=user.user_id,
+            user_name=user.name
+        )
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {"$set": {"subledger_account_id": customer_subledger.get("account_id")}}
+        )
+        logger.info(f"Created customer sub-ledger for project {project_id}")
+    except Exception as e:
+        logger.warning(f"Failed to create customer sub-ledger for project {project_id}: {e}")
+    
     # ========== CREATE INITIAL DESIGNER ASSIGNMENT ==========
     # If a primary designer is assigned, create the first assignment record
     if primary_designer_id:

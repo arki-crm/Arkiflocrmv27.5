@@ -78,6 +78,38 @@ GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
+# ============ PARTY SUB-LEDGER CONSTANTS ============
+# Control Account IDs (parent accounts for sub-ledgers)
+CONTROL_ACCOUNTS = {
+    "accounts_receivable": {
+        "account_id": "ctrl_accounts_receivable",
+        "account_name": "Accounts Receivable (Control)",
+        "account_type": "control",
+        "ledger_type": "asset",
+        "party_type": "customer",
+        "description": "Control account for all customer receivables"
+    },
+    "accounts_payable": {
+        "account_id": "ctrl_accounts_payable",
+        "account_name": "Accounts Payable (Control)",
+        "account_type": "control",
+        "ledger_type": "liability",
+        "party_type": "vendor",
+        "description": "Control account for all vendor payables"
+    },
+    "employee_control": {
+        "account_id": "ctrl_employee",
+        "account_name": "Employee Control (Payables/Advances)",
+        "account_type": "control",
+        "ledger_type": "liability",
+        "party_type": "employee",
+        "description": "Control account for employee salaries payable and advances"
+    }
+}
+
+# Party types for sub-ledger accounts
+PARTY_TYPES = ["vendor", "customer", "employee"]
+
 # Create the main app
 app = FastAPI()
 

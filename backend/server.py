@@ -2072,6 +2072,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.cashbook.view", "finance.cashbook.create", "finance.cashbook.edit", "finance.cashbook.delete",
         "finance.cashbook.verify", "finance.daily_closing.view", "finance.daily_closing.create", "finance.daily_closing.lock",
         "finance.transaction.reverse",
+        # Journal Entry permissions - Admin gets all
+        "finance.journal_entry.view", "finance.journal_entry.create", "finance.journal_entry.edit", "finance.journal_entry.reverse",
         "finance.accounts.view", "finance.accounts.create", "finance.accounts.edit", "finance.accounts.opening_balance",
         "finance.receipts.view", "finance.receipts.create", "finance.receipts.download",
         "finance.invoices.view", "finance.invoices.create", "finance.invoices.cancel",

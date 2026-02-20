@@ -13,7 +13,7 @@ import os
 import uuid
 from datetime import datetime
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://sign-off-manager.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://finance-ledger-35.preview.emergentagent.com')
 
 @pytest.fixture(scope="module")
 def session():

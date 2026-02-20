@@ -7,7 +7,7 @@ import pytest
 import requests
 from datetime import datetime
 
-BASE_URL = "https://sign-off-manager.preview.emergentagent.com/api"
+BASE_URL = "https://finance-ledger-35.preview.emergentagent.com/api"
 
 # Test credentials
 FOUNDER_EMAIL = "sidheeq.arkidots@gmail.com"

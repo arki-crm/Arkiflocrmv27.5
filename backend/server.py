@@ -2382,6 +2382,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.journal_entry.view",
         # General Ledger - View and export (for audit)
         "finance.general_ledger.view", "finance.general_ledger.export",
+        # Party Sub-Ledger - View only
+        "finance.party_subledger.view",
         # Accounts - View only
         "finance.accounts.view",
         # Receipts & Invoices - View and download only

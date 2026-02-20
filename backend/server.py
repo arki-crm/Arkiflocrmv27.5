@@ -2325,6 +2325,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.journal_entry.view", "finance.journal_entry.create", "finance.journal_entry.edit", "finance.journal_entry.reverse",
         # General Ledger - Full access
         "finance.general_ledger.view", "finance.general_ledger.export",
+        # Party Sub-Ledger - Full access
+        "finance.party_subledger.view", "finance.party_subledger.manage",
         # Accounts - Full access including opening balance
         "finance.accounts.view", "finance.accounts.create", "finance.accounts.edit", "finance.accounts.opening_balance",
         # Receipts & Invoices - Full control including cancellation

@@ -75,6 +75,7 @@ const financeSubItems = [
   { path: '/finance/pnl-snapshot', label: 'P&L Snapshot', icon: TrendingUp },
   { path: '/finance/trial-balance', label: 'Trial Balance', icon: Scale },
   { path: '/finance/daily-snapshot', label: 'Daily Closing', icon: Landmark },
+  { path: '/finance/journal-entry', label: 'Journal Entry', icon: FileText },
   { path: '/finance/reports', label: 'Reports', icon: BarChart3 },
   { path: '/finance/forecast', label: 'Forecast', icon: TrendingUp },
   { path: '/finance/budgets', label: 'Budgets', icon: PiggyBank },

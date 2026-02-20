@@ -262,6 +262,42 @@ export default function GeneralLedger() {
                       ))}
                     </>
                   )}
+                  {vendors.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-orange-600 bg-orange-50 mt-1">
+                        Accounts Payable (Vendors)
+                      </div>
+                      {vendors.map(v => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.name} <span className="text-gray-400 text-xs">{formatCurrency(v.balance)}</span>
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  {customers.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 mt-1">
+                        Accounts Receivable (Customers)
+                      </div>
+                      {customers.map(c => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} <span className="text-gray-400 text-xs">{formatCurrency(c.balance)}</span>
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  {employees.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-purple-600 bg-purple-50 mt-1">
+                        Employee Payables
+                      </div>
+                      {employees.map(e => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.name} <span className="text-gray-400 text-xs">{formatCurrency(e.balance)}</span>
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
                   {categories.length > 0 && (
                     <>
                       <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-gray-50 mt-1">

@@ -2050,6 +2050,15 @@ AVAILABLE_PERMISSIONS = {
             {"id": "finance.view_expense_requests", "name": "View Expense Requests", "description": "View expenses (legacy)"},
             {"id": "finance.track_refunds", "name": "Track Refunds", "description": "Track refunds (legacy)"}
         ]
+    },
+    
+    # Party Sub-Ledgers (Vendors, Customers, Employees)
+    "finance_party_subledger": {
+        "name": "Party Sub-Ledgers",
+        "permissions": [
+            {"id": "finance.party_subledger.view", "name": "View Party Ledgers", "description": "View vendor/customer/employee ledgers"},
+            {"id": "finance.party_subledger.manage", "name": "Manage Party Accounts", "description": "Create/edit party sub-ledger accounts"}
+        ]
     }
 }
 

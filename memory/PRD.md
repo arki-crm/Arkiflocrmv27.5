@@ -9,7 +9,42 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Journal Entry Module COMPLETE ✅
+## Current Status: General Ledger Module COMPLETE ✅
+**As of February 20, 2026**
+
+### Finance Module - General Ledger (Read-Only, Ledger-Driven)
+
+Implemented a permission-based General Ledger for account-wise transaction history with running balance.
+
+| # | Feature | Description | Status |
+|---|---------|-------------|--------|
+| 1 | **Sidebar Navigation** | "General Ledger" tab added under Finance menu with BookOpen icon | ✅ |
+| 2 | **Account Selector** | Mandatory dropdown showing Bank/Cash accounts + Expense/Income categories | ✅ |
+| 3 | **Period Filters** | This Month, Quarter, Financial Year, Custom date range | ✅ |
+| 4 | **Summary Cards** | Opening Balance, Total Debit, Total Credit, Closing Balance | ✅ |
+| 5 | **Ledger Table** | Date, Reference, Source Module, Narration, Debit, Credit, Running Balance | ✅ |
+| 6 | **Opening Balance** | Calculated from master + transactions before start date | ✅ |
+| 7 | **Running Balance** | Calculated in date order for each transaction | ✅ |
+| 8 | **Closing Balance** | Opening + Credit - Debit (matches Trial Balance) | ✅ |
+| 9 | **Export** | Excel/CSV download with opening balance and totals rows | ✅ |
+| 10 | **Permissions** | finance.general_ledger.view, finance.general_ledger.export | ✅ |
+| 11 | **Read-Only** | No editing allowed - pure reporting layer | ✅ |
+
+**Technical Details:**
+- Backend APIs:
+  - `GET /api/finance/general-ledger?account_id=&period=&start_date=&end_date=`
+  - `GET /api/finance/general-ledger/accounts` (list accounts + categories)
+  - `GET /api/finance/general-ledger/export` (CSV-ready data)
+- Frontend: `/app/frontend/src/pages/GeneralLedger.jsx`
+- Route: `/finance/general-ledger`
+- Data Source: Reads from `accounting_transactions` only
+- Permissions: Granted to Admin, Founder, FinanceManager (view+export), CharteredAccountant (view+export)
+
+**Verification (iteration_75.json):** 100% pass rate - All 25 backend API tests + all frontend UI tests passed.
+
+---
+
+## Previous Status: Journal Entry Module COMPLETE ✅
 **As of February 20, 2026**
 
 ### Finance Module - Journal Entry (Manual Accounting Adjustments)

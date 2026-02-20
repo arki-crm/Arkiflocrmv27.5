@@ -42,6 +42,9 @@ export default function GeneralLedger() {
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [error, setError] = useState(null);
   
   // Filters
@@ -68,6 +71,9 @@ export default function GeneralLedger() {
       });
       setAccounts(res.data.accounts || []);
       setCategories(res.data.categories || []);
+      setVendors(res.data.vendors || []);
+      setCustomers(res.data.customers || []);
+      setEmployees(res.data.employees || []);
     } catch (err) {
       console.error('Failed to fetch accounts:', err);
       if (err.response?.status === 403) {

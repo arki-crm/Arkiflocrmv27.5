@@ -29252,6 +29252,10 @@ async def get_general_ledger(
     # Get account details
     account = await db.finance_accounts.find_one({"account_id": account_id}, {"_id": 0})
     if not account:
+        # Try accounting_accounts collection
+        account = await db.accounting_accounts.find_one({"account_id": account_id}, {"_id": 0})
+    
+    if not account:
         # Try categories
         category = await db.accounting_categories.find_one({"category_id": account_id}, {"_id": 0})
         if category:

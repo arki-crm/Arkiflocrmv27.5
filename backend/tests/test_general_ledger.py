@@ -30,7 +30,7 @@ class TestGeneralLedgerAuth:
     def auth_token(self, session):
         """Get authentication token via local admin login"""
         # First get the login page to establish session
-        login_url = f"{BASE_URL}/api/auth/local-admin-login"
+        login_url = f"{BASE_URL}/api/auth/local-login"
         response = session.post(login_url, json={
             "email": FOUNDER_EMAIL,
             "password": FOUNDER_PASSWORD
@@ -65,7 +65,7 @@ class TestGeneralLedgerAccounts:
     def session(self):
         """Create authenticated session"""
         s = requests.Session()
-        login_url = f"{BASE_URL}/api/auth/local-admin-login"
+        login_url = f"{BASE_URL}/api/auth/local-login"
         response = s.post(login_url, json={
             "email": FOUNDER_EMAIL,
             "password": FOUNDER_PASSWORD
@@ -122,7 +122,7 @@ class TestGeneralLedgerMain:
     def session(self):
         """Create authenticated session"""
         s = requests.Session()
-        login_url = f"{BASE_URL}/api/auth/local-admin-login"
+        login_url = f"{BASE_URL}/api/auth/local-login"
         response = s.post(login_url, json={
             "email": FOUNDER_EMAIL,
             "password": FOUNDER_PASSWORD
@@ -264,7 +264,7 @@ class TestGeneralLedgerExport:
     def session(self):
         """Create authenticated session"""
         s = requests.Session()
-        login_url = f"{BASE_URL}/api/auth/local-admin-login"
+        login_url = f"{BASE_URL}/api/auth/local-login"
         response = s.post(login_url, json={
             "email": FOUNDER_EMAIL,
             "password": FOUNDER_PASSWORD
@@ -338,7 +338,7 @@ class TestGeneralLedgerRunningBalance:
     def session(self):
         """Create authenticated session"""
         s = requests.Session()
-        login_url = f"{BASE_URL}/api/auth/local-admin-login"
+        login_url = f"{BASE_URL}/api/auth/local-login"
         response = s.post(login_url, json={
             "email": FOUNDER_EMAIL,
             "password": FOUNDER_PASSWORD

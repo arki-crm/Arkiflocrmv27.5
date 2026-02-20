@@ -29481,8 +29481,11 @@ async def export_general_ledger(
     start_iso = start.isoformat()
     end_iso = end.isoformat()
     
-    # Get account details
+    # Get account details (check both collections)
     account = await db.finance_accounts.find_one({"account_id": account_id}, {"_id": 0})
+    if not account:
+        account = await db.accounting_accounts.find_one({"account_id": account_id}, {"_id": 0})
+    
     if not account:
         category = await db.accounting_categories.find_one({"category_id": account_id}, {"_id": 0})
         if category:

@@ -9,38 +9,43 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Daily Closing Snapshot Feature COMPLETE ✅
-**As of February 19, 2026**
+## Current Status: Journal Entry Module COMPLETE ✅
+**As of February 20, 2026**
 
-### Finance Module - Daily Closing Snapshot (Founder Liquidity View)
+### Finance Module - Journal Entry (Manual Accounting Adjustments)
 
-Implemented a read-only daily liquidity snapshot for founder-level visibility into account balances.
+Implemented a permission-based Journal Entry module for manual accounting adjustments.
 
 | # | Feature | Description | Status |
 |---|---------|-------------|--------|
-| 1 | **Sidebar Navigation** | "Daily Closing" tab added under Finance menu with Landmark icon | ✅ |
-| 2 | **Date Selector** | Date input with prev/next arrows, defaults to today | ✅ |
-| 3 | **Summary Cards** | Cash, Bank, UPI/Wallet, Other, Grand Total Liquidity | ✅ |
-| 4 | **Account Groups** | Accounts grouped by type (Cash, Bank, UPI/Wallet, Other) | ✅ |
-| 5 | **Closing Balance** | Per-account closing balance as of selected date | ✅ |
-| 6 | **Custodian Split** | Optional grouping by custodian (if data exists) | ✅ |
-| 7 | **Permission Restriction** | Access limited to Founder, Admin, FinanceManager, CA | ✅ |
-| 8 | **Read-Only** | No data modification - pure reporting layer | ✅ |
-| 9 | **Go to Today Button** | Quick navigation back to today's snapshot | ✅ |
-| 10 | **Empty State** | Graceful handling when no accounts exist | ✅ |
+| 1 | **Sidebar Navigation** | "Journal Entry" tab added under Finance menu | ✅ |
+| 2 | **Auto Reference Number** | JE-YYYYMM-XXXX format auto-generated | ✅ |
+| 3 | **Debit/Credit Balance** | Validates Total Debit = Total Credit, blocks save if mismatch | ✅ |
+| 4 | **Minimum Lines** | Requires at least 2 lines with at least one Debit and one Credit | ✅ |
+| 5 | **accounting_transactions** | Posts with source_module='journal_entry', is_daybook_entry=true | ✅ |
+| 6 | **No Deletion** | Only reversal allowed - creates opposite entry | ✅ |
+| 7 | **Reversal Flow** | Auto-swaps Debit/Credit, links original/reversal | ✅ |
+| 8 | **Audit Trail** | created_by, created_at, reversed_by, reversed_at tracked | ✅ |
+| 9 | **Warning Banner** | "Do NOT use for operational transactions" visible | ✅ |
+| 10 | **Filters** | Status, Date range, Account, Reference search | ✅ |
+| 11 | **Export** | Excel/CSV export functionality | ✅ |
+| 12 | **Permissions** | finance.journal_entry.view/create/edit/reverse | ✅ |
 
 **Technical Details:**
-- Backend API: `GET /api/finance/daily-snapshot?date=YYYY-MM-DD` (defaults to today)
-- Frontend: `/app/frontend/src/pages/DailyClosingSnapshot.jsx`
-- Route: `/finance/daily-snapshot`
-- Data Source: Reads from `finance_accounts` + `accounting_transactions`
-- No modifications to cashbook, daybook, or any existing finance logic
+- Backend APIs: 
+  - `GET/POST /api/finance/journal-entries`
+  - `GET /api/finance/journal-entries/{je_id}`
+  - `POST /api/finance/journal-entries/{je_id}/reverse`
+  - `GET /api/finance/journal-entries/export/excel`
+- Frontend: `/app/frontend/src/pages/JournalEntry.jsx`
+- Route: `/finance/journal-entry`
+- Permissions: Granted to Admin, Founder, FinanceManager (full), CharteredAccountant (view-only)
 
-**Verification (iteration_73.json):** 100% pass rate - All backend API tests (11/11) and frontend UI tests passed.
+**Verification (iteration_74.json):** 100% pass rate - All 24 backend API tests + all frontend UI tests passed.
 
 ---
 
-## Previous Status: Trial Balance Report COMPLETE ✅
+## Previous Status: Daily Closing Snapshot COMPLETE ✅
 **As of February 19, 2026**
 
 ### Composer (SpatialBOQCanvas) - Module Spatial Precision Fix

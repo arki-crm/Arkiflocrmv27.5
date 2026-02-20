@@ -2361,6 +2361,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         # Finance - Full visibility
         "finance.cashbook.view",
         "finance.daily_closing.view",
+        # Journal Entry - Full access
+        "finance.journal_entry.view", "finance.journal_entry.create", "finance.journal_entry.edit", "finance.journal_entry.reverse",
         "finance.accounts.view",
         "finance.receipts.view", "finance.receipts.download",
         "finance.invoices.view", "finance.invoices.create", "finance.invoices.cancel",

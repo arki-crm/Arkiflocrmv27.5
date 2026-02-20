@@ -29515,6 +29515,121 @@ async def get_general_ledger(
     }
 
 
+async def get_party_general_ledger(
+    account_id: str,
+    party_account: dict,
+    start_iso: str,
+    end_iso: str,
+    period_label: str
+) -> dict:
+    """Generate General Ledger for a party sub-ledger account.
+    Reads from party_ledger_entries collection."""
+    
+    now = datetime.now(timezone.utc)
+    account_name = party_account.get("account_name", account_id)
+    account_type = party_account.get("account_type", "party_subledger")
+    party_type = party_account.get("party_type", "unknown")
+    party_id = party_account.get("party_id")
+    opening_balance_from_master = party_account.get("opening_balance", 0) or 0
+    
+    # Calculate Opening Balance from entries BEFORE start date
+    entries_before = await db.party_ledger_entries.find({
+        "party_account_id": account_id,
+        "created_at": {"$lt": start_iso}
+    }, {"_id": 0, "transaction_type": 1, "amount": 1}).to_list(100000)
+    
+    credits_before = sum(e.get("amount", 0) for e in entries_before if e.get("transaction_type") == "credit")
+    debits_before = sum(e.get("amount", 0) for e in entries_before if e.get("transaction_type") == "debit")
+    
+    # For liability accounts (vendor/employee): credits increase, debits decrease
+    # For asset accounts (customer receivables): debits increase, credits decrease
+    if party_account.get("ledger_type") == "asset":
+        calculated_opening = opening_balance_from_master + debits_before - credits_before
+    else:
+        calculated_opening = opening_balance_from_master + credits_before - debits_before
+    
+    # Get entries within the period
+    entries = await db.party_ledger_entries.find({
+        "party_account_id": account_id,
+        "created_at": {"$gte": start_iso, "$lte": end_iso}
+    }, {"_id": 0}).to_list(50000)
+    
+    # Sort by date
+    entries.sort(key=lambda x: (x.get("created_at", ""), x.get("entry_id", "")))
+    
+    # Build ledger entries with running balance
+    ledger_entries = []
+    running_balance = calculated_opening
+    total_debit = 0
+    total_credit = 0
+    
+    for entry in entries:
+        txn_type = entry.get("transaction_type", "")
+        amount = entry.get("amount", 0) or 0
+        
+        if txn_type == "debit":
+            debit = amount
+            credit = 0
+            total_debit += amount
+            if party_account.get("ledger_type") == "asset":
+                running_balance += amount  # Debit increases asset
+            else:
+                running_balance -= amount  # Debit decreases liability
+        else:  # credit
+            debit = 0
+            credit = amount
+            total_credit += amount
+            if party_account.get("ledger_type") == "asset":
+                running_balance -= amount  # Credit decreases asset
+            else:
+                running_balance += amount  # Credit increases liability
+        
+        txn_date = entry.get("transaction_date", "")[:10] or entry.get("created_at", "")[:10]
+        
+        ledger_entries.append({
+            "date": txn_date,
+            "transaction_id": entry.get("linked_transaction_id"),
+            "entry_id": entry.get("entry_id"),
+            "reference": entry.get("linked_transaction_id", "")[:12],
+            "source_module": entry.get("source_module", "manual"),
+            "narration": entry.get("remarks", ""),
+            "debit": debit,
+            "credit": credit,
+            "running_balance": running_balance
+        })
+    
+    # Calculate closing balance
+    if party_account.get("ledger_type") == "asset":
+        closing_balance = calculated_opening + total_debit - total_credit
+    else:
+        closing_balance = calculated_opening + total_credit - total_debit
+    
+    return {
+        "account_id": account_id,
+        "account_name": account_name,
+        "account_type": account_type,
+        "party_type": party_type,
+        "party_id": party_id,
+        "ledger_type": party_account.get("ledger_type", "unknown"),
+        
+        "period_label": period_label,
+        "start_date": start_iso[:10],
+        "end_date": end_iso[:10],
+        "generated_at": now.isoformat(),
+        
+        "summary": {
+            "opening_balance": calculated_opening,
+            "total_debit": total_debit,
+            "total_credit": total_credit,
+            "closing_balance": closing_balance,
+            "net_movement": total_credit - total_debit
+        },
+        
+        "entries": ledger_entries,
+        "entry_count": len(ledger_entries)
+    }
+
+
 @api_router.get("/finance/general-ledger/accounts")
 async def get_ledger_accounts(request: Request):
     """Get list of all accounts available for general ledger view

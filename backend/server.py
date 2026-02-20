@@ -2267,6 +2267,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.cashbook.view", "finance.cashbook.create", "finance.cashbook.edit", "finance.cashbook.delete",
         "finance.cashbook.verify", "finance.transaction.reverse",
         "finance.daily_closing.view", "finance.daily_closing.create", "finance.daily_closing.lock",
+        # Journal Entry - Full access
+        "finance.journal_entry.view", "finance.journal_entry.create", "finance.journal_entry.edit", "finance.journal_entry.reverse",
         # Accounts - Full access including opening balance
         "finance.accounts.view", "finance.accounts.create", "finance.accounts.edit", "finance.accounts.opening_balance",
         # Receipts & Invoices - Full control including cancellation

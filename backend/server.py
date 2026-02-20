@@ -22358,6 +22358,47 @@ async def create_transaction(txn: TransactionCreate, request: Request):
         {"$inc": {"current_balance": balance_change}}
     )
     
+    # ============ PARTY SUB-LEDGER POSTING ============
+    # Post to vendor sub-ledger if vendor_id provided (outflow = credit vendor, later payment debits)
+    if vendor_id and txn.transaction_type == "outflow":
+        try:
+            vendor_account = await get_party_subledger_account("vendor", vendor_id)
+            if vendor_account:
+                # Outflow to vendor = Credit vendor account (increase payable)
+                await post_party_transaction(
+                    party_account_id=vendor_account["account_id"],
+                    transaction_type="credit",
+                    amount=txn.amount,
+                    transaction_id=txn_id,
+                    remarks=f"Purchase: {txn.remarks[:100] if txn.remarks else 'No remarks'}",
+                    transaction_date=txn.transaction_date,
+                    user_id=user.user_id,
+                    user_name=user.name,
+                    source_module="cashbook"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to post vendor sub-ledger for txn {txn_id}: {e}")
+    
+    # Post to customer sub-ledger if project_id provided (inflow = credit customer, reduces receivable)
+    if txn.project_id and txn.transaction_type == "inflow":
+        try:
+            customer_account = await get_party_subledger_account("customer", txn.project_id)
+            if customer_account:
+                # Inflow from customer = Credit customer account (reduces receivable)
+                await post_party_transaction(
+                    party_account_id=customer_account["account_id"],
+                    transaction_type="credit",
+                    amount=txn.amount,
+                    transaction_id=txn_id,
+                    remarks=f"Payment received: {txn.remarks[:100] if txn.remarks else 'No remarks'}",
+                    transaction_date=txn.transaction_date,
+                    user_id=user.user_id,
+                    user_name=user.name,
+                    source_module="cashbook"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to post customer sub-ledger for txn {txn_id}: {e}")
+    
     # Audit log for cashbook create
     await create_audit_log(
         entity_type="cashbook",

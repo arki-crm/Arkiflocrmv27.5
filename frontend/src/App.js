@@ -70,6 +70,7 @@ import PnLSnapshot from './pages/PnLSnapshot';
 import TrialBalance from './pages/TrialBalance';
 import DailyClosingSnapshot from './pages/DailyClosingSnapshot';
 import JournalEntry from './pages/JournalEntry';
+import GeneralLedger from './pages/GeneralLedger';
 import ImportExport from './pages/ImportExport';
 import FinanceReports from './pages/FinanceReports';
 import CashFlowReport from './pages/CashFlowReport';

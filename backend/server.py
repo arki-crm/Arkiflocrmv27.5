@@ -29502,7 +29502,15 @@ async def get_general_ledger(
 
 @api_router.get("/finance/general-ledger/accounts")
 async def get_ledger_accounts(request: Request):
-    """Get list of all accounts available for general ledger view"""
+    """Get list of all accounts available for general ledger view
+    
+    Now includes:
+    - Bank & Cash accounts
+    - Expense/Income categories
+    - Vendor sub-ledger accounts
+    - Customer sub-ledger accounts
+    - Employee sub-ledger accounts
+    """
     user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -29510,6 +29518,9 @@ async def get_ledger_accounts(request: Request):
     user_doc = await db.users.find_one({"user_id": user.user_id})
     if not has_permission(user_doc, "finance.general_ledger.view"):
         raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Ensure control accounts exist
+    await ensure_control_accounts_exist()
     
     # Get finance accounts (try both collections for compatibility)
     accounts = await db.finance_accounts.find(
@@ -29531,6 +29542,18 @@ async def get_ledger_accounts(request: Request):
         {"_id": 0, "category_id": 1, "name": 1}
     ).to_list(100)
     
+    # Get party sub-ledger accounts (vendors, customers, employees)
+    party_accounts = await db.party_subledger_accounts.find(
+        {"is_active": {"$ne": False}},
+        {"_id": 0}
+    ).sort("account_name", 1).to_list(1000)
+    
+    # Separate party accounts by type
+    vendor_accounts = [p for p in party_accounts if p.get("party_type") == "vendor" and not p.get("is_control")]
+    customer_accounts = [p for p in party_accounts if p.get("party_type") == "customer" and not p.get("is_control")]
+    employee_accounts = [p for p in party_accounts if p.get("party_type") == "employee" and not p.get("is_control")]
+    control_accounts = [p for p in party_accounts if p.get("is_control")]
+    
     return {
         "accounts": [
             {
@@ -29551,6 +29574,53 @@ async def get_ledger_accounts(request: Request):
                 "balance": None
             }
             for cat in categories
+        ],
+        "vendors": [
+            {
+                "id": v.get("account_id"),
+                "name": v.get("account_name"),
+                "type": "party_subledger",
+                "party_type": "vendor",
+                "party_id": v.get("party_id"),
+                "group": "Accounts Payable",
+                "balance": v.get("current_balance", 0)
+            }
+            for v in vendor_accounts
+        ],
+        "customers": [
+            {
+                "id": c.get("account_id"),
+                "name": c.get("account_name"),
+                "type": "party_subledger",
+                "party_type": "customer",
+                "party_id": c.get("party_id"),
+                "group": "Accounts Receivable",
+                "balance": c.get("current_balance", 0)
+            }
+            for c in customer_accounts
+        ],
+        "employees": [
+            {
+                "id": e.get("account_id"),
+                "name": e.get("account_name"),
+                "type": "party_subledger",
+                "party_type": "employee",
+                "party_id": e.get("party_id"),
+                "group": "Employee Control",
+                "balance": e.get("current_balance", 0)
+            }
+            for e in employee_accounts
+        ],
+        "control_accounts": [
+            {
+                "id": ctrl.get("account_id"),
+                "name": ctrl.get("account_name"),
+                "type": "control",
+                "party_type": ctrl.get("party_type"),
+                "group": "Control Accounts",
+                "balance": ctrl.get("current_balance", 0)
+            }
+            for ctrl in control_accounts
         ]
     }
 

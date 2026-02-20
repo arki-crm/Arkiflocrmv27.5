@@ -2320,6 +2320,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         # Cashbook - View only
         "finance.cashbook.view",
         "finance.daily_closing.view",
+        # Journal Entry - View only (for audit)
+        "finance.journal_entry.view",
         # Accounts - View only
         "finance.accounts.view",
         # Receipts & Invoices - View and download only

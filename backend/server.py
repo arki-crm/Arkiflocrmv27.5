@@ -29371,11 +29371,19 @@ async def get_ledger_accounts(request: Request):
     if not has_permission(user_doc, "finance.general_ledger.view"):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Get finance accounts
+    # Get finance accounts (try both collections for compatibility)
     accounts = await db.finance_accounts.find(
         {"is_active": {"$ne": False}},
         {"_id": 0, "account_id": 1, "account_name": 1, "account_type": 1, "current_balance": 1}
     ).to_list(100)
+    
+    # Also check accounting_accounts collection if finance_accounts is empty
+    if not accounts:
+        accounting_accs = await db.accounting_accounts.find(
+            {"is_archived": {"$ne": True}},
+            {"_id": 0}
+        ).to_list(100)
+        accounts = accounting_accs
     
     # Get categories
     categories = await db.accounting_categories.find(

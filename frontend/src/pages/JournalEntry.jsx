@@ -140,8 +140,8 @@ export default function JournalEntry() {
   const fetchAccounts = useCallback(async () => {
     try {
       const [accountsRes, categoriesRes] = await Promise.all([
-        axios.get(`${API}/finance/accounts`, { withCredentials: true }).catch(() => ({ data: [] })),
-        axios.get(`${API}/finance/categories`, { withCredentials: true }).catch(() => ({ data: [] }))
+        axios.get(`${API}/accounting/accounts`, { withCredentials: true }).catch(() => ({ data: [] })),
+        axios.get(`${API}/accounting/categories`, { withCredentials: true }).catch(() => ({ data: [] }))
       ]);
       setAccounts(accountsRes.data || []);
       setCategories(categoriesRes.data || []);

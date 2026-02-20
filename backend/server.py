@@ -1839,6 +1839,15 @@ AVAILABLE_PERMISSIONS = {
         ]
     },
     
+    # General Ledger (Read-Only Reporting)
+    "finance_general_ledger": {
+        "name": "General Ledger",
+        "permissions": [
+            {"id": "finance.general_ledger.view", "name": "View General Ledger", "description": "View account-wise transaction history and running balances"},
+            {"id": "finance.general_ledger.export", "name": "Export General Ledger", "description": "Export ledger data to Excel/PDF"}
+        ]
+    },
+    
     # Bank & Cash Accounts
     "finance_accounts": {
         "name": "Bank & Cash Accounts",

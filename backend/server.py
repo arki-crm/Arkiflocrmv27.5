@@ -29170,6 +29170,410 @@ async def export_journal_entries_excel(
 
 
 # ============================================================================
+# ============ GENERAL LEDGER (READ-ONLY REPORTING) ==========================
+# ============================================================================
+# Account-wise transaction history with running balance
+# Reads strictly from accounting_transactions - no recalculation
+
+@api_router.get("/finance/general-ledger")
+async def get_general_ledger(
+    request: Request,
+    account_id: str,  # Mandatory - account to view
+    period: str = "month",  # month, quarter, fy, custom
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """Get General Ledger for a specific account
+    
+    Shows:
+    - Opening balance (sum of all transactions before start date)
+    - Transaction history within date range
+    - Running balance
+    - Closing balance
+    
+    Reads strictly from accounting_transactions.
+    Must match Trial Balance for same account/date range.
+    """
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.general_ledger.view"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.general_ledger.view permission")
+    
+    if not account_id:
+        raise HTTPException(status_code=400, detail="account_id is required")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Determine date range
+    if period == "month":
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=now.month + 1, day=1) - timedelta(seconds=1)
+        period_label = now.strftime("%B %Y")
+    elif period == "quarter":
+        quarter = (now.month - 1) // 3
+        start = now.replace(month=quarter * 3 + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_month = (quarter + 1) * 3 + 1
+        if end_month > 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=end_month, day=1) - timedelta(seconds=1)
+        period_label = f"Q{quarter + 1} {now.year}"
+    elif period == "fy":
+        # Financial Year: April 1 to March 31 (India)
+        if now.month >= 4:
+            fy_start_year = now.year
+        else:
+            fy_start_year = now.year - 1
+        start = now.replace(year=fy_start_year, month=4, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = now.replace(year=fy_start_year + 1, month=3, day=31, hour=23, minute=59, second=59, microsecond=999999)
+        period_label = f"FY {fy_start_year}-{fy_start_year + 1}"
+    elif period == "custom" and start_date and end_date:
+        start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        period_label = f"{start_date} to {end_date}"
+    else:
+        # Default to current month
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=now.month + 1, day=1) - timedelta(seconds=1)
+        period_label = now.strftime("%B %Y")
+    
+    start_iso = start.isoformat()
+    end_iso = end.isoformat()
+    
+    # Get account details
+    account = await db.finance_accounts.find_one({"account_id": account_id}, {"_id": 0})
+    if not account:
+        # Try categories
+        category = await db.accounting_categories.find_one({"category_id": account_id}, {"_id": 0})
+        if category:
+            account_name = category.get("name", account_id)
+            account_type = "category"
+            opening_balance_from_master = 0  # Categories don't have opening balance
+        else:
+            raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
+    else:
+        account_name = account.get("account_name") or account.get("name", account_id)
+        account_type = account.get("account_type", "unknown")
+        opening_balance_from_master = account.get("opening_balance", 0) or 0
+    
+    # Calculate Opening Balance
+    # Opening = Master opening balance + sum of transactions BEFORE start date
+    transactions_before = await db.accounting_transactions.find({
+        "account_id": account_id,
+        "created_at": {"$lt": start_iso}
+    }, {"_id": 0, "transaction_type": 1, "amount": 1}).to_list(100000)
+    
+    inflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "inflow")
+    outflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "outflow")
+    
+    # For bank/cash accounts: opening + inflows - outflows
+    # For categories: inflows are credits (income), outflows are debits (expense)
+    calculated_opening = opening_balance_from_master + inflows_before - outflows_before
+    
+    # Get transactions within the period
+    transactions = await db.accounting_transactions.find({
+        "account_id": account_id,
+        "created_at": {"$gte": start_iso, "$lte": end_iso}
+    }, {"_id": 0}).to_list(50000)
+    
+    # Sort by date (created_at), then by transaction_id for consistency
+    transactions.sort(key=lambda x: (x.get("created_at", ""), x.get("transaction_id", "")))
+    
+    # Build ledger entries with running balance
+    ledger_entries = []
+    running_balance = calculated_opening
+    total_debit = 0
+    total_credit = 0
+    
+    for txn in transactions:
+        txn_type = txn.get("transaction_type", "")
+        amount = txn.get("amount", 0) or 0
+        
+        # Determine debit/credit based on transaction type
+        # For accounts: inflow = credit (money coming in), outflow = debit (money going out)
+        if txn_type == "inflow":
+            debit = 0
+            credit = amount
+            running_balance += amount
+            total_credit += amount
+        else:  # outflow
+            debit = amount
+            credit = 0
+            running_balance -= amount
+            total_debit += amount
+        
+        # Extract date (handle both ISO and date-only formats)
+        txn_date = txn.get("date") or txn.get("created_at", "")[:10]
+        
+        ledger_entries.append({
+            "date": txn_date,
+            "transaction_id": txn.get("transaction_id"),
+            "reference": txn.get("reference_id") or txn.get("transaction_id", "")[:12],
+            "source_module": txn.get("source_module", "cashbook"),
+            "narration": txn.get("remarks") or txn.get("description", ""),
+            "category": txn.get("category_id"),
+            "project_id": txn.get("project_id"),
+            "debit": debit,
+            "credit": credit,
+            "running_balance": running_balance
+        })
+    
+    # Calculate closing balance
+    closing_balance = calculated_opening + total_credit - total_debit
+    
+    # Verify against expected running balance
+    if ledger_entries:
+        last_running = ledger_entries[-1]["running_balance"]
+        if abs(last_running - closing_balance) > 0.01:
+            print(f"WARNING: General Ledger balance mismatch for {account_id}. Last running: {last_running}, Closing: {closing_balance}")
+    
+    return {
+        "account_id": account_id,
+        "account_name": account_name,
+        "account_type": account_type,
+        
+        "period": period,
+        "period_label": period_label,
+        "start_date": start_iso[:10],
+        "end_date": end_iso[:10],
+        "generated_at": now.isoformat(),
+        
+        "summary": {
+            "opening_balance": calculated_opening,
+            "total_debit": total_debit,
+            "total_credit": total_credit,
+            "closing_balance": closing_balance,
+            "net_movement": total_credit - total_debit
+        },
+        
+        "entries": ledger_entries,
+        "entry_count": len(ledger_entries)
+    }
+
+
+@api_router.get("/finance/general-ledger/accounts")
+async def get_ledger_accounts(request: Request):
+    """Get list of all accounts available for general ledger view"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.general_ledger.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get finance accounts
+    accounts = await db.finance_accounts.find(
+        {"is_active": {"$ne": False}},
+        {"_id": 0, "account_id": 1, "account_name": 1, "account_type": 1, "current_balance": 1}
+    ).to_list(100)
+    
+    # Get categories
+    categories = await db.accounting_categories.find(
+        {"is_active": {"$ne": False}},
+        {"_id": 0, "category_id": 1, "name": 1}
+    ).to_list(100)
+    
+    return {
+        "accounts": [
+            {
+                "id": acc.get("account_id"),
+                "name": acc.get("account_name") or acc.get("name"),
+                "type": acc.get("account_type", "unknown"),
+                "group": "Bank & Cash",
+                "balance": acc.get("current_balance", 0)
+            }
+            for acc in accounts
+        ],
+        "categories": [
+            {
+                "id": cat.get("category_id"),
+                "name": cat.get("name"),
+                "type": "category",
+                "group": "Expense/Income Category",
+                "balance": None
+            }
+            for cat in categories
+        ]
+    }
+
+
+@api_router.get("/finance/general-ledger/export")
+async def export_general_ledger(
+    request: Request,
+    account_id: str,
+    period: str = "month",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    format: str = "excel"  # excel or pdf
+):
+    """Export general ledger to Excel/CSV"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not has_permission(user_doc, "finance.general_ledger.export"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.general_ledger.export permission")
+    
+    # Get ledger data using the main endpoint logic
+    # Re-use the same calculation
+    now = datetime.now(timezone.utc)
+    
+    # Determine date range (same logic as main endpoint)
+    if period == "month":
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=now.month + 1, day=1) - timedelta(seconds=1)
+        period_label = now.strftime("%B %Y")
+    elif period == "quarter":
+        quarter = (now.month - 1) // 3
+        start = now.replace(month=quarter * 3 + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_month = (quarter + 1) * 3 + 1
+        if end_month > 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=end_month, day=1) - timedelta(seconds=1)
+        period_label = f"Q{quarter + 1} {now.year}"
+    elif period == "fy":
+        if now.month >= 4:
+            fy_start_year = now.year
+        else:
+            fy_start_year = now.year - 1
+        start = now.replace(year=fy_start_year, month=4, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = now.replace(year=fy_start_year + 1, month=3, day=31, hour=23, minute=59, second=59, microsecond=999999)
+        period_label = f"FY {fy_start_year}-{fy_start_year + 1}"
+    elif period == "custom" and start_date and end_date:
+        start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        period_label = f"{start_date} to {end_date}"
+    else:
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end = now.replace(month=now.month + 1, day=1) - timedelta(seconds=1)
+        period_label = now.strftime("%B %Y")
+    
+    start_iso = start.isoformat()
+    end_iso = end.isoformat()
+    
+    # Get account details
+    account = await db.finance_accounts.find_one({"account_id": account_id}, {"_id": 0})
+    if not account:
+        category = await db.accounting_categories.find_one({"category_id": account_id}, {"_id": 0})
+        if category:
+            account_name = category.get("name", account_id)
+            opening_balance_from_master = 0
+        else:
+            raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
+    else:
+        account_name = account.get("account_name") or account.get("name", account_id)
+        opening_balance_from_master = account.get("opening_balance", 0) or 0
+    
+    # Calculate opening balance
+    transactions_before = await db.accounting_transactions.find({
+        "account_id": account_id,
+        "created_at": {"$lt": start_iso}
+    }, {"_id": 0, "transaction_type": 1, "amount": 1}).to_list(100000)
+    
+    inflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "inflow")
+    outflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "outflow")
+    calculated_opening = opening_balance_from_master + inflows_before - outflows_before
+    
+    # Get transactions within period
+    transactions = await db.accounting_transactions.find({
+        "account_id": account_id,
+        "created_at": {"$gte": start_iso, "$lte": end_iso}
+    }, {"_id": 0}).to_list(50000)
+    
+    transactions.sort(key=lambda x: (x.get("created_at", ""), x.get("transaction_id", "")))
+    
+    # Build export rows
+    rows = []
+    running_balance = calculated_opening
+    total_debit = 0
+    total_credit = 0
+    
+    # Add opening balance row
+    rows.append({
+        "date": start_iso[:10],
+        "reference": "",
+        "source_module": "",
+        "narration": "Opening Balance",
+        "debit": "",
+        "credit": "",
+        "balance": calculated_opening
+    })
+    
+    for txn in transactions:
+        txn_type = txn.get("transaction_type", "")
+        amount = txn.get("amount", 0) or 0
+        
+        if txn_type == "inflow":
+            debit = 0
+            credit = amount
+            running_balance += amount
+            total_credit += amount
+        else:
+            debit = amount
+            credit = 0
+            running_balance -= amount
+            total_debit += amount
+        
+        txn_date = txn.get("date") or txn.get("created_at", "")[:10]
+        
+        rows.append({
+            "date": txn_date,
+            "reference": txn.get("reference_id") or txn.get("transaction_id", "")[:12],
+            "source_module": txn.get("source_module", "cashbook"),
+            "narration": txn.get("remarks") or txn.get("description", ""),
+            "debit": debit if debit > 0 else "",
+            "credit": credit if credit > 0 else "",
+            "balance": running_balance
+        })
+    
+    # Add totals row
+    closing_balance = calculated_opening + total_credit - total_debit
+    rows.append({
+        "date": "",
+        "reference": "",
+        "source_module": "",
+        "narration": "TOTALS / CLOSING",
+        "debit": total_debit,
+        "credit": total_credit,
+        "balance": closing_balance
+    })
+    
+    return {
+        "account_id": account_id,
+        "account_name": account_name,
+        "period_label": period_label,
+        "start_date": start_iso[:10],
+        "end_date": end_iso[:10],
+        "rows": rows,
+        "summary": {
+            "opening_balance": calculated_opening,
+            "total_debit": total_debit,
+            "total_credit": total_credit,
+            "closing_balance": closing_balance
+        },
+        "exported_at": now.isoformat()
+    }
+
+
+# ============================================================================
 # ============ PROJECT PROFIT VISIBILITY =====================================
 # ============================================================================
 # Enhanced project finance metrics - projected vs realised profit

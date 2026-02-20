@@ -28459,6 +28459,77 @@ async def get_trial_balance(
         total_debit += liab_paid
         total_credit += liab_created
     
+    # ===== PARTY SUB-LEDGER INTEGRATION =====
+    # Ensure control accounts exist
+    await ensure_control_accounts_exist()
+    
+    # Get party ledger entries in period
+    party_entries = await db.party_ledger_entries.find({
+        "created_at": {"$gte": start_iso, "$lte": end_iso}
+    }, {"_id": 0}).to_list(50000)
+    
+    # Get all party accounts for lookup
+    party_accounts = await db.party_subledger_accounts.find({}, {"_id": 0}).to_list(1000)
+    party_accounts_map = {p["account_id"]: p for p in party_accounts}
+    
+    # Group by party account
+    party_balances = {}
+    for entry in party_entries:
+        acc_id = entry.get("party_account_id")
+        if acc_id not in party_balances:
+            party_acc = party_accounts_map.get(acc_id, {})
+            party_balances[acc_id] = {
+                "account_name": party_acc.get("account_name", acc_id),
+                "account_id": acc_id,
+                "party_type": party_acc.get("party_type", "unknown"),
+                "ledger_type": party_acc.get("ledger_type", "unknown"),
+                "debit": 0,
+                "credit": 0
+            }
+        
+        amount = entry.get("amount", 0)
+        if entry.get("transaction_type") == "debit":
+            party_balances[acc_id]["debit"] += amount
+        else:
+            party_balances[acc_id]["credit"] += amount
+    
+    # Add party accounts to appropriate groups
+    # Vendor accounts go to Liabilities (Accounts Payable)
+    vendor_total_debit = 0
+    vendor_total_credit = 0
+    for acc_id, bal in party_balances.items():
+        if bal["party_type"] == "vendor" and (bal["debit"] > 0 or bal["credit"] > 0):
+            bal["net"] = bal["credit"] - bal["debit"]  # Liability: credit increases
+            trial_balance["liabilities"].append(bal)
+            vendor_total_debit += bal["debit"]
+            vendor_total_credit += bal["credit"]
+            total_debit += bal["debit"]
+            total_credit += bal["credit"]
+    
+    # Customer accounts go to Assets (Accounts Receivable)
+    customer_total_debit = 0
+    customer_total_credit = 0
+    for acc_id, bal in party_balances.items():
+        if bal["party_type"] == "customer" and (bal["debit"] > 0 or bal["credit"] > 0):
+            bal["net"] = bal["debit"] - bal["credit"]  # Asset: debit increases
+            trial_balance["assets"].append(bal)
+            customer_total_debit += bal["debit"]
+            customer_total_credit += bal["credit"]
+            total_debit += bal["debit"]
+            total_credit += bal["credit"]
+    
+    # Employee accounts go to Liabilities (Employee Payables)
+    employee_total_debit = 0
+    employee_total_credit = 0
+    for acc_id, bal in party_balances.items():
+        if bal["party_type"] == "employee" and (bal["debit"] > 0 or bal["credit"] > 0):
+            bal["net"] = bal["credit"] - bal["debit"]  # Liability: credit increases
+            trial_balance["liabilities"].append(bal)
+            employee_total_debit += bal["debit"]
+            employee_total_credit += bal["credit"]
+            total_debit += bal["debit"]
+            total_credit += bal["credit"]
+    
     # ===== INCOME =====
     # Project Revenue (inflows linked to projects)
     project_income = sum(t.get("amount", 0) for t in transactions 

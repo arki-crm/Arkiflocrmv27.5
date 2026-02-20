@@ -344,6 +344,11 @@ export default function JournalEntry() {
       });
     });
     
+    // Debug: log options count
+    if (options.length === 0) {
+      console.log('JournalEntry: No account options available', { accounts: accounts.length, categories: categories.length });
+    }
+    
     return options;
   };
 

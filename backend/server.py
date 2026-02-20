@@ -2335,6 +2335,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.daily_closing.view",
         # Journal Entry - View only (for audit)
         "finance.journal_entry.view",
+        # General Ledger - View and export (for audit)
+        "finance.general_ledger.view", "finance.general_ledger.export",
         # Accounts - View only
         "finance.accounts.view",
         # Receipts & Invoices - View and download only

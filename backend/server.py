@@ -28375,10 +28375,23 @@ async def get_trial_balance(
     - Equity (Retained earnings, if applicable)
     
     Shows Debit and Credit columns with totals.
+    
+    Access: Requires finance.trial_balance.view permission or finance role.
     """
     user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Permission check - Finance roles only
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    finance_roles = ["Admin", "Founder", "Accountant", "SeniorAccountant", "JuniorAccountant", 
+                     "CharteredAccountant", "FinanceManager"]
+    
+    has_finance_role = user_doc.get("role") in finance_roles
+    has_permission_flag = has_permission(user_doc, "finance.trial_balance.view") or has_permission(user_doc, "finance.cashbook.view")
+    
+    if not has_finance_role and not has_permission_flag:
+        raise HTTPException(status_code=403, detail="Access denied - Finance permission required")
     
     now = datetime.now(timezone.utc)
     

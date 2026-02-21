@@ -1666,14 +1666,38 @@ async def local_login(credentials: LocalLoginRequest, response: Response):
 @api_router.post("/auth/setup-local-admin")
 async def setup_local_admin(request: Request):
     """
-    Setup a local admin user for testing.
-    This creates the predefined admin user with local password.
-    Can only be called once - subsequent calls will update the password.
+    Setup a local admin user - REQUIRES FOUNDER AUTHENTICATION or first-time setup.
+    
+    Security:
+    - If any admin exists, requires founder authentication
+    - If no users exist, allows first-time setup with provided credentials
+    - Credentials must be provided in request body (not hardcoded)
     """
-    # Predefined admin credentials
-    admin_email = "thaha.pakayil@gmail.com"
-    admin_password = "password123"
-    admin_name = "Thaha Pakayil"
+    body = await request.json()
+    
+    # Validate required fields
+    admin_email = body.get("email")
+    admin_password = body.get("password")
+    admin_name = body.get("name", "Admin User")
+    
+    if not admin_email or not admin_password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+    
+    if len(admin_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    
+    # Check if any admin users exist
+    existing_admins = await db.users.count_documents({"role": {"$in": ["Admin", "Founder"]}})
+    
+    if existing_admins > 0:
+        # Require founder authentication for subsequent admin creation
+        user = await get_current_user(request)
+        if not user:
+            raise HTTPException(status_code=401, detail="Authentication required to create admin users")
+        
+        user_doc = await db.users.find_one({"user_id": user.user_id})
+        if not user_doc or (user_doc.get("role") != "Founder" and user_doc.get("email") != FOUNDER_EMAIL):
+            raise HTTPException(status_code=403, detail="Only Founder can create admin users")
     
     # Check if user already exists
     existing_user = await db.users.find_one({"email": admin_email}, {"_id": 0})

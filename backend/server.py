@@ -1589,6 +1589,7 @@ async def local_login(credentials: LocalLoginRequest, response: Response):
     """
     Local login for testing outside Emergent environment.
     This does NOT replace Google OAuth - it's an additional option for local testing.
+    Includes automatic migration of legacy SHA-256 passwords to bcrypt.
     """
     # Find user by email with local password
     user_doc = await db.users.find_one(
@@ -1597,11 +1598,18 @@ async def local_login(credentials: LocalLoginRequest, response: Response):
     )
     
     if not user_doc:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=401, detail="Authentication failed")
+    
+    stored_hash = user_doc.get("local_password", "")
     
     # Verify password
-    if not verify_password(credentials.password, user_doc.get("local_password", "")):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not verify_password(credentials.password, stored_hash):
+        raise HTTPException(status_code=401, detail="Authentication failed")
+    
+    # Auto-migrate legacy SHA-256 passwords to bcrypt
+    if stored_hash and not stored_hash.startswith('$2'):
+        await migrate_legacy_password(user_doc["user_id"], credentials.password)
+        logger.info(f"Auto-migrated legacy password for user: {credentials.email}")
     
     # Check if user is active
     if user_doc.get("status") != "Active":

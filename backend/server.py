@@ -221,13 +221,45 @@ class TimelineAdjustmentRequest(BaseModel):
 # ============ LOCAL AUTH HELPERS ============
 
 def hash_password(password: str) -> str:
-    """Hash password using SHA-256 with salt"""
-    salt = "arkiflo_local_salt_2024"  # Fixed salt for simplicity
-    return hashlib.sha256(f"{password}{salt}".encode()).hexdigest()
+    """Hash password using bcrypt with random salt (secure)"""
+    password_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt(rounds=12)  # Cost factor 12 for good security/performance balance
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
+
 
 def verify_password(password: str, hashed: str) -> bool:
-    """Verify password against hash"""
-    return hash_password(password) == hashed
+    """Verify password against bcrypt hash.
+    Also supports legacy SHA-256 hashes for migration.
+    """
+    if not hashed:
+        return False
+    
+    # Check if it's a bcrypt hash (starts with $2b$ or $2a$)
+    if hashed.startswith('$2b$') or hashed.startswith('$2a$') or hashed.startswith('$2y$'):
+        try:
+            return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+        except Exception:
+            return False
+    else:
+        # Legacy SHA-256 hash migration support
+        # This allows existing users to login and their password will be re-hashed on next change
+        legacy_salt = "arkiflo_local_salt_2024"
+        legacy_hash = hashlib.sha256(f"{password}{legacy_salt}".encode()).hexdigest()
+        return legacy_hash == hashed
+
+
+async def migrate_legacy_password(user_id: str, password: str):
+    """Migrate a legacy SHA-256 password to bcrypt after successful verification"""
+    new_hash = hash_password(password)
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "local_password": new_hash,
+            "password_migrated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    logger.info(f"Migrated password to bcrypt for user: {user_id}")
 
 # ============ PROJECT MODELS ============
 

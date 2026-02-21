@@ -1752,21 +1752,23 @@ async def setup_local_admin(request: Request):
 
 @api_router.get("/auth/check-local-admin")
 async def check_local_admin():
-    """Check if local admin is set up"""
-    admin_email = "thaha.pakayil@gmail.com"
-    existing_user = await db.users.find_one(
-        {"email": admin_email, "local_password": {"$exists": True}},
-        {"_id": 0, "email": 1, "role": 1, "name": 1}
-    )
+    """Check if any local admin is set up (does not reveal specific email)"""
+    # Check if any admin with local password exists
+    admin_count = await db.users.count_documents({
+        "role": {"$in": ["Admin", "Founder"]},
+        "local_password": {"$exists": True}
+    })
     
-    if existing_user:
+    if admin_count > 0:
         return {
             "exists": True,
-            "email": existing_user.get("email"),
-            "name": existing_user.get("name"),
-            "role": existing_user.get("role")
+            "admin_count": admin_count,
+            "message": "Admin user(s) configured"
         }
-    return {"exists": False}
+    return {
+        "exists": False,
+        "message": "No admin users configured - first-time setup available"
+    }
 
 # ============ USER MANAGEMENT ============
 

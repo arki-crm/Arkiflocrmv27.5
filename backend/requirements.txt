@@ -33,6 +33,7 @@ isort==7.0.0
 jmespath==1.0.1
 jq==1.10.0
 librt==0.7.4
+limits==5.8.0
 markdown-it-py==4.0.0
 mccabe==0.7.0
 mdurl==0.1.2
@@ -77,6 +78,7 @@ s3transfer==0.16.0
 s5cmd==0.2.0
 shellingham==1.5.4
 six==1.17.0
+slowapi==0.1.9
 starlette==0.37.2
 typer==0.20.1
 typing-inspection==0.4.2

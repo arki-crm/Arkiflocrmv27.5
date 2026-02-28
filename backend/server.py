@@ -20825,7 +20825,9 @@ async def global_search(q: str, request: Request):
         return []
     
     # Build regex pattern for partial/contains match (case-insensitive)
-    pattern = {"$regex": q, "$options": "i"}
+    # Escape special regex characters to prevent ReDoS and injection
+    safe_q = re.escape(q)
+    pattern = {"$regex": safe_q, "$options": "i"}
     results = []
     
     # Search Leads

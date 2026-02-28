@@ -3822,6 +3822,9 @@ async def delete_user(user_id: str, request: Request):
             detail="Cannot delete System Owner account. This account is protected."
         )
     
+    # Get user info for audit log before deletion
+    deleted_user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "email": 1, "name": 1, "role": 1})
+    
     result = await db.users.delete_one({"user_id": user_id})
     
     if result.deleted_count == 0:
@@ -3829,6 +3832,19 @@ async def delete_user(user_id: str, request: Request):
     
     # Also delete user sessions
     await db.user_sessions.delete_many({"user_id": user_id})
+    
+    # Audit log for user deletion (critical operation)
+    await db.finance_audit_log.insert_one({
+        "audit_id": f"aud_{uuid.uuid4().hex[:12]}",
+        "entity_type": "user",
+        "entity_id": user_id,
+        "action": "delete",
+        "details": f"Deleted user: {deleted_user.get('email')} ({deleted_user.get('name')}) - Role: {deleted_user.get('role')}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "severity": "critical"
+    })
     
     return {"message": "User deleted successfully"}
 

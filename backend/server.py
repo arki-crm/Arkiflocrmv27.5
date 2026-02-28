@@ -1319,7 +1319,7 @@ async def create_session(request: SessionRequest, response: Response):
             value=session_token,
             httponly=True,
             secure=True,
-            samesite="none",
+            samesite="lax",  # Changed from "none" - prevents CSRF while allowing normal navigation
             path="/",
             max_age=7 * 24 * 60 * 60  # 7 days
         )

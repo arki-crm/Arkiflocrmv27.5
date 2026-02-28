@@ -1658,7 +1658,7 @@ async def local_login(request: Request, credentials: LocalLoginRequest, response
     
     # Create session
     session_token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
     
     await db.user_sessions.insert_one({
         "user_id": user_doc["user_id"],
@@ -1681,7 +1681,7 @@ async def local_login(request: Request, credentials: LocalLoginRequest, response
         httponly=True,
         secure=True,
         samesite="lax",  # Changed from "none" - prevents CSRF while allowing normal navigation
-        max_age=7 * 24 * 60 * 60,
+        max_age=24 * 60 * 60,  # 24 hours (reduced from 7 days for security)
         path="/"
     )
     

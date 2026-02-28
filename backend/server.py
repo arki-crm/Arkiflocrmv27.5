@@ -49,11 +49,14 @@ load_dotenv(ROOT_DIR / '.env')
 UPLOADS_DIR = ROOT_DIR / "uploads" / "academy"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Allowed file extensions for Academy uploads
+# Allowed file extensions for various upload types
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".webm"}
 ALLOWED_PDF_EXTENSIONS = {".pdf"}
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx"}
+ALLOWED_ALL_EXTENSIONS = ALLOWED_VIDEO_EXTENSIONS | ALLOWED_PDF_EXTENSIONS | ALLOWED_IMAGE_EXTENSIONS | ALLOWED_DOCUMENT_EXTENSIONS
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB max for videos
+DEFAULT_MAX_FILE_SIZE = 15 * 1024 * 1024  # 15MB default
 
 # File magic bytes for content validation (prevents extension spoofing)
 FILE_MAGIC_BYTES = {

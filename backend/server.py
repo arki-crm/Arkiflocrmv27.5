@@ -24672,9 +24672,24 @@ async def delete_approval_rule(rule_id: str, request: Request):
     if user_doc.get("role") != "Admin":
         raise HTTPException(status_code=403, detail="Only Admin can delete approval rules")
     
+    # Get rule info before deletion for audit
+    existing_rule = await db.finance_approval_rules.find_one({"rule_id": rule_id}, {"_id": 0})
+    
     result = await db.finance_approval_rules.delete_one({"rule_id": rule_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Rule not found")
+    
+    # Audit log for approval rule deletion
+    await db.finance_audit_log.insert_one({
+        "audit_id": f"aud_{uuid.uuid4().hex[:12]}",
+        "entity_type": "approval_rule",
+        "entity_id": rule_id,
+        "action": "delete",
+        "details": f"Deleted approval rule: {existing_rule.get('name', 'Unknown')} (threshold: ₹{existing_rule.get('threshold', 0):,.0f})",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
     
     return {"success": True, "message": "Rule deleted"}
 

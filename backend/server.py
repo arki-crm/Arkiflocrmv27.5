@@ -32370,17 +32370,18 @@ async def upload_company_logo(file: UploadFile = File(...), request: Request = N
     if user_doc.get("role") != "Admin":
         raise HTTPException(status_code=403, detail="Admin only")
     
-    # Validate file type
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image files allowed")
+    # Use centralized file validation
+    content, safe_filename, file_ext = await validated_file_upload(
+        file=file,
+        allowed_extensions=ALLOWED_IMAGE_EXTENSIONS,
+        max_size_bytes=2 * 1024 * 1024,  # 2MB max for logo
+        validate_content=True,
+        context="logo"
+    )
     
-    # Read and convert to base64
-    content = await file.read()
-    if len(content) > 2 * 1024 * 1024:  # 2MB max
-        raise HTTPException(status_code=400, detail="Logo must be under 2MB")
-    
+    # Convert to base64
     logo_base64 = base64.b64encode(content).decode("utf-8")
-    content_type = file.content_type
+    content_type = f"image/{file_ext[1:]}"  # .jpg -> image/jpg
     
     now = datetime.now(timezone.utc)
     await db.finance_company_settings.update_one(

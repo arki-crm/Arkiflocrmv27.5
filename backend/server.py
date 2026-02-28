@@ -247,8 +247,9 @@ class SessionRequest(BaseModel):
     session_id: str
 
 class LocalLoginRequest(BaseModel):
-    email: str
-    password: str
+    """Login request with input validation"""
+    email: str = Field(..., max_length=254, description="Email address")
+    password: str = Field(..., min_length=1, max_length=128, description="Password")
 
 class RoleUpdateRequest(BaseModel):
     role: str

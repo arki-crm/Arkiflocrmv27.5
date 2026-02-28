@@ -19868,11 +19868,13 @@ async def list_warranties(request: Request, search: Optional[str] = None, status
     
     query = {}
     if search:
+        # Escape special regex characters to prevent ReDoS and injection
+        safe_search = re.escape(search)
         query["$or"] = [
-            {"pid": {"$regex": search, "$options": "i"}},
-            {"customer_name": {"$regex": search, "$options": "i"}},
-            {"customer_phone": {"$regex": search, "$options": "i"}},
-            {"project_name": {"$regex": search, "$options": "i"}}
+            {"pid": {"$regex": safe_search, "$options": "i"}},
+            {"customer_name": {"$regex": safe_search, "$options": "i"}},
+            {"customer_phone": {"$regex": safe_search, "$options": "i"}},
+            {"project_name": {"$regex": safe_search, "$options": "i"}}
         ]
     if status:
         query["warranty_status"] = status

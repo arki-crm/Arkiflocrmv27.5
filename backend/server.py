@@ -40774,41 +40774,36 @@ async def upload_finance_attachment(
     if not entity_id:
         raise HTTPException(status_code=400, detail="entity_id is required")
     
-    # Validate file type
-    content_type = file.content_type or ""
-    if content_type not in ALLOWED_ATTACHMENT_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type not allowed. Supported: PDF, JPG, PNG"
-        )
+    # Use centralized file validation (PDF, JPG, PNG only)
+    finance_allowed_extensions = {".pdf", ".jpg", ".jpeg", ".png"}
+    content, safe_filename, file_ext = await validated_file_upload(
+        file=file,
+        allowed_extensions=finance_allowed_extensions,
+        max_size_bytes=MAX_ATTACHMENT_SIZE,  # 15MB
+        validate_content=True,
+        context="finance attachment"
+    )
     
-    # Read file content
-    content = await file.read()
-    
-    # Validate file size
-    if len(content) > MAX_ATTACHMENT_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File size exceeds maximum limit of 15MB"
-        )
-    
-    # Generate unique filename
+    # Generate unique filename with entity context
     now = datetime.now(timezone.utc)
     year_month = now.strftime("%Y/%m")
-    file_ext = ALLOWED_ATTACHMENT_TYPES.get(content_type, ".bin")
     unique_id = uuid.uuid4().hex[:12]
-    safe_filename = f"{entity_type}_{entity_id}_{unique_id}{file_ext}"
+    final_filename = f"{entity_type}_{entity_id}_{unique_id}{file_ext}"
     
     # Create directory structure
     upload_dir = FINANCE_UPLOADS_DIR / year_month
     upload_dir.mkdir(parents=True, exist_ok=True)
     
-    file_path = upload_dir / safe_filename
-    relative_path = f"finance/{year_month}/{safe_filename}"
+    file_path = upload_dir / final_filename
+    relative_path = f"finance/{year_month}/{final_filename}"
     
     # Save file
     async with aiofiles.open(file_path, 'wb') as f:
         await f.write(content)
+    
+    # Map extension to mime type
+    ext_to_mime = {".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+    mime_type = ext_to_mime.get(file_ext, "application/octet-stream")
     
     # Create attachment metadata
     attachment_id = f"att_{uuid.uuid4().hex[:12]}"
@@ -40821,7 +40816,7 @@ async def upload_finance_attachment(
         "file_name": original_filename,
         "file_path": relative_path,
         "file_size": len(content),
-        "mime_type": content_type,
+        "mime_type": mime_type,
         "description": description,
         "uploaded_by": user.user_id,
         "uploaded_by_name": user.name,

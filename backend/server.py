@@ -118,8 +118,35 @@ PARTY_TYPES = ["vendor", "customer", "employee"]
 app = FastAPI()
 
 # ============ RATE LIMITING CONFIGURATION ============
-# Initialize rate limiter with in-memory storage
-limiter = Limiter(key_func=get_remote_address)
+def get_real_client_ip(request: Request) -> str:
+    """
+    Get real client IP address, handling reverse proxy headers.
+    Priority: X-Forwarded-For > X-Real-IP > CF-Connecting-IP > client.host
+    """
+    # Check X-Forwarded-For (most common for reverse proxies)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # X-Forwarded-For can be a comma-separated list; first IP is the client
+        return forwarded_for.split(",")[0].strip()
+    
+    # Check X-Real-IP (nginx)
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    
+    # Check CF-Connecting-IP (Cloudflare)
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        return cf_ip.strip()
+    
+    # Fallback to direct client connection
+    if request.client and request.client.host:
+        return request.client.host
+    
+    return "127.0.0.1"
+
+# Initialize rate limiter with custom IP extraction for reverse proxy support
+limiter = Limiter(key_func=get_real_client_ip)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

@@ -23780,6 +23780,18 @@ async def delete_vendor_mapping(mapping_id: str, request: Request):
     
     await db.finance_vendor_mappings.delete_one({"mapping_id": mapping_id})
     
+    # Audit log for vendor mapping deletion
+    await db.finance_audit_log.insert_one({
+        "audit_id": f"aud_{uuid.uuid4().hex[:12]}",
+        "entity_type": "vendor_mapping",
+        "entity_id": mapping_id,
+        "action": "delete",
+        "details": f"Deleted vendor mapping for project {project_id}: {existing.get('vendor_name', 'Unknown')} - ₹{existing.get('amount', 0):,.0f}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
     return {"success": True, "message": "Vendor mapping deleted"}
 
 

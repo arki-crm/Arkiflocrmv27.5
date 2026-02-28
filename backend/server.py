@@ -222,11 +222,12 @@ class UserResponse(BaseModel):
     last_login: Optional[str] = None
 
 class UserInvite(BaseModel):
-    name: str
-    email: str
-    role: str
-    phone: Optional[str] = None
-    skill_level: Optional[str] = "intermediate"  # For Designer roles
+    """User invitation with input validation"""
+    name: str = Field(..., min_length=1, max_length=100, description="Full name")
+    email: str = Field(..., max_length=254, description="Email address")
+    role: str = Field(..., max_length=50, description="User role")
+    phone: Optional[str] = Field(None, max_length=20, description="Phone number")
+    skill_level: Optional[str] = Field("intermediate", max_length=20)  # For Designer roles
     senior_manager_view: Optional[bool] = False  # V1 permission toggle
 
 class UserUpdate(BaseModel):

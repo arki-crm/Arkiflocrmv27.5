@@ -1581,7 +1581,7 @@ async def google_callback(request: Request, response: Response, code: str = None
         
         # Create session token
         session_token = secrets.token_urlsafe(32)
-        expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
         
         # Remove old sessions for this user
         await db.user_sessions.delete_many({"user_id": user_id})
@@ -1605,7 +1605,7 @@ async def google_callback(request: Request, response: Response, code: str = None
             httponly=True,
             secure=True,
             samesite="lax",  # Changed from "none" - prevents CSRF while allowing normal navigation
-            max_age=7 * 24 * 60 * 60,
+            max_age=24 * 60 * 60,  # 24 hours (reduced from 7 days for security)
             path="/"
         )
         

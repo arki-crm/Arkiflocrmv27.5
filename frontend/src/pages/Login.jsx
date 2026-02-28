@@ -60,7 +60,13 @@ const Login = () => {
       }
     } catch (err) {
       console.error('Local login failed:', err);
-      toast.error(err.response?.data?.detail || 'Invalid email or password');
+      
+      // Handle rate limiting (HTTP 429)
+      if (err.response?.status === 429) {
+        toast.error('Too many login attempts. Please try again after a minute.');
+      } else {
+        toast.error(err.response?.data?.detail || 'Invalid email or password');
+      }
     } finally {
       setLocalLoading(false);
     }

@@ -21565,23 +21565,24 @@ class VendorUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 class TransactionCreate(BaseModel):
-    transaction_date: str  # ISO date string
-    transaction_type: str  # "inflow" or "outflow"
-    amount: float
-    mode: str  # "cash", "bank_transfer", "upi", "cheque"
-    category_id: str
-    account_id: str
-    project_id: Optional[str] = None  # Link to CRM project (read-only)
-    vendor_id: Optional[str] = None  # Link to unified vendor master
-    paid_to: Optional[str] = None  # Vendor/Person name (auto-populated if vendor_id provided)
-    remarks: str
-    attachment_url: Optional[str] = None
-    # New accountability fields
-    requested_by: Optional[str] = None  # Who initiated the spend
-    requested_by_name: Optional[str] = None
-    approved_by: Optional[str] = None  # Who approved (required for > ₹5000)
-    approved_by_name: Optional[str] = None
-    expense_request_id: Optional[str] = None  # Link to approved expense request
+    """Transaction creation with input validation"""
+    transaction_date: str = Field(..., max_length=30, description="ISO date string")
+    transaction_type: str = Field(..., max_length=20, description="inflow or outflow")
+    amount: float = Field(..., gt=0, le=100000000, description="Transaction amount (max 10 crore)")
+    mode: str = Field(..., max_length=30, description="Payment mode")
+    category_id: str = Field(..., max_length=50)
+    account_id: str = Field(..., max_length=50)
+    project_id: Optional[str] = Field(None, max_length=50)
+    vendor_id: Optional[str] = Field(None, max_length=50)
+    paid_to: Optional[str] = Field(None, max_length=200)
+    remarks: str = Field(..., max_length=1000, description="Transaction remarks")
+    attachment_url: Optional[str] = Field(None, max_length=500)
+    # Accountability fields
+    requested_by: Optional[str] = Field(None, max_length=50)
+    requested_by_name: Optional[str] = Field(None, max_length=100)
+    approved_by: Optional[str] = Field(None, max_length=50)
+    approved_by_name: Optional[str] = Field(None, max_length=100)
+    expense_request_id: Optional[str] = Field(None, max_length=50)
 
 
 class TransactionUpdate(BaseModel):

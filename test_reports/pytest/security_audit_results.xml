@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="13" time="3.603" timestamp="2026-02-28T19:52:07.974892+00:00" hostname="agent-env-cdb80447-9bbc-4ac9-89cd-beaf73ab2fc0"><testcase classname="backend.tests.test_security_audit.TestSecurityHeaders" name="test_security_headers_on_health_endpoint" time="0.266" /><testcase classname="backend.tests.test_security_audit.TestSecurityHeaders" name="test_security_headers_on_auth_endpoint" time="0.110" /><testcase classname="backend.tests.test_security_audit.TestSecurityHeaders" name="test_security_headers_on_protected_endpoint" time="0.132" /><testcase classname="backend.tests.test_security_audit.TestRateLimiting" name="test_rate_limit_on_login_endpoint" time="1.545" /><testcase classname="backend.tests.test_security_audit.TestRateLimiting" name="test_rate_limit_headers_present" time="0.132" /><testcase classname="backend.tests.test_security_audit.TestAuthentication" name="test_login_with_valid_credentials" time="0.114"><failure message="AssertionError: Login failed with status 429: {&quot;error&quot;:&quot;Rate limit exceeded: 5 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429]&gt;.status_code">backend/tests/test_security_audit.py:139: in test_login_with_valid_credentials
+    assert response.status_code == 200, f"Login failed with status {response.status_code}: {response.text}"
+E   AssertionError: Login failed with status 429: {"error":"Rate limit exceeded: 5 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_security_audit.TestAuthentication" name="test_login_with_invalid_password" time="0.104"><failure message="AssertionError: Expected 401, got 429&#10;assert 429 == 401&#10; +  where 429 = &lt;Response [429]&gt;.status_code">backend/tests/test_security_audit.py:156: in test_login_with_invalid_password
+    assert response.status_code == 401, f"Expected 401, got {response.status_code}"
+E   AssertionError: Expected 401, got 429
+E   assert 429 == 401
+E    +  where 429 = &lt;Response [429]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_security_audit.TestAuthentication" name="test_login_with_nonexistent_user" time="0.104"><failure message="AssertionError: Expected 401, got 429&#10;assert 429 == 401&#10; +  where 429 = &lt;Response [429]&gt;.status_code">backend/tests/test_security_audit.py:166: in test_login_with_nonexistent_user
+    assert response.status_code == 401, f"Expected 401, got {response.status_code}"
+E   AssertionError: Expected 401, got 429
+E   assert 429 == 401
+E    +  where 429 = &lt;Response [429]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_security_audit.TestAuthentication" name="test_session_cookie_settings" time="0.115"><failure message="AssertionError: Login failed: {&quot;error&quot;:&quot;Rate limit exceeded: 5 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429]&gt;.status_code">backend/tests/test_security_audit.py:177: in test_session_cookie_settings
+    assert response.status_code == 200, f"Login failed: {response.text}"
+E   AssertionError: Login failed: {"error":"Rate limit exceeded: 5 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_security_audit.TestFileUploadValidation" name="test_file_upload_validation_exists" time="0.116"><failure message="AssertionError: Login failed&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429]&gt;.status_code">backend/tests/test_security_audit.py:215: in test_file_upload_validation_exists
+    assert login_response.status_code == 200, "Login failed"
+E   AssertionError: Login failed
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_security_audit.TestAPIEndpointSecurity" name="test_protected_endpoints_require_auth" time="0.453"><failure message="AssertionError: Endpoint /api/finance/accounts should require auth, got 404&#10;assert 404 in [401, 403]&#10; +  where 404 = &lt;Response [404]&gt;.status_code">backend/tests/test_security_audit.py:256: in test_protected_endpoints_require_auth
+    assert response.status_code in [401, 403], \
+E   AssertionError: Endpoint /api/finance/accounts should require auth, got 404
+E   assert 404 in [401, 403]
+E    +  where 404 = &lt;Response [404]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_security_audit.TestAPIEndpointSecurity" name="test_cors_headers_present" time="0.073" /><testcase classname="backend.tests.test_security_audit.TestSecuritySummary" name="test_all_security_features_summary" time="0.220"><failure message="AssertionError: Some security features failed: {'security_headers': True, 'rate_limiting': True, 'authentication': False, 'cookie_security': False}&#10;assert False&#10; +  where False = all(dict_values([True, True, False, False]))&#10; +    where dict_values([True, True, False, False]) = &lt;built-in method values of dict object at 0xfaba4e0c4200&gt;()&#10; +      where &lt;built-in method values of dict object at 0xfaba4e0c4200&gt; = {'authentication': False, 'cookie_security': False, 'rate_limiting': True, 'security_headers': True}.values">backend/tests/test_security_audit.py:316: in test_all_security_features_summary
+    assert all(results.values()), f"Some security features failed: {results}"
+E   AssertionError: Some security features failed: {'security_headers': True, 'rate_limiting': True, 'authentication': False, 'cookie_security': False}
+E   assert False
+E    +  where False = all(dict_values([True, True, False, False]))
+E    +    where dict_values([True, True, False, False]) = &lt;built-in method values of dict object at 0xfaba4e0c4200&gt;()
+E    +      where &lt;built-in method values of dict object at 0xfaba4e0c4200&gt; = {'authentication': False, 'cookie_security': False, 'rate_limiting': True, 'security_headers': True}.values</failure></testcase></testsuite></testsuites>

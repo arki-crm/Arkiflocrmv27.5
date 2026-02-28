@@ -10,7 +10,7 @@ import re
 import logging
 import json
 from pathlib import Path
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta

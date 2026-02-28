@@ -21392,6 +21392,13 @@ async def upload_academy_file(request: Request, file: UploadFile = File(...)):
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB")
     
+    # Validate file content matches extension (magic bytes check)
+    if not validate_file_content(content, file_ext):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"File content does not match extension {file_ext}. Possible file type spoofing detected."
+        )
+    
     # Save file
     async with aiofiles.open(file_path, 'wb') as out_file:
         await out_file.write(content)

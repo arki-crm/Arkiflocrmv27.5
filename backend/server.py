@@ -20207,11 +20207,13 @@ async def list_service_requests(
         query["assigned_technician_id"] = user.user_id
     
     if search:
+        # Escape special regex characters to prevent ReDoS and injection
+        safe_search = re.escape(search)
         query["$or"] = [
-            {"service_request_id": {"$regex": search, "$options": "i"}},
-            {"pid": {"$regex": search, "$options": "i"}},
-            {"customer_name": {"$regex": search, "$options": "i"}},
-            {"customer_phone": {"$regex": search, "$options": "i"}}
+            {"service_request_id": {"$regex": safe_search, "$options": "i"}},
+            {"pid": {"$regex": safe_search, "$options": "i"}},
+            {"customer_name": {"$regex": safe_search, "$options": "i"}},
+            {"customer_phone": {"$regex": safe_search, "$options": "i"}}
         ]
     if stage:
         query["stage"] = stage

@@ -70,6 +70,10 @@ FILE_MAGIC_BYTES = {
     ".mov": [b"\x00\x00\x00\x14ftyp", b"moov"],
     ".avi": [b"RIFF"],
     ".webm": [b"\x1a\x45\xdf\xa3"],
+    ".doc": [b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"],  # OLE compound document
+    ".docx": [b"PK\x03\x04"],  # ZIP-based Office format
+    ".xls": [b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"],  # OLE compound document
+    ".xlsx": [b"PK\x03\x04"],  # ZIP-based Office format
 }
 
 def validate_file_content(file_bytes: bytes, expected_extension: str) -> bool:

@@ -1331,7 +1331,7 @@ async def create_session(request: SessionRequest, response: Response):
         session_doc = {
             "user_id": user_id,
             "session_token": session_token,
-            "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(),
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
@@ -1347,7 +1347,7 @@ async def create_session(request: SessionRequest, response: Response):
             secure=True,
             samesite="lax",  # Changed from "none" - prevents CSRF while allowing normal navigation
             path="/",
-            max_age=7 * 24 * 60 * 60  # 7 days
+            max_age=24 * 60 * 60  # 24 hours (reduced from 7 days for security)
         )
         
         # Get fresh user data

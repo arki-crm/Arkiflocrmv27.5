@@ -1578,7 +1578,7 @@ async def google_callback(request: Request, response: Response, code: str = None
             value=session_token,
             httponly=True,
             secure=True,
-            samesite="none",
+            samesite="lax",  # Changed from "none" - prevents CSRF while allowing normal navigation
             max_age=7 * 24 * 60 * 60,
             path="/"
         )

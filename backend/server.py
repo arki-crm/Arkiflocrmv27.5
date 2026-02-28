@@ -21441,43 +21441,28 @@ async def upload_academy_file(request: Request, file: UploadFile = File(...)):
     if not has_permission(user_doc, "academy.manage"):
         raise HTTPException(status_code=403, detail="Permission denied: academy.manage required")
     
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file provided")
+    # Academy allows videos, PDFs, and images
+    academy_allowed = ALLOWED_VIDEO_EXTENSIONS | ALLOWED_PDF_EXTENSIONS | ALLOWED_IMAGE_EXTENSIONS
     
-    # Get file extension
-    file_ext = Path(file.filename).suffix.lower()
+    # Use centralized file validation
+    content, safe_filename, file_ext = await validated_file_upload(
+        file=file,
+        allowed_extensions=academy_allowed,
+        max_size_bytes=MAX_FILE_SIZE,  # 500MB for videos
+        validate_content=True,
+        context="academy file"
+    )
     
-    # Determine file type and validate extension
+    # Determine file type for response
     if file_ext in ALLOWED_VIDEO_EXTENSIONS:
         file_type = "video"
     elif file_ext in ALLOWED_PDF_EXTENSIONS:
         file_type = "pdf"
-    elif file_ext in ALLOWED_IMAGE_EXTENSIONS:
-        file_type = "image"
     else:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"File type not allowed. Allowed: videos ({', '.join(ALLOWED_VIDEO_EXTENSIONS)}), PDFs (.pdf), images ({', '.join(ALLOWED_IMAGE_EXTENSIONS)})"
-        )
-    
-    # Generate unique filename
-    unique_id = uuid.uuid4().hex[:12]
-    safe_filename = f"{unique_id}{file_ext}"
-    file_path = UPLOADS_DIR / safe_filename
-    
-    # Check file size (for videos, enforce limit)
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB")
-    
-    # Validate file content matches extension (magic bytes check)
-    if not validate_file_content(content, file_ext):
-        raise HTTPException(
-            status_code=400, 
-            detail=f"File content does not match extension {file_ext}. Possible file type spoofing detected."
-        )
+        file_type = "image"
     
     # Save file
+    file_path = UPLOADS_DIR / safe_filename
     async with aiofiles.open(file_path, 'wb') as out_file:
         await out_file.write(content)
     

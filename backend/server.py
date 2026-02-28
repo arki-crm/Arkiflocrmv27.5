@@ -35998,6 +35998,241 @@ async def create_audit_log(
     return audit_entry
 
 
+# ============ CENTRALIZED TRANSACTION SERVICE ============
+# All accounting transaction writes MUST go through this function
+
+async def create_accounting_transaction(
+    transaction_data: dict,
+    user_id: str,
+    user_name: str,
+    source_module: str,
+    skip_balance_update: bool = False,
+    skip_party_posting: bool = False
+) -> dict:
+    """
+    Centralized accounting transaction creation with validation.
+    
+    ALL transaction writes must use this function to ensure:
+    - Consistent validation
+    - Proper audit logging
+    - Balance updates
+    - Party sub-ledger posting
+    
+    Args:
+        transaction_data: Dict with transaction fields:
+            - transaction_date (required): ISO date string
+            - transaction_type (required): "inflow" or "outflow"
+            - amount (required): Positive number, max 10 crore
+            - category_id (required): Category ID
+            - account_id (required): Bank/cash account ID
+            - remarks (required): Max 1000 chars
+            - mode (optional): Payment mode
+            - project_id (optional): Linked project
+            - vendor_id (optional): Linked vendor
+            - paid_to (optional): Recipient name
+            - reference_number (optional): External reference
+            - attachment_url (optional): File URL
+        user_id: ID of user creating transaction
+        user_name: Name of user creating transaction
+        source_module: Module creating this (e.g., "cashbook", "salary", "journal_entry")
+        skip_balance_update: Skip account balance update (for reversals)
+        skip_party_posting: Skip party sub-ledger posting
+    
+    Returns:
+        dict: Created transaction document (without _id)
+    
+    Raises:
+        HTTPException: If validation fails
+    """
+    now = datetime.now(timezone.utc)
+    
+    # ========== VALIDATION ==========
+    
+    # Required fields
+    required_fields = ["transaction_date", "transaction_type", "amount", "category_id", "account_id"]
+    for field in required_fields:
+        if field not in transaction_data or transaction_data[field] is None:
+            raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+    
+    # Validate transaction_type
+    txn_type = transaction_data.get("transaction_type")
+    if txn_type not in VALID_TRANSACTION_TYPES:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid transaction_type: {txn_type}. Must be 'inflow' or 'outflow'"
+        )
+    
+    # Validate amount
+    amount = transaction_data.get("amount")
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Amount must be a valid number")
+    
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+    
+    if amount > TRANSACTION_MAX_AMOUNT:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Amount exceeds maximum limit of ₹{TRANSACTION_MAX_AMOUNT:,.0f}"
+        )
+    
+    # Validate remarks length
+    remarks = transaction_data.get("remarks", "")
+    if remarks and len(remarks) > TRANSACTION_MAX_REMARKS_LENGTH:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Remarks exceeds maximum length of {TRANSACTION_MAX_REMARKS_LENGTH} characters"
+        )
+    
+    # Validate transaction_date format
+    txn_date = transaction_data.get("transaction_date", "")
+    try:
+        # Basic ISO date validation
+        if len(txn_date) >= 10:
+            datetime.strptime(txn_date[:10], "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid transaction_date format. Use YYYY-MM-DD")
+    
+    # Validate account exists
+    account_id = transaction_data.get("account_id")
+    account = await db.accounting_accounts.find_one({"account_id": account_id})
+    if not account:
+        raise HTTPException(status_code=400, detail=f"Invalid account_id: {account_id}")
+    
+    # ========== CREATE TRANSACTION ==========
+    
+    txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+    
+    # Get vendor info if vendor_id provided
+    vendor_id = transaction_data.get("vendor_id")
+    paid_to = transaction_data.get("paid_to", "")
+    if vendor_id and not paid_to:
+        vendor = await db.accounting_vendors.find_one({"vendor_id": vendor_id}, {"_id": 0, "vendor_name": 1})
+        if vendor:
+            paid_to = vendor.get("vendor_name", "")
+    
+    new_txn = {
+        "transaction_id": txn_id,
+        "transaction_date": txn_date,
+        "transaction_type": txn_type,
+        "amount": amount,
+        "mode": transaction_data.get("mode", "other"),
+        "category_id": transaction_data.get("category_id"),
+        "account_id": account_id,
+        "project_id": transaction_data.get("project_id"),
+        "vendor_id": vendor_id,
+        "paid_to": paid_to,
+        "remarks": remarks[:TRANSACTION_MAX_REMARKS_LENGTH] if remarks else "",
+        "reference_number": transaction_data.get("reference_number", ""),
+        "attachment_url": transaction_data.get("attachment_url"),
+        
+        # Accountability
+        "requested_by": transaction_data.get("requested_by"),
+        "requested_by_name": transaction_data.get("requested_by_name"),
+        "approved_by": transaction_data.get("approved_by"),
+        "approved_by_name": transaction_data.get("approved_by_name"),
+        "expense_request_id": transaction_data.get("expense_request_id"),
+        
+        # Metadata
+        "source_module": source_module,
+        "created_by": user_id,
+        "created_by_name": user_name,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        
+        # Verification status
+        "is_verified": transaction_data.get("is_verified", False),
+        "verified_by": transaction_data.get("verified_by"),
+        "verified_at": transaction_data.get("verified_at"),
+        
+        # Additional fields from transaction_data (for module-specific data)
+        "liability_id": transaction_data.get("liability_id"),
+        "salary_record_id": transaction_data.get("salary_record_id"),
+        "incentive_id": transaction_data.get("incentive_id"),
+        "commission_id": transaction_data.get("commission_id"),
+        "journal_entry_id": transaction_data.get("journal_entry_id"),
+        "receipt_id": transaction_data.get("receipt_id"),
+        "refund_id": transaction_data.get("refund_id"),
+        "purchase_return_id": transaction_data.get("purchase_return_id"),
+        "sales_return_id": transaction_data.get("sales_return_id"),
+        "credit_note_id": transaction_data.get("credit_note_id"),
+        "debit_note_id": transaction_data.get("debit_note_id"),
+        "invoice_id": transaction_data.get("invoice_id"),
+    }
+    
+    # Remove None values to keep document clean
+    new_txn = {k: v for k, v in new_txn.items() if v is not None}
+    
+    # Insert transaction
+    await db.accounting_transactions.insert_one(new_txn)
+    
+    # ========== UPDATE ACCOUNT BALANCE ==========
+    if not skip_balance_update:
+        balance_change = amount if txn_type == "inflow" else -amount
+        await db.accounting_accounts.update_one(
+            {"account_id": account_id},
+            {"$inc": {"current_balance": balance_change}}
+        )
+    
+    # ========== PARTY SUB-LEDGER POSTING ==========
+    if not skip_party_posting:
+        # Post to vendor sub-ledger if vendor_id provided (outflow = credit vendor)
+        if vendor_id and txn_type == "outflow":
+            try:
+                vendor_account = await get_party_subledger_account("vendor", vendor_id)
+                if vendor_account:
+                    await post_party_transaction(
+                        party_account_id=vendor_account["account_id"],
+                        transaction_type="credit",
+                        amount=amount,
+                        transaction_id=txn_id,
+                        remarks=f"{source_module}: {remarks[:100] if remarks else 'No remarks'}",
+                        transaction_date=txn_date,
+                        user_id=user_id,
+                        user_name=user_name,
+                        source_module=source_module
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to post vendor sub-ledger for txn {txn_id}: {e}")
+        
+        # Post to customer sub-ledger if project_id provided (inflow = credit customer)
+        project_id = transaction_data.get("project_id")
+        if project_id and txn_type == "inflow":
+            try:
+                customer_account = await get_party_subledger_account("customer", project_id)
+                if customer_account:
+                    await post_party_transaction(
+                        party_account_id=customer_account["account_id"],
+                        transaction_type="credit",
+                        amount=amount,
+                        transaction_id=txn_id,
+                        remarks=f"{source_module}: {remarks[:100] if remarks else 'No remarks'}",
+                        transaction_date=txn_date,
+                        user_id=user_id,
+                        user_name=user_name,
+                        source_module=source_module
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to post customer sub-ledger for txn {txn_id}: {e}")
+    
+    # ========== AUDIT LOG ==========
+    await create_audit_log(
+        entity_type="transaction",
+        entity_id=txn_id,
+        action="create",
+        user_id=user_id,
+        user_name=user_name,
+        new_value={"amount": amount, "type": txn_type, "source": source_module},
+        details=f"Created {txn_type} of ₹{amount:,.0f} via {source_module}"
+    )
+    
+    # Remove MongoDB _id before returning
+    new_txn.pop("_id", None)
+    return new_txn
+
+
 # ============ PARTY SUB-LEDGER HELPER FUNCTIONS ============
 
 async def ensure_control_accounts_exist():

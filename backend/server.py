@@ -95,6 +95,75 @@ def validate_file_content(file_bytes: bytes, expected_extension: str) -> bool:
     
     return False
 
+
+async def validated_file_upload(
+    file: UploadFile,
+    allowed_extensions: set,
+    max_size_bytes: int = DEFAULT_MAX_FILE_SIZE,
+    validate_content: bool = True,
+    context: str = "file"
+) -> tuple:
+    """
+    Centralized file upload validation utility.
+    
+    Args:
+        file: FastAPI UploadFile object
+        allowed_extensions: Set of allowed extensions (e.g., {".pdf", ".jpg"})
+        max_size_bytes: Maximum file size in bytes
+        validate_content: Whether to validate magic bytes
+        context: Context for error messages (e.g., "document", "image")
+    
+    Returns:
+        tuple: (file_content: bytes, safe_filename: str, file_extension: str)
+    
+    Raises:
+        HTTPException: If validation fails
+    """
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail=f"No {context} file provided")
+    
+    # Get and validate extension
+    original_filename = file.filename
+    file_ext = Path(original_filename).suffix.lower()
+    
+    if file_ext not in allowed_extensions:
+        allowed_list = ", ".join(sorted(allowed_extensions))
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid {context} type: {file_ext}. Allowed: {allowed_list}"
+        )
+    
+    # Read file content
+    content = await file.read()
+    
+    # Validate file size
+    if len(content) > max_size_bytes:
+        max_mb = max_size_bytes // (1024 * 1024)
+        raise HTTPException(
+            status_code=400, 
+            detail=f"{context.capitalize()} too large. Maximum size is {max_mb}MB"
+        )
+    
+    # Validate content matches extension (magic bytes check)
+    if validate_content and not validate_file_content(content, file_ext):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"File content does not match extension {file_ext}. Possible file type spoofing detected."
+        )
+    
+    # Generate safe filename
+    safe_filename = f"{uuid.uuid4().hex}{file_ext}"
+    
+    return content, safe_filename, file_ext
+
+
+# ============ TRANSACTION VALIDATION CONSTANTS ============
+TRANSACTION_MAX_AMOUNT = 100_000_000  # 10 crore max
+TRANSACTION_MAX_REMARKS_LENGTH = 1000
+VALID_TRANSACTION_TYPES = {"inflow", "outflow"}
+VALID_PAYMENT_MODES = {"cash", "bank_transfer", "upi", "cheque", "card", "other"}
+
+
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)

@@ -41805,13 +41805,18 @@ async def import_preview(
     if data_type not in EXPORT_FIELD_MAPPINGS:
         raise HTTPException(status_code=400, detail=f"Invalid data type: {data_type}")
     
-    # Validate file type
-    filename = file.filename or ""
-    if not filename.endswith(('.xlsx', '.xls', '.csv')):
-        raise HTTPException(status_code=400, detail="Only Excel (.xlsx, .xls) or CSV files are supported")
+    # Use centralized file validation for import files
+    import_allowed_extensions = {".xlsx", ".xls", ".csv"}
+    content, safe_filename, file_ext = await validated_file_upload(
+        file=file,
+        allowed_extensions=import_allowed_extensions,
+        max_size_bytes=50 * 1024 * 1024,  # 50MB for large data imports
+        validate_content=True,
+        context="import file"
+    )
     
-    # Read file content
-    content = await file.read()
+    # Get original filename for file type detection
+    filename = file.filename or safe_filename
     
     # Parse file
     try:

@@ -55,6 +55,39 @@ ALLOWED_PDF_EXTENSIONS = {".pdf"}
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB max for videos
 
+# File magic bytes for content validation (prevents extension spoofing)
+FILE_MAGIC_BYTES = {
+    ".pdf": [b"%PDF"],
+    ".jpg": [b"\xff\xd8\xff"],
+    ".jpeg": [b"\xff\xd8\xff"],
+    ".png": [b"\x89PNG\r\n\x1a\n"],
+    ".gif": [b"GIF87a", b"GIF89a"],
+    ".webp": [b"RIFF"],
+    ".mp4": [b"\x00\x00\x00\x18ftyp", b"\x00\x00\x00\x1cftyp", b"\x00\x00\x00\x20ftyp", b"ftyp"],
+    ".mov": [b"\x00\x00\x00\x14ftyp", b"moov"],
+    ".avi": [b"RIFF"],
+    ".webm": [b"\x1a\x45\xdf\xa3"],
+}
+
+def validate_file_content(file_bytes: bytes, expected_extension: str) -> bool:
+    """
+    Validate file content matches expected extension using magic bytes.
+    Returns True if valid, False if content doesn't match extension.
+    """
+    ext = expected_extension.lower()
+    if ext not in FILE_MAGIC_BYTES:
+        return True  # No magic bytes defined, allow
+    
+    magic_signatures = FILE_MAGIC_BYTES[ext]
+    # Check first 20 bytes for magic signature
+    header = file_bytes[:20]
+    
+    for signature in magic_signatures:
+        if signature in header[:len(signature) + 10]:
+            return True
+    
+    return False
+
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)

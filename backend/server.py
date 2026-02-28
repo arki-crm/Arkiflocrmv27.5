@@ -20340,8 +20340,12 @@ async def create_service_request(data: ServiceRequestCreate, request: Request):
     }
 
 @api_router.post("/service-requests/from-google-form")
-async def create_service_request_from_google_form(data: ServiceRequestFromGoogleForm):
-    """Create service request from Google Form submission (no auth required)"""
+@limiter.limit("10/minute")  # Rate limit: 10 requests per minute per IP (prevent spam)
+async def create_service_request_from_google_form(request: Request, data: ServiceRequestFromGoogleForm):
+    """Create service request from Google Form submission (no auth required)
+    
+    Rate limited: 10 requests per minute per IP to prevent spam.
+    """
     now = datetime.now(timezone.utc)
     service_request_id = f"SR-{uuid.uuid4().hex[:8].upper()}"
     sla_visit_by = (now + timedelta(hours=72)).isoformat()

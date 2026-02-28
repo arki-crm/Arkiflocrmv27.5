@@ -117,6 +117,12 @@ PARTY_TYPES = ["vendor", "customer", "employee"]
 # Create the main app
 app = FastAPI()
 
+# ============ RATE LIMITING CONFIGURATION ============
+# Initialize rate limiter with in-memory storage
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 

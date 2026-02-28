@@ -4191,8 +4191,10 @@ async def add_comment(project_id: str, comment: CommentCreate, request: Request)
         if mentions:
             # Find mentioned users
             for mention in mentions:
+                # Escape special regex characters to prevent ReDoS and injection
+                safe_mention = re.escape(mention)
                 mentioned_user = await db.users.find_one(
-                    {"name": {"$regex": f"^{mention}", "$options": "i"}, "status": "Active"},
+                    {"name": {"$regex": f"^{safe_mention}", "$options": "i"}, "status": "Active"},
                     {"_id": 0, "user_id": 1, "name": 1}
                 )
                 if mentioned_user and mentioned_user["user_id"] != user.user_id:

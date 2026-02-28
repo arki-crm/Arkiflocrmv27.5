@@ -23194,10 +23194,12 @@ async def get_projects_for_accounting(request: Request, search: Optional[str] = 
     
     query = {}
     if search:
+        # Escape special regex characters to prevent ReDoS and injection
+        safe_search = re.escape(search)
         query["$or"] = [
-            {"pid": {"$regex": search, "$options": "i"}},
-            {"project_name": {"$regex": search, "$options": "i"}},
-            {"client_name": {"$regex": search, "$options": "i"}}
+            {"pid": {"$regex": safe_search, "$options": "i"}},
+            {"project_name": {"$regex": safe_search, "$options": "i"}},
+            {"client_name": {"$regex": safe_search, "$options": "i"}}
         ]
     
     projects = await db.projects.find(

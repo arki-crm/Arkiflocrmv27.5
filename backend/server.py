@@ -29058,9 +29058,11 @@ async def list_journal_entries(
         query["lines.account_id"] = account_id
     
     if search:
+        # Escape special regex characters to prevent ReDoS and injection
+        safe_search = re.escape(search)
         query["$or"] = [
-            {"reference_number": {"$regex": search, "$options": "i"}},
-            {"narration": {"$regex": search, "$options": "i"}}
+            {"reference_number": {"$regex": safe_search, "$options": "i"}},
+            {"narration": {"$regex": safe_search, "$options": "i"}}
         ]
     
     # Get total count

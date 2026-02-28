@@ -1676,6 +1676,7 @@ async def local_login(request: Request, credentials: LocalLoginRequest, response
 
 
 @api_router.post("/auth/setup-local-admin")
+@limiter.limit("3/hour")  # Rate limit: 3 attempts per hour per IP
 async def setup_local_admin(request: Request):
     """
     Setup a local admin user - REQUIRES FOUNDER AUTHENTICATION or first-time setup.
@@ -1684,6 +1685,7 @@ async def setup_local_admin(request: Request):
     - If any admin exists, requires founder authentication
     - If no users exist, allows first-time setup with provided credentials
     - Credentials must be provided in request body (not hardcoded)
+    - Rate limited: 3 attempts per hour
     """
     body = await request.json()
     

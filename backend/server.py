@@ -1594,11 +1594,14 @@ async def google_callback(request: Request, response: Response, code: str = None
 # ============ LOCAL LOGIN SYSTEM ============
 
 @api_router.post("/auth/local-login")
-async def local_login(credentials: LocalLoginRequest, response: Response):
+@limiter.limit("5/minute")  # Rate limit: 5 login attempts per minute per IP
+async def local_login(request: Request, credentials: LocalLoginRequest, response: Response):
     """
     Local login for testing outside Emergent environment.
     This does NOT replace Google OAuth - it's an additional option for local testing.
     Includes automatic migration of legacy SHA-256 passwords to bcrypt.
+    
+    Rate limited: 5 attempts per minute per IP address.
     """
     # Find user by email with local password
     user_doc = await db.users.find_one(

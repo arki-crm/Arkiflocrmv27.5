@@ -42441,7 +42441,7 @@ app.include_router(api_router)
 from starlette.middleware.base import BaseHTTPMiddleware
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Add security headers to all responses"""
+    """Add security headers to all responses including CSP"""
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         # Prevent MIME type sniffing
@@ -42454,6 +42454,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         # Permissions policy (restrict browser features)
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        # Content Security Policy (conservative, production-safe)
+        csp_directives = [
+            "default-src 'self'",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline'",  # React requires inline styles
+            "img-src 'self' data: https: blob:",  # Allow HTTPS images, data URIs, blobs
+            "font-src 'self' data:",
+            "connect-src 'self' https:",  # Allow API calls over HTTPS
+            "frame-ancestors 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+        ]
+        response.headers["Content-Security-Policy"] = "; ".join(csp_directives)
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)

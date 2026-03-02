@@ -1620,9 +1620,14 @@ async def google_callback(request: Request, response: Response, code: str = None
         if existing_user:
             user_id = existing_user["user_id"]
             
-            # Check if user is inactive
+            # Check if user is inactive/deleted
             if existing_user.get("status") == "Inactive":
-                logger.warning(f"Inactive user attempted login: {email}")
+                logger.warning(f"SECURITY: Inactive user attempted Google login: {email}")
+                return RedirectResponse(url=f"{FRONTEND_URL}/login?error=account_inactive")
+            
+            # Check is_active flag (if explicitly set to False)
+            if existing_user.get("is_active") is False:
+                logger.warning(f"SECURITY: Deactivated user attempted Google login: {email}")
                 return RedirectResponse(url=f"{FRONTEND_URL}/login?error=account_inactive")
             
             # Update user info and last_login (also add google_sub if missing)
@@ -1645,50 +1650,10 @@ async def google_callback(request: Request, response: Response, code: str = None
             role = existing_user["role"]
             logger.info(f"Existing user logged in via Google: {email}")
         else:
-            # Determine role for new user:
-            # 1. If email matches FOUNDER_EMAIL -> Founder role
-            # 2. If first user -> Admin role
-            # 3. Otherwise -> Designer role
-            user_count = await db.users.count_documents({})
-            
-            if email == FOUNDER_EMAIL:
-                role = "Founder"
-                logger.info(f"SYSTEM OWNER: {email} assigned Founder role")
-            elif user_count == 0:
-                role = "Admin"
-            else:
-                role = "Designer"
-            
-            # Get default permissions for the role (MANDATORY - never empty)
-            default_perms = DEFAULT_ROLE_PERMISSIONS.get(role, DEFAULT_ROLE_PERMISSIONS.get("Designer", []))
-            
-            # Create new user with GUARANTEED permissions
-            user_id = f"user_{uuid.uuid4().hex[:12]}"
-            initials = "".join([n[0].upper() for n in name.split()[:2]]) if name else "U"
-            new_user = {
-                "user_id": user_id,
-                "email": email,
-                "name": name,
-                "picture": picture,
-                "role": role,
-                "phone": None,
-                "status": "Active",
-                "initials": initials,
-                "google_sub": google_sub,
-                "auth_provider": "google",
-                "permissions": default_perms,  # MANDATORY: Never empty
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat(),
-                "last_login": now.isoformat()
-            }
-            await db.users.insert_one(new_user)
-            
-            if role == "Founder":
-                logger.info(f"SYSTEM OWNER CREATED: {email} with {len(default_perms)} permissions")
-            elif role == "Admin":
-                logger.info(f"FIRST USER: {email} created as Admin with {len(default_perms)} permissions")
-            else:
-                logger.info(f"New user created via Google OAuth: {email} (role: {role}, permissions: {len(default_perms)})")
+            # SECURITY FIX: Do NOT auto-create users
+            # Only Admin/Founder can create users manually in the system
+            logger.warning(f"SECURITY: Unauthorized Google login attempt - email not registered: {email}")
+            return RedirectResponse(url=f"{FRONTEND_URL}/login?error=access_denied")
         
         # Create session token
         session_token = secrets.token_urlsafe(32)

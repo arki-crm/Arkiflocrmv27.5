@@ -22698,6 +22698,17 @@ async def create_transaction(txn: TransactionCreate, request: Request):
     
     await db.accounting_transactions.insert_one(new_txn)
     
+    # ============ DOUBLE-ENTRY ENFORCEMENT ============
+    # Create counter-entry for transactions after cutoff date
+    if is_double_entry_required(txn.transaction_date) and txn.category_id not in ["internal_transfer", "journal_entry"]:
+        counter_account = get_counter_account_for_category(txn.category_id, txn.transaction_type)
+        await create_double_entry_pair(
+            primary_txn=new_txn,
+            counter_account_info=counter_account,
+            user_id=user.user_id,
+            user_name=user.name
+        )
+    
     balance_change = txn.amount if txn.transaction_type == "inflow" else -txn.amount
     await db.accounting_accounts.update_one(
         {"account_id": txn.account_id},

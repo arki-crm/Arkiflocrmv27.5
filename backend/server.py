@@ -38718,9 +38718,10 @@ async def update_purchase_return_refund(
             
             if not existing_txn:
                 txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+                refund_date = update.refund_date or now.strftime("%Y-%m-%d")
                 cashbook_entry = {
                     "transaction_id": txn_id,
-                    "transaction_date": update.refund_date or now.strftime("%Y-%m-%d"),
+                    "transaction_date": refund_date,
                     "transaction_type": "inflow",  # P0-FIX: Purchase refund = INFLOW
                     "entry_type": "purchase_return_refund",
                     "is_cashbook_entry": True,  # P0-FIX: Explicit cashbook flag
@@ -38745,6 +38746,16 @@ async def update_purchase_return_refund(
                     "updated_at": now.isoformat()
                 }
                 await db.accounting_transactions.insert_one(cashbook_entry)
+                
+                # ============ DOUBLE-ENTRY ENFORCEMENT ============
+                if is_double_entry_required(refund_date):
+                    vendor_payable_account = {"account_id": "acc_vendor_payable", "account_name": "Accounts Payable", "account_type": "liability"}
+                    await create_double_entry_pair(
+                        primary_txn=cashbook_entry,
+                        counter_account_info=vendor_payable_account,
+                        user_id=user.user_id,
+                        user_name=user_doc.get("name", "Unknown")
+                    )
                 
                 # Update account balance (inflow = increase)
                 await db.accounting_accounts.update_one(

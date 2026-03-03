@@ -25885,6 +25885,17 @@ async def record_expense_refund(request_id: str, data: RefundReceivedAction, req
     
     await db.accounting_transactions.insert_one(refund_txn)
     
+    # ============ DOUBLE-ENTRY ENFORCEMENT ============
+    if is_double_entry_required(data.received_date[:10]):
+        # Refund credits the expense account (reversal)
+        expense_account = {"account_id": "acc_general_expense", "account_name": "General Expense", "account_type": "expense"}
+        await create_double_entry_pair(
+            primary_txn=refund_txn,
+            counter_account_info=expense_account,
+            user_id=user.user_id,
+            user_name=user.name
+        )
+    
     # Update account balance (inflow)
     await db.accounting_accounts.update_one(
         {"account_id": data.account_id},

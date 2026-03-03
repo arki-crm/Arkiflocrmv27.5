@@ -163,6 +163,140 @@ TRANSACTION_MAX_REMARKS_LENGTH = 1000
 VALID_TRANSACTION_TYPES = {"inflow", "outflow"}
 VALID_PAYMENT_MODES = {"cash", "bank_transfer", "upi", "cheque", "card", "other"}
 
+# ============ DOUBLE-ENTRY ACCOUNTING ENFORCEMENT ============
+# All transactions ON or AFTER this date must be strictly double-entry
+# Transactions before this date remain as legacy single-entry
+DOUBLE_ENTRY_START_DATE = "2026-03-03"  # Forward-only enforcement
+
+# Counter-account mapping for double-entry
+DOUBLE_ENTRY_COUNTER_ACCOUNTS = {
+    # Expense categories -> map to expense account
+    "salary_payment": {"account_id": "acc_salary_expense", "account_name": "Salary Expense", "account_type": "expense"},
+    "training_expense": {"account_id": "acc_training_expense", "account_name": "Training Expense", "account_type": "expense"},
+    "project_expense": {"account_id": "acc_project_expense", "account_name": "Project Expense", "account_type": "expense"},
+    "hr_expense": {"account_id": "acc_hr_expense", "account_name": "HR Expense", "account_type": "expense"},
+    "business_development_expense": {"account_id": "acc_bd_expense", "account_name": "Business Development Expense", "account_type": "expense"},
+    "vendor_refund": {"account_id": "acc_vendor_payable", "account_name": "Accounts Payable", "account_type": "liability"},
+    "customer_payment": {"account_id": "acc_revenue", "account_name": "Sales Revenue", "account_type": "income"},
+    "internal_transfer": None,  # Already double-entry
+    "journal_entry": None,  # Already double-entry
+}
+
+# Default expense account for unmapped categories
+DEFAULT_EXPENSE_ACCOUNT = {"account_id": "acc_general_expense", "account_name": "General Expense", "account_type": "expense"}
+DEFAULT_INCOME_ACCOUNT = {"account_id": "acc_other_income", "account_name": "Other Income", "account_type": "income"}
+
+
+def is_double_entry_required(transaction_date: str) -> bool:
+    """Check if transaction requires double-entry enforcement"""
+    if not transaction_date:
+        return True  # Default to requiring double-entry for new transactions
+    # Compare date strings (YYYY-MM-DD format)
+    return transaction_date >= DOUBLE_ENTRY_START_DATE
+
+
+async def ensure_counter_account_exists(account_info: dict):
+    """Ensure the counter-account exists in accounting_accounts collection"""
+    existing = await db.accounting_accounts.find_one({"account_id": account_info["account_id"]})
+    if not existing:
+        now = datetime.now(timezone.utc)
+        await db.accounting_accounts.insert_one({
+            "account_id": account_info["account_id"],
+            "account_name": account_info["account_name"],
+            "account_type": account_info["account_type"],
+            "is_system_account": True,  # Mark as system-generated
+            "is_active": True,
+            "current_balance": 0,
+            "opening_balance": 0,
+            "created_at": now.isoformat(),
+            "created_by": "system",
+            "description": f"Auto-created for double-entry accounting"
+        })
+
+
+async def create_double_entry_pair(
+    primary_txn: dict,
+    counter_account_info: dict,
+    user_id: str,
+    user_name: str
+) -> str:
+    """
+    Create the counter-entry for double-entry accounting.
+    Returns the counter transaction ID.
+    
+    Rules:
+    - Primary outflow (bank credit) -> Counter is debit (expense/asset increase)
+    - Primary inflow (bank debit) -> Counter is credit (income/liability increase)
+    """
+    # Ensure counter account exists
+    await ensure_counter_account_exists(counter_account_info)
+    
+    now = datetime.now(timezone.utc)
+    counter_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+    
+    # Determine counter transaction type (opposite of primary)
+    primary_type = primary_txn.get("transaction_type")
+    counter_type = "inflow" if primary_type == "outflow" else "outflow"
+    
+    # Create counter entry
+    counter_txn = {
+        "transaction_id": counter_txn_id,
+        "transaction_date": primary_txn.get("transaction_date"),
+        "transaction_type": counter_type,
+        "amount": primary_txn.get("amount"),
+        "mode": "double_entry",
+        "category_id": primary_txn.get("category_id"),
+        "account_id": counter_account_info["account_id"],
+        "project_id": primary_txn.get("project_id"),
+        "remarks": f"[DE] {primary_txn.get('remarks', '')}",
+        
+        # Double-entry linking
+        "is_double_entry": True,
+        "paired_transaction_id": primary_txn.get("transaction_id"),
+        "reference_id": primary_txn.get("reference_id") or primary_txn.get("transaction_id"),
+        "entry_role": "counter",  # 'primary' or 'counter'
+        
+        # Source tracking
+        "source_module": primary_txn.get("source_module", "cashbook"),
+        "source_id": primary_txn.get("source_id"),
+        
+        # Metadata
+        "is_system_generated": True,
+        "created_at": now.isoformat(),
+        "created_by": user_id,
+        "created_by_name": user_name,
+        "updated_at": now.isoformat()
+    }
+    
+    await db.accounting_transactions.insert_one(counter_txn)
+    
+    # Update primary transaction with pairing info
+    await db.accounting_transactions.update_one(
+        {"transaction_id": primary_txn.get("transaction_id")},
+        {"$set": {
+            "is_double_entry": True,
+            "paired_transaction_id": counter_txn_id,
+            "entry_role": "primary"
+        }}
+    )
+    
+    return counter_txn_id
+
+
+def get_counter_account_for_category(category_id: str, transaction_type: str) -> dict:
+    """Get the appropriate counter-account based on category and transaction type"""
+    # Check mapped categories first
+    if category_id in DOUBLE_ENTRY_COUNTER_ACCOUNTS:
+        mapped = DOUBLE_ENTRY_COUNTER_ACCOUNTS[category_id]
+        if mapped:
+            return mapped
+    
+    # Default based on transaction type
+    if transaction_type == "outflow":
+        return DEFAULT_EXPENSE_ACCOUNT
+    else:
+        return DEFAULT_INCOME_ACCOUNT
+
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']

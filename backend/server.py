@@ -28843,22 +28843,10 @@ async def get_trial_balance(
     trial_balance["expenses"].sort(key=lambda x: x["debit"], reverse=True)
     
     # ===== EQUITY =====
-    # Calculate retained earnings as balancing figure (simplified)
-    retained_earnings = total_credit - total_debit
-    if retained_earnings != 0:
-        trial_balance["equity"].append({
-            "account_name": "Retained Earnings / Net Movement",
-            "account_id": "retained_earnings",
-            "debit": max(0, -retained_earnings),
-            "credit": max(0, retained_earnings),
-            "net": retained_earnings
-        })
-        if retained_earnings > 0:
-            total_credit += retained_earnings
-        else:
-            total_debit += abs(retained_earnings)
+    # NO artificial balancing - equity section left empty unless real equity accounts exist
+    # Trial Balance must show actual computed totals only
     
-    # Calculate final totals
+    # Calculate final totals - actual values, no forced balancing
     final_total_debit = sum(
         sum(item["debit"] for item in trial_balance[group])
         for group in ["assets", "liabilities", "income", "expenses", "equity"]
@@ -28868,7 +28856,9 @@ async def get_trial_balance(
         for group in ["assets", "liabilities", "income", "expenses", "equity"]
     )
     
-    is_balanced = abs(final_total_debit - final_total_credit) < 1  # Allow small rounding
+    # Calculate imbalance - show truth, not corrected numbers
+    imbalance_amount = final_total_debit - final_total_credit
+    is_balanced = abs(imbalance_amount) < 1  # Allow small rounding difference
     
     return {
         "period": period,
@@ -28882,7 +28872,8 @@ async def get_trial_balance(
         "totals": {
             "total_debit": final_total_debit,
             "total_credit": final_total_credit,
-            "difference": final_total_debit - final_total_credit,
+            "difference": imbalance_amount,
+            "imbalance_amount": imbalance_amount,  # Explicit field for mismatch
             "is_balanced": is_balanced
         },
         

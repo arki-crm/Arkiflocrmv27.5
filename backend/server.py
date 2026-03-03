@@ -33401,6 +33401,16 @@ async def create_salary_payment(data: SalaryPaymentCreate, request: Request):
     # Insert cashbook entry to accounting_transactions (main cashbook collection)
     await db.accounting_transactions.insert_one(cashbook_entry)
     
+    # ============ DOUBLE-ENTRY ENFORCEMENT ============
+    if is_double_entry_required(data.payment_date):
+        salary_expense_account = {"account_id": "acc_salary_expense", "account_name": "Salary Expense", "account_type": "expense"}
+        await create_double_entry_pair(
+            primary_txn=cashbook_entry,
+            counter_account_info=salary_expense_account,
+            user_id=user.user_id,
+            user_name=user_doc.get("name", "Unknown")
+        )
+    
     # Update account balance (reduce by outflow)
     await db.accounting_accounts.update_one(
         {"account_id": data.account_id},

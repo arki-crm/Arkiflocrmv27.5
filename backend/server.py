@@ -23053,7 +23053,13 @@ async def get_approved_expense_requests(request: Request):
 
 @api_router.get("/accounting/daily-summary/{date}")
 async def get_daily_summary(date: str, request: Request):
-    """Get daily summary with opening/closing balances"""
+    """Get daily summary with opening/closing balances
+    
+    Opening Balance = Master opening_balance + sum of all transactions BEFORE selected date
+    Closing Balance = Opening + day's net movement
+    
+    Historical accuracy: Does NOT derive from current_balance
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
@@ -23062,46 +23068,82 @@ async def get_daily_summary(date: str, request: Request):
     
     accounts = await db.accounting_accounts.find({"is_active": True}, {"_id": 0}).to_list(100)
     
-    # P0-FIX: Exclude credit purchase daybook entries (is_cashbook_entry=False)
-    # Also exclude old purchase_invoice entries that don't have the flag
-    # These are for tracking purposes only and don't represent actual cash movement
-    transactions = await db.accounting_transactions.find(
+    # Build ISO date string for comparison (transactions store created_at as ISO)
+    # date format is YYYY-MM-DD
+    date_start_iso = f"{date}T00:00:00"
+    date_end_iso = f"{date}T23:59:59"
+    
+    # Get transactions for the selected day
+    # Exclude credit purchase daybook entries and old purchase_invoice entries
+    day_transactions = await db.accounting_transactions.find(
         {
-            "transaction_date": {"$regex": f"^{date}"},
+            "$or": [
+                {"transaction_date": {"$regex": f"^{date}"}},
+                {"created_at": {"$gte": date_start_iso, "$lte": date_end_iso}}
+            ],
             "$and": [
                 {"$or": [
                     {"is_cashbook_entry": {"$ne": False}},
                     {"is_cashbook_entry": {"$exists": False}}
                 ]},
-                # Also exclude old credit purchase entries
                 {"entry_type": {"$nin": ["purchase_invoice", "purchase_invoice_credit"]}}
             ]
         },
         {"_id": 0}
     ).to_list(1000)
     
-    total_inflow = sum(t["amount"] for t in transactions if t.get("transaction_type") == "inflow")
-    total_outflow = sum(t["amount"] for t in transactions if t.get("transaction_type") == "outflow")
+    total_inflow = sum(t.get("amount", 0) for t in day_transactions if t.get("transaction_type") == "inflow")
+    total_outflow = sum(t.get("amount", 0) for t in day_transactions if t.get("transaction_type") == "outflow")
     
     account_summaries = []
     for acc in accounts:
-        acc_txns = [t for t in transactions if t.get("account_id") == acc["account_id"]]
-        acc_inflow = sum(t["amount"] for t in acc_txns if t.get("transaction_type") == "inflow")
-        acc_outflow = sum(t["amount"] for t in acc_txns if t.get("transaction_type") == "outflow")
+        acc_id = acc["account_id"]
+        master_opening = acc.get("opening_balance", 0) or 0
         
+        # CORRECT LOGIC: Opening = master opening + all transactions BEFORE selected date
+        # Query transactions strictly before the selected date
+        transactions_before = await db.accounting_transactions.find({
+            "account_id": acc_id,
+            "$or": [
+                {"transaction_date": {"$lt": date}},
+                {"created_at": {"$lt": date_start_iso}}
+            ],
+            "$and": [
+                {"$or": [
+                    {"is_cashbook_entry": {"$ne": False}},
+                    {"is_cashbook_entry": {"$exists": False}}
+                ]},
+                {"entry_type": {"$nin": ["purchase_invoice", "purchase_invoice_credit"]}}
+            ]
+        }, {"_id": 0, "transaction_type": 1, "amount": 1}).to_list(100000)
+        
+        inflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "inflow")
+        outflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "outflow")
+        
+        # Opening balance = master opening + net of all prior transactions
+        opening_balance = master_opening + inflows_before - outflows_before
+        
+        # Day's transactions for this account
+        acc_day_txns = [t for t in day_transactions if t.get("account_id") == acc_id]
+        acc_inflow = sum(t.get("amount", 0) for t in acc_day_txns if t.get("transaction_type") == "inflow")
+        acc_outflow = sum(t.get("amount", 0) for t in acc_day_txns if t.get("transaction_type") == "outflow")
+        
+        # Closing = Opening + day's net
         day_net = acc_inflow - acc_outflow
-        opening_balance = acc["current_balance"] - day_net
-        closing_balance = acc["current_balance"]
+        closing_balance = opening_balance + day_net
         
         account_summaries.append({
-            "account_id": acc["account_id"],
-            "account_name": acc["account_name"],
-            "account_type": acc["account_type"],
+            "account_id": acc_id,
+            "account_name": acc.get("account_name", acc_id),
+            "account_type": acc.get("account_type", "unknown"),
             "opening_balance": opening_balance,
             "inflow": acc_inflow,
             "outflow": acc_outflow,
             "closing_balance": closing_balance
         })
+    
+    # Include party sub-ledger summary if movements exist
+    party_summary = await get_daily_party_movements(date, date_start_iso, date_end_iso)
     
     daily_closing = await db.accounting_daily_closings.find_one({"date": date})
     
@@ -23113,8 +23155,49 @@ async def get_daily_summary(date: str, request: Request):
         "total_inflow": total_inflow,
         "total_outflow": total_outflow,
         "net_change": total_inflow - total_outflow,
-        "transaction_count": len(transactions),
-        "accounts": account_summaries
+        "transaction_count": len(day_transactions),
+        "accounts": account_summaries,
+        "party_movements": party_summary  # Party sub-ledger movements for the day
+    }
+
+
+async def get_daily_party_movements(date: str, date_start_iso: str, date_end_iso: str) -> dict:
+    """Get party sub-ledger movements for a specific day"""
+    # Query party_ledger_entries for the day
+    party_entries = await db.party_ledger_entries.find({
+        "$or": [
+            {"transaction_date": {"$regex": f"^{date}"}},
+            {"created_at": {"$gte": date_start_iso, "$lte": date_end_iso}}
+        ]
+    }, {"_id": 0}).to_list(10000)
+    
+    if not party_entries:
+        return {"has_movements": False, "total_debit": 0, "total_credit": 0, "entries_count": 0}
+    
+    total_debit = sum(e.get("amount", 0) for e in party_entries if e.get("transaction_type") == "debit")
+    total_credit = sum(e.get("amount", 0) for e in party_entries if e.get("transaction_type") == "credit")
+    
+    # Group by party type
+    by_type = {"vendor": {"debit": 0, "credit": 0}, "customer": {"debit": 0, "credit": 0}, "employee": {"debit": 0, "credit": 0}}
+    
+    # Get party accounts for type lookup
+    party_accounts = await db.party_subledger_accounts.find({}, {"_id": 0, "account_id": 1, "party_type": 1}).to_list(1000)
+    party_type_map = {p["account_id"]: p.get("party_type", "unknown") for p in party_accounts}
+    
+    for entry in party_entries:
+        ptype = party_type_map.get(entry.get("party_account_id"), "unknown")
+        if ptype in by_type:
+            if entry.get("transaction_type") == "debit":
+                by_type[ptype]["debit"] += entry.get("amount", 0)
+            else:
+                by_type[ptype]["credit"] += entry.get("amount", 0)
+    
+    return {
+        "has_movements": True,
+        "total_debit": total_debit,
+        "total_credit": total_credit,
+        "entries_count": len(party_entries),
+        "by_party_type": by_type
     }
 
 

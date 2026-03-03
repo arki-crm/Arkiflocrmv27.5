@@ -31411,6 +31411,16 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
     await db.finance_receipts.insert_one(receipt_doc)
     await db.accounting_transactions.insert_one(txn_doc)
     
+    # ============ DOUBLE-ENTRY ENFORCEMENT ============
+    if is_double_entry_required(payment_date):
+        revenue_account = {"account_id": "acc_revenue", "account_name": "Sales Revenue", "account_type": "income"}
+        await create_double_entry_pair(
+            primary_txn=txn_doc,
+            counter_account_info=revenue_account,
+            user_id=user.user_id,
+            user_name=user.name
+        )
+    
     # Update account balance
     await db.accounting_accounts.update_one(
         {"account_id": receipt.account_id},

@@ -29017,10 +29017,18 @@ async def get_daily_closing_snapshot(
     end_of_day_iso = end_of_day.isoformat()
     
     # Get all active accounts
+    # Get all active accounts - check both collections for compatibility
     accounts = await db.finance_accounts.find(
         {"is_active": {"$ne": False}},
         {"_id": 0}
     ).to_list(100)
+    
+    # If no finance_accounts, fall back to accounting_accounts
+    if not accounts:
+        accounts = await db.accounting_accounts.find(
+            {"is_active": {"$ne": False}},
+            {"_id": 0}
+        ).to_list(100)
     
     if not accounts:
         return {

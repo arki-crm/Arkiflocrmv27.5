@@ -34752,6 +34752,16 @@ async def create_stipend_payment(data: StipendPaymentRequest, request: Request):
     
     await db.accounting_transactions.insert_one(cashbook_entry)
     
+    # ============ DOUBLE-ENTRY ENFORCEMENT ============
+    if is_double_entry_required(data.payment_date):
+        training_expense_account = {"account_id": "acc_training_expense", "account_name": "Training Expense", "account_type": "expense"}
+        await create_double_entry_pair(
+            primary_txn=cashbook_entry,
+            counter_account_info=training_expense_account,
+            user_id=user.user_id,
+            user_name=user_doc.get("name", "Unknown")
+        )
+    
     # Update account balance
     await db.accounting_accounts.update_one(
         {"account_id": data.account_id},

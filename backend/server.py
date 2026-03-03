@@ -35277,6 +35277,16 @@ async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, requ
     
     await db.accounting_transactions.insert_one(cashbook_entry)
     
+    # ============ DOUBLE-ENTRY ENFORCEMENT ============
+    if is_double_entry_required(data.payment_date):
+        incentive_expense_account = {"account_id": "acc_incentive_expense", "account_name": "Incentive Expense", "account_type": "expense"}
+        await create_double_entry_pair(
+            primary_txn=cashbook_entry,
+            counter_account_info=incentive_expense_account,
+            user_id=user.user_id,
+            user_name=user_doc.get("name", "Unknown")
+        )
+    
     # Update account balance
     await db.accounting_accounts.update_one(
         {"account_id": data.account_id},

@@ -123,7 +123,7 @@ export default function GeneralLedger() {
     } finally {
       setLoading(false);
     }
-  }, [selectedAccount, period, customStart, customEnd]);
+  }, [selectedAccount, selectedParty, selectedProject, period, customStart, customEnd]);
 
   useEffect(() => {
     fetchAccounts();
@@ -133,7 +133,7 @@ export default function GeneralLedger() {
     if (selectedAccount && (period !== 'custom' || (customStart && customEnd))) {
       fetchLedger();
     }
-  }, [selectedAccount, period, fetchLedger, customStart, customEnd]);
+  }, [selectedAccount, selectedParty, selectedProject, period, fetchLedger, customStart, customEnd]);
 
   const handleExport = async () => {
     if (!selectedAccount) return;

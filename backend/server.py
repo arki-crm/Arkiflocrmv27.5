@@ -31382,16 +31382,24 @@ async def list_receipts(
     project_id: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
+    include_cancelled: bool = True,
     limit: int = 100
 ):
-    """List receipts with optional filters"""
+    """List receipts with optional filters
+    
+    Args:
+        include_cancelled: If True, returns all receipts including cancelled ones.
+                          If False, excludes cancelled receipts. Default is True.
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
     if not has_permission(user_doc, "finance.view_receipts"):
         raise HTTPException(status_code=403, detail="Access denied - no finance.view_receipts permission")
     
-    query = {"status": {"$ne": "cancelled"}}
+    query = {}
+    if not include_cancelled:
+        query["status"] = {"$ne": "cancelled"}
     if project_id:
         query["project_id"] = project_id
     if from_date:

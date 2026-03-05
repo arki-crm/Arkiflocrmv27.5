@@ -321,7 +321,7 @@ export default function GeneralLedger() {
             {/* Party Filter */}
             <div className="w-56">
               <Label className="text-sm text-gray-600 mb-1.5 block">
-                Party (Customer/Vendor/Employee)
+                Party (Vendor / Employee)
               </Label>
               <Select value={selectedParty} onValueChange={setSelectedParty}>
                 <SelectTrigger data-testid="party-select">

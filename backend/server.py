@@ -23755,9 +23755,6 @@ async def get_project_finance_detail(project_id: str, request: Request):
     signoff_value = project.get("signoff_value") or 0
     signoff_locked = project.get("signoff_locked", False)
     
-    # Check if spending has started (any transactions exist)
-    spending_started = await db.accounting_transactions.find_one({"project_id": project_id}) is not None
-    
     # Check if production has started (check stages)
     stages = project.get("stages", {})
     production_started = any(

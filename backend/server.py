@@ -27442,9 +27442,10 @@ async def get_revenue_reality_check(request: Request, period: str = "month"):
     active_count = len(active_projects)
     
     # 3. Revenue Realised (Cash In) - Actual receipts from customers in period
-    # From finance_receipts collection
+    # From finance_receipts collection - EXCLUDE CANCELLED RECEIPTS
     receipts_in_period = await db.finance_receipts.find({
-        "created_at": {"$gte": period_start}
+        "created_at": {"$gte": period_start},
+        "status": {"$ne": "cancelled"}
     }, {"_id": 0, "amount": 1}).to_list(1000)
     
     revenue_realised = sum(r.get("amount", 0) or 0 for r in receipts_in_period)
@@ -28630,9 +28631,10 @@ async def get_pnl_snapshot(
         "created_at": {"$gte": start_iso, "$lte": end_iso}
     }, {"_id": 0, "amount": 1}).to_list(10000)
     
-    # Also check finance_receipts
+    # Also check finance_receipts - EXCLUDE CANCELLED RECEIPTS
     receipts = await db.finance_receipts.find({
-        "created_at": {"$gte": start_iso, "$lte": end_iso}
+        "created_at": {"$gte": start_iso, "$lte": end_iso},
+        "status": {"$ne": "cancelled"}
     }, {"_id": 0, "amount": 1}).to_list(10000)
     
     revenue_from_projects = sum(t.get("amount", 0) for t in project_inflows) + sum(r.get("amount", 0) for r in receipts)
@@ -31072,9 +31074,9 @@ async def get_project_profit(project_id: str, request: Request):
     }, {"_id": 0, "amount": 1}).to_list(10000)
     actual_cost = sum(t.get("amount", 0) for t in actual_outflows)
     
-    # Get total received (Sign-off Collected Amount)
+    # Get total received (Sign-off Collected Amount) - EXCLUDE CANCELLED RECEIPTS
     receipts = await db.finance_receipts.find(
-        {"project_id": project_id},
+        {"project_id": project_id, "status": {"$ne": "cancelled"}},
         {"_id": 0, "amount": 1}
     ).to_list(1000)
     receipts_total = sum(r.get("amount", 0) for r in receipts)
@@ -37386,10 +37388,10 @@ async def send_payment_reminder(reminder: PaymentReminderCreate, request: Reques
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Calculate pending amount
+    # Calculate pending amount - EXCLUDE CANCELLED RECEIPTS
     contract_value = float(project.get("contract_value", 0))
     receipts = await db.finance_receipts.find(
-        {"project_id": reminder.project_id, "imported": {"$ne": True}},
+        {"project_id": reminder.project_id, "imported": {"$ne": True}, "status": {"$ne": "cancelled"}},
         {"_id": 0, "amount": 1}
     ).to_list(100)
     total_received = sum(float(r.get("amount", 0)) for r in receipts)
@@ -37467,9 +37469,9 @@ async def get_overdue_payments(request: Request, days_threshold: int = 7):
         if contract_value <= 0:
             continue
         
-        # Get total received
+        # Get total received - EXCLUDE CANCELLED RECEIPTS
         receipts = await db.finance_receipts.find(
-            {"project_id": project_id, "imported": {"$ne": True}},
+            {"project_id": project_id, "imported": {"$ne": True}, "status": {"$ne": "cancelled"}},
             {"_id": 0, "amount": 1}
         ).to_list(100)
         total_received = sum(float(r.get("amount", 0)) for r in receipts)
@@ -41700,10 +41702,11 @@ async def get_project_profitability_report(
         # P2-FIX: Handle None values for contract_value
         contract_value = float(project.get("contract_value") or 0)
         
-        # Get total received (from receipts, exclude imported)
+        # Get total received (from receipts, exclude imported) - EXCLUDE CANCELLED RECEIPTS
         receipts = await db.finance_receipts.find({
             "project_id": project_id,
-            "$or": [{"imported": {"$ne": True}}, {"imported": {"$exists": False}}]
+            "$or": [{"imported": {"$ne": True}}, {"imported": {"$exists": False}}],
+            "status": {"$ne": "cancelled"}
         }, {"_id": 0, "amount": 1}).to_list(100)
         total_received = sum(float(r.get("amount") or 0) for r in receipts)
         

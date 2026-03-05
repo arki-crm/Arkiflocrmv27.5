@@ -102,13 +102,13 @@ export default function GeneralLedger() {
       if (period === 'custom' && customStart && customEnd) {
         url += `&start_date=${customStart}&end_date=${customEnd}`;
       }
-      // Add party filter if selected
-      if (selectedParty) {
+      // Add party filter if selected (not __all__)
+      if (selectedParty && selectedParty !== '__all__') {
         const [partyType, partyId] = selectedParty.split(':');
         url += `&party_id=${partyId}&party_type=${partyType}`;
       }
-      // Add project filter if selected
-      if (selectedProject) {
+      // Add project filter if selected (not __all__)
+      if (selectedProject && selectedProject !== '__all__') {
         url += `&project_id=${selectedProject}`;
       }
       

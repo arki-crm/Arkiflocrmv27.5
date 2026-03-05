@@ -23832,12 +23832,19 @@ async def get_project_finance_detail(project_id: str, request: Request):
     ).to_list(1000)
     total_received_from_receipts = sum(r.get("amount", 0) for r in project_receipts)
     
+    # Check if this project has ANY receipt records (including cancelled)
+    has_any_receipts = await db.finance_receipts.find_one({"project_id": project_id}) is not None
+    
     # Calculate actuals from transactions
     total_inflow_from_txns = sum(t["amount"] for t in transactions if t.get("transaction_type") == "inflow" and not t.get("is_cancelled"))
     total_outflow = sum(t["amount"] for t in transactions if t.get("transaction_type") == "outflow")
     
-    # Use receipts as primary source for total_received, fallback to txns for legacy
-    total_inflow = total_received_from_receipts if total_received_from_receipts > 0 else total_inflow_from_txns
+    # Use receipts as primary source for total_received
+    # Only fall back to txns for legacy projects without ANY receipt records
+    if has_any_receipts:
+        total_inflow = total_received_from_receipts
+    else:
+        total_inflow = total_inflow_from_txns
     
     # Group actual outflows by expense category
     actual_by_category = {}

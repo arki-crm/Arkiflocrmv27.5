@@ -1533,7 +1533,7 @@ Lead Allocated → BC Call Done → BOQ Shared → Site Meeting → Revised BOQ 
 ## Test Credentials
 
 **Local Admin Login:**
-- **URL**: https://fortified-finance.preview.emergentagent.com/login
+- **URL**: https://finance-accounting-3.preview.emergentagent.com/login
 - **Email**: thaha.pakayil@gmail.com
 - **Password**: password123
 - **Access**: Full Admin permissions

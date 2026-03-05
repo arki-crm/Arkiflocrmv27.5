@@ -7,7 +7,7 @@ import requests
 import json
 
 def debug_service_request():
-    base_url = "https://fortified-finance.preview.emergentagent.com"
+    base_url = "https://finance-accounting-3.preview.emergentagent.com"
     
     # Use the admin token from the previous test
     admin_token = "test_admin_session_b8b8b8b8b8b8b8b8"  # This will need to be updated

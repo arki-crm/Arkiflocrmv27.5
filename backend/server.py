@@ -31113,12 +31113,15 @@ async def get_project_profit(project_id: str, request: Request):
     ).to_list(1000)
     receipts_total = sum(r.get("amount", 0) for r in receipts)
     
-    # For backward compatibility with legacy data, also check accounting inflows
-    # but only use if no receipts exist (legacy projects without receipt records)
-    if receipts_total == 0:
+    # Check if this project has ANY receipt records (including cancelled)
+    has_any_receipts = await db.finance_receipts.find_one({"project_id": project_id}) is not None
+    
+    # Only fall back to accounting_transactions for legacy projects without ANY receipt records
+    if not has_any_receipts and receipts_total == 0:
         inflows = await db.accounting_transactions.find({
             "project_id": project_id,
-            "transaction_type": "inflow"
+            "transaction_type": "inflow",
+            "is_cancelled": {"$ne": True}
         }, {"_id": 0, "amount": 1}).to_list(10000)
         inflows_total = sum(t.get("amount", 0) for t in inflows)
         total_received = inflows_total

@@ -28529,6 +28529,10 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
         "project_id": liability.get("project_id"),  # Link to project if liability was project-linked
         "paid_to": liability.get("vendor_name", "Vendor"),
         "vendor_id": liability.get("vendor_id"),
+        # Party metadata for ledger traceability
+        "party_id": liability.get("vendor_id"),
+        "party_type": "vendor",
+        "party_name": liability.get("vendor_name"),
         "remarks": settlement.remarks or f"Settlement for liability: {liability.get('vendor_name')} - {liability.get('description', '')}",
         "attachment_url": None,
         "is_verified": False,

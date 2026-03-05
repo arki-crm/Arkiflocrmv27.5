@@ -30855,14 +30855,11 @@ async def get_ledger_accounts(request: Request):
         
         # ============================================================
         # PARTY FILTERS (for Party dropdown)
-        # These are sub-ledger entities (customers, vendors, employees)
-        # NOT accounts - they are filtered via party_id, not account_id
+        # Only Vendors and Employees - Customers are excluded because
+        # in ArkiFlo each project (PID) represents a customer engagement,
+        # so filtering by Customer duplicates the Project filter
         # ============================================================
         "party_filters": {
-            "customers": [
-                {"id": c.get("customer_id"), "name": c.get("client_name"), "type": "customer"}
-                for c in customers_list
-            ],
             "vendors": [
                 {"id": v.get("vendor_id"), "name": v.get("vendor_name"), "type": "vendor"}
                 for v in vendors_list

@@ -258,16 +258,27 @@ export default function GeneralLedger() {
           <div className="flex flex-wrap items-end gap-4">
             <div className="w-72">
               <Label className="text-sm text-gray-600 mb-1.5 block">
-                Account <span className="text-red-500">*</span>
+                Account
               </Label>
               <Select value={selectedAccount} onValueChange={setSelectedAccount}>
                 <SelectTrigger data-testid="account-select">
                   <SelectValue placeholder="Select an account..." />
                 </SelectTrigger>
                 <SelectContent>
+                  {/* All Accounts Option */}
+                  {allAccountsOption && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50">
+                        📊 Combined View
+                      </div>
+                      <SelectItem key={allAccountsOption.id} value={allAccountsOption.id}>
+                        <span className="font-medium">{allAccountsOption.name}</span>
+                      </SelectItem>
+                    </>
+                  )}
                   {accounts.length > 0 && (
                     <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-gray-50">
+                      <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-gray-50 mt-1">
                         Bank & Cash Accounts
                       </div>
                       {accounts.map(acc => (
@@ -325,6 +336,77 @@ export default function GeneralLedger() {
                       ))}
                     </>
                   )}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Party Filter */}
+            <div className="w-56">
+              <Label className="text-sm text-gray-600 mb-1.5 block">
+                Party (Customer/Vendor)
+              </Label>
+              <Select value={selectedParty} onValueChange={setSelectedParty}>
+                <SelectTrigger data-testid="party-select">
+                  <SelectValue placeholder="All Parties" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All Parties</SelectItem>
+                  {partyFilters.customers?.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 mt-1">
+                        Customers
+                      </div>
+                      {partyFilters.customers.map(c => (
+                        <SelectItem key={c.id} value={`customer:${c.id}`}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  {partyFilters.vendors?.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-orange-600 bg-orange-50 mt-1">
+                        Vendors
+                      </div>
+                      {partyFilters.vendors.map(v => (
+                        <SelectItem key={v.id} value={`vendor:${v.id}`}>
+                          {v.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  {partyFilters.employees?.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-purple-600 bg-purple-50 mt-1">
+                        Employees
+                      </div>
+                      {partyFilters.employees.map(e => (
+                        <SelectItem key={e.id} value={`employee:${e.id}`}>
+                          {e.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Project Filter */}
+            <div className="w-56">
+              <Label className="text-sm text-gray-600 mb-1.5 block">
+                Project
+              </Label>
+              <Select value={selectedProject} onValueChange={setSelectedProject}>
+                <SelectTrigger data-testid="project-select">
+                  <SelectValue placeholder="All Projects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All Projects</SelectItem>
+                  {partyFilters.projects?.map(p => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

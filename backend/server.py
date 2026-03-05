@@ -24025,8 +24025,13 @@ async def update_vendor_mapping(mapping_id: str, update: VendorMappingUpdate, re
     
     project_id = existing.get("project_id")
     
-    # Check if spending has started
-    spending_started = await db.accounting_transactions.find_one({"project_id": project_id}) is not None
+    # Check if spending has started (using operational tables, not accounting_transactions)
+    has_purchase_invoices = await db.execution_ledger.find_one({"project_id": project_id}) is not None
+    has_expense_requests = await db.finance_expense_requests.find_one({
+        "project_id": project_id, 
+        "status": {"$in": ["approved", "recorded"]}
+    }) is not None
+    spending_started = has_purchase_invoices or has_expense_requests
     if spending_started:
         raise HTTPException(status_code=400, detail="Cannot edit vendor mapping - spending has already started for this project")
     

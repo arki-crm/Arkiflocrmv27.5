@@ -9,40 +9,44 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Finance Summary Cancelled Receipt Exclusion COMPLETE ✅
+## Current Status: Finance Summary Aggregation Fix COMPLETE ✅
 **As of March 5, 2026**
 
-### Finance Summary Fix - Exclude Cancelled Receipts from Totals
+### Finance Summary Widget - Query-Based Calculation (Not Event-Based)
 
-Fixed all financial summary calculations to exclude cancelled receipts from totals.
+Fixed the root cause where Finance Summary was using event-based incrementing via `accounting_transactions` instead of query-based calculation from `finance_receipts`.
 
-| # | Endpoint/Function | Issue Fixed | Status |
-|---|-------------------|-------------|--------|
-| 1 | CEO Overview Dashboard | `receipts_in_period` included cancelled | ✅ |
-| 2 | P&L Report | `receipts` sum included cancelled | ✅ |
-| 3 | `get_project_profit` | `total_received` used max(receipts, inflows) | ✅ |
-| 4 | Payment Reminder | `receipts` for pending calculation | ✅ |
-| 5 | Overdue Payment List | `receipts` for pending amount | ✅ |
-| 6 | Profitability Report | `receipts` sum for total_received | ✅ |
+| # | Endpoint | Issue | Fix Applied | Status |
+|---|----------|-------|-------------|--------|
+| 1 | `/finance/project-finance` | Used `accounting_transactions` inflows | Now uses `finance_receipts` with `status != cancelled` | ✅ |
+| 2 | `/finance/project-finance/{id}` | `total_inflow` from transactions | Now uses `finance_receipts` as primary source | ✅ |
+| 3 | `/finance/project-profit/{id}` | Fallback to inflows if receipts=0 | Only fallback if NO receipt records exist | ✅ |
 
-**Rule Applied:**
+**Root Cause:**
+- Summary was calculating `total_received` from `accounting_transactions.inflow` 
+- When receipt cancelled, reverse entry created but original inflow still counted
+- Fallback logic activated when active receipts = 0 (even if cancelled receipts existed)
+
+**Fix Applied:**
 ```python
-# All receipt queries now include:
-{"status": {"$ne": "cancelled"}}
+# Check if project has ANY receipt records (including cancelled)
+has_any_receipts = await db.finance_receipts.find_one({"project_id": project_id})
+
+# Only fall back to transactions for legacy projects without ANY receipts
+if has_any_receipts:
+    total_received = sum(active_receipts)  # From finance_receipts
+else:
+    total_received = sum(inflows)  # Legacy fallback
 ```
 
-**Key Changes:**
-- `get_project_profit`: Now uses receipts as primary source of truth, falls back to accounting_transactions only for legacy projects without receipts
-- All dashboard summaries exclude cancelled receipts
-- Cancelled receipts remain visible in history but don't affect financial totals
-
 **Verification:**
-- Project with ₹35,000 total receipts (₹32,500 active + ₹2,500 cancelled) → `total_received = ₹32,500` ✅
-- Project with all receipts cancelled → `total_received = ₹0` ✅
+- Project with all receipts cancelled (₹204,000 total) → `total_received = ₹0` ✅
+- Project with 6 active (₹32,500) + 1 cancelled (₹2,500) → `total_received = ₹32,500` ✅
+- All endpoints consistent: `/project-finance`, `/project-profit`, `/payment-schedule` ✅
 
 ---
 
-### Receipt Management UI (Safe Cancellation & Deletion)
+### Previous: Finance Summary Cancelled Receipt Exclusion
 
 Implemented a full Receipt Management UI with safe cancellation workflow that ensures accounting integrity.
 

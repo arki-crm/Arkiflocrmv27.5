@@ -31075,19 +31075,24 @@ async def get_project_profit(project_id: str, request: Request):
     actual_cost = sum(t.get("amount", 0) for t in actual_outflows)
     
     # Get total received (Sign-off Collected Amount) - EXCLUDE CANCELLED RECEIPTS
+    # Use receipts as primary source of truth for customer payments
     receipts = await db.finance_receipts.find(
         {"project_id": project_id, "status": {"$ne": "cancelled"}},
         {"_id": 0, "amount": 1}
     ).to_list(1000)
     receipts_total = sum(r.get("amount", 0) for r in receipts)
     
-    inflows = await db.accounting_transactions.find({
-        "project_id": project_id,
-        "transaction_type": "inflow"
-    }, {"_id": 0, "amount": 1}).to_list(10000)
-    inflows_total = sum(t.get("amount", 0) for t in inflows)
-    
-    total_received = max(receipts_total, inflows_total)  # Avoid double-counting
+    # For backward compatibility with legacy data, also check accounting inflows
+    # but only use if no receipts exist (legacy projects without receipt records)
+    if receipts_total == 0:
+        inflows = await db.accounting_transactions.find({
+            "project_id": project_id,
+            "transaction_type": "inflow"
+        }, {"_id": 0, "amount": 1}).to_list(10000)
+        inflows_total = sum(t.get("amount", 0) for t in inflows)
+        total_received = inflows_total
+    else:
+        total_received = receipts_total
     
     # Calculate profits based on Sign-off Locked BOQ Value (NO FALLBACKS)
     # Projected Profit = Sign-off Locked Value – Planned Cost

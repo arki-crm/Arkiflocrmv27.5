@@ -30296,6 +30296,9 @@ async def get_general_ledger(
             "narration": txn.get("remarks") or txn.get("description", ""),
             "category": txn.get("category_id"),
             "project_id": txn.get("project_id"),
+            "party_id": txn.get("party_id"),
+            "party_type": txn.get("party_type"),
+            "party_name": txn.get("party_name"),
             "debit": debit,
             "credit": credit,
             "running_balance": running_balance

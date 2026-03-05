@@ -64,6 +64,15 @@ export default function GeneralLedger() {
     }).format(val);
   };
 
+  // Create project lookup map for displaying PID + name in ledger table
+  const projectLookup = useMemo(() => {
+    const map = {};
+    partyFilters.projects?.forEach(p => {
+      map[p.id] = p.name; // Format: "PID0064 – Ayisha Sharda"
+    });
+    return map;
+  }, [partyFilters.projects]);
+
   // Fetch available accounts for dropdown
   const fetchAccounts = useCallback(async () => {
     try {

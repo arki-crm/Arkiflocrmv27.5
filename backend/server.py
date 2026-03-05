@@ -40232,14 +40232,14 @@ async def update_sales_return_refund(
             
             # Create double-entry pair for sales return refund (after cutoff date)
             if is_double_entry_required(refund_date):
-                await create_double_entry_pair(
-                    db=db,
-                    primary_txn=cashbook_entry,
-                    category_id="sales_return",
-                    counter_account_type="customer_refund",
-                    user_id=user.user_id,
-                    user_name=user_doc.get("name", "Unknown")
-                )
+                counter_account = COUNTER_ACCOUNT_MAP.get("customer_refund", DEFAULT_EXPENSE_ACCOUNT)
+                if counter_account:
+                    await create_double_entry_pair(
+                        primary_txn=cashbook_entry,
+                        counter_account_info=counter_account,
+                        user_id=user.user_id,
+                        user_name=user_doc.get("name", "Unknown")
+                    )
             
             # Update account balance
             await db.accounting_accounts.update_one(

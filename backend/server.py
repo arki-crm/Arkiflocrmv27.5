@@ -23820,9 +23820,20 @@ async def get_project_finance_detail(project_id: str, request: Request):
         t["account_name"] = accounts.get(t.get("account_id"), {}).get("account_name", "Unknown")
         enriched_txns.append(t)
     
-    # Calculate actuals
-    total_inflow = sum(t["amount"] for t in transactions if t.get("transaction_type") == "inflow")
+    # Calculate total_received from receipts (PRIMARY SOURCE - excludes cancelled)
+    # This is the authoritative source for customer payments
+    project_receipts = await db.finance_receipts.find(
+        {"project_id": project_id, "status": {"$ne": "cancelled"}},
+        {"_id": 0, "amount": 1}
+    ).to_list(1000)
+    total_received_from_receipts = sum(r.get("amount", 0) for r in project_receipts)
+    
+    # Calculate actuals from transactions
+    total_inflow_from_txns = sum(t["amount"] for t in transactions if t.get("transaction_type") == "inflow" and not t.get("is_cancelled"))
     total_outflow = sum(t["amount"] for t in transactions if t.get("transaction_type") == "outflow")
+    
+    # Use receipts as primary source for total_received, fallback to txns for legacy
+    total_inflow = total_received_from_receipts if total_received_from_receipts > 0 else total_inflow_from_txns
     
     # Group actual outflows by expense category
     actual_by_category = {}

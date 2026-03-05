@@ -29084,11 +29084,32 @@ async def get_trial_balance(
             }
         
         amount = entry.get("amount", 0)
-        # inflow = credit increase, outflow = debit increase
-        if entry.get("transaction_type") == "inflow":
-            system_account_balances[acc_id]["credit"] += amount
+        acc_type = system_account_balances[acc_id]["account_type"]
+        txn_type = entry.get("transaction_type")
+        
+        # Interpret transaction_type based on account type
+        # Counter entry with opposite txn_type should INCREASE the counter account
+        # 
+        # For Liabilities/Income (normal credit balance):
+        #   - outflow (counter to bank inflow) = Credit (increases)
+        #   - inflow (counter to bank outflow) = Debit (decreases)
+        # 
+        # For Expenses/Assets (normal debit balance):
+        #   - inflow (counter to bank outflow) = Debit (increases)
+        #   - outflow (counter to bank inflow) = Credit (decreases)
+        
+        if acc_type in ["liability", "income"]:
+            # For liabilities/income: outflow = Credit increase, inflow = Debit decrease
+            if txn_type == "outflow":
+                system_account_balances[acc_id]["credit"] += amount
+            else:
+                system_account_balances[acc_id]["debit"] += amount
         else:
-            system_account_balances[acc_id]["debit"] += amount
+            # For expenses/assets: inflow = Debit increase, outflow = Credit decrease
+            if txn_type == "inflow":
+                system_account_balances[acc_id]["debit"] += amount
+            else:
+                system_account_balances[acc_id]["credit"] += amount
     
     # Add system accounts to appropriate groups
     for acc_id, bal in system_account_balances.items():

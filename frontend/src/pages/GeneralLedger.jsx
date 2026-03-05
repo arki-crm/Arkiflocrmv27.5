@@ -592,7 +592,7 @@ export default function GeneralLedger() {
                   
                   {/* Totals/Closing Row */}
                   <TableRow className="bg-gray-100 font-bold border-t-2">
-                    <TableCell colSpan={4} className="text-right">TOTALS / CLOSING</TableCell>
+                    <TableCell colSpan={5} className="text-right">TOTALS / CLOSING</TableCell>
                     <TableCell className="text-right font-mono text-red-700">
                       {formatCurrency(ledgerData.summary.total_debit)}
                     </TableCell>

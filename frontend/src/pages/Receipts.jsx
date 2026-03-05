@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
+import { Textarea } from '../components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -21,6 +22,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../components/ui/alert-dialog';
 import { 
   Loader2, 
   Plus,
@@ -28,7 +39,13 @@ import {
   Search,
   Download,
   Eye,
-  Ban
+  Ban,
+  Pencil,
+  Trash2,
+  BookOpen,
+  AlertTriangle,
+  XCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -49,6 +66,14 @@ const formatDate = (dateStr) => {
   return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleString('en-IN', { 
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+};
+
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
   { value: 'bank_transfer', label: 'Bank Transfer' },
@@ -59,15 +84,27 @@ const PAYMENT_MODES = [
 ];
 
 const Receipts = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [projects, setProjects] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [viewReceipt, setViewReceipt] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Cancel receipt state
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [receiptToCancel, setReceiptToCancel] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  
+  // Delete receipt state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [receiptToDelete, setReceiptToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   
   const [newReceipt, setNewReceipt] = useState({
     project_id: '',
@@ -76,8 +113,11 @@ const Receipts = () => {
     account_id: '',
     stage_name: '',
     notes: '',
-    payment_date: new Date().toISOString().split('T')[0]  // Default to today, editable
+    payment_date: new Date().toISOString().split('T')[0]
   });
+
+  // Check if user is Founder or Admin
+  const isFounderOrAdmin = user?.role === 'Founder' || user?.role === 'Admin';
 
   const fetchData = async () => {
     try {
@@ -117,7 +157,7 @@ const Receipts = () => {
         account_id: newReceipt.account_id,
         stage_name: newReceipt.stage_name || null,
         notes: newReceipt.notes || null,
-        payment_date: newReceipt.payment_date  // Custom receipt date
+        payment_date: newReceipt.payment_date
       }, { withCredentials: true });
       
       toast.success(`Receipt ${res.data.receipt_number} created`);
@@ -148,7 +188,6 @@ const Receipts = () => {
         responseType: 'blob'
       });
       
-      // Create download link
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;
@@ -165,13 +204,119 @@ const Receipts = () => {
     }
   };
 
-  const filteredReceipts = receipts.filter(r => 
-    !search || 
-    r.receipt_number?.toLowerCase().includes(search.toLowerCase()) ||
-    r.pid?.toLowerCase().includes(search.toLowerCase()) ||
-    r.project_name?.toLowerCase().includes(search.toLowerCase()) ||
-    r.client_name?.toLowerCase().includes(search.toLowerCase())
-  );
+  // Open cancel confirmation dialog
+  const openCancelDialog = (receipt) => {
+    setReceiptToCancel(receipt);
+    setCancelReason('');
+    setCancelDialogOpen(true);
+  };
+
+  // Handle receipt cancellation
+  const handleCancelReceipt = async () => {
+    if (!receiptToCancel) return;
+    
+    if (!cancelReason.trim()) {
+      toast.error('Please provide a cancellation reason');
+      return;
+    }
+
+    try {
+      setCancelling(true);
+      const res = await axios.post(
+        `${API}/finance/receipts/${receiptToCancel.receipt_id}/cancel`,
+        { reason: cancelReason },
+        { withCredentials: true }
+      );
+      
+      toast.success(res.data.message || 'Receipt cancelled successfully');
+      setCancelDialogOpen(false);
+      setReceiptToCancel(null);
+      setCancelReason('');
+      
+      // Close view dialog if open
+      if (viewReceipt?.receipt_id === receiptToCancel.receipt_id) {
+        setViewReceipt(null);
+      }
+      
+      // Refresh data to update project financials
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to cancel receipt');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  // Open delete confirmation dialog
+  const openDeleteDialog = (receipt) => {
+    setReceiptToDelete(receipt);
+    setDeleteDialogOpen(true);
+  };
+
+  // Handle receipt deletion (Founder/Admin only)
+  const handleDeleteReceipt = async () => {
+    if (!receiptToDelete) return;
+
+    try {
+      setDeleting(true);
+      await axios.delete(
+        `${API}/finance/receipts/${receiptToDelete.receipt_id}`,
+        { withCredentials: true }
+      );
+      
+      toast.success('Receipt deleted successfully');
+      setDeleteDialogOpen(false);
+      setReceiptToDelete(null);
+      
+      if (viewReceipt?.receipt_id === receiptToDelete.receipt_id) {
+        setViewReceipt(null);
+      }
+      
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete receipt');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Navigate to General Ledger for the receipt's account
+  const handleViewLedger = (receipt) => {
+    // Open ledger in new tab or navigate
+    window.open(`/finance/general-ledger?account_id=${receipt.account_id}`, '_blank');
+  };
+
+  const filteredReceipts = receipts.filter(r => {
+    const matchesSearch = !search || 
+      r.receipt_number?.toLowerCase().includes(search.toLowerCase()) ||
+      r.pid?.toLowerCase().includes(search.toLowerCase()) ||
+      r.project_name?.toLowerCase().includes(search.toLowerCase()) ||
+      r.client_name?.toLowerCase().includes(search.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'all' || 
+      (statusFilter === 'active' && r.status !== 'cancelled') ||
+      (statusFilter === 'cancelled' && r.status === 'cancelled');
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  // Get status badge
+  const getStatusBadge = (status) => {
+    if (status === 'cancelled') {
+      return (
+        <Badge variant="destructive" className="text-xs">
+          <XCircle className="w-3 h-3 mr-1" />
+          CANCELLED
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="text-xs text-green-600 border-green-200 bg-green-50">
+        <CheckCircle2 className="w-3 h-3 mr-1" />
+        ACTIVE
+      </Badge>
+    );
+  };
 
   if (!hasPermission('finance.view_receipts')) {
     return (
@@ -199,15 +344,27 @@ const Receipts = () => {
         )}
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <Input
-          placeholder="Search by receipt number, PID, project..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10"
-        />
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            placeholder="Search by receipt number, PID, project..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Receipts List */}
@@ -232,42 +389,75 @@ const Receipts = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Project</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Customer</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Amount</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Mode</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Account</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {filteredReceipts.map((receipt) => (
-                    <tr key={receipt.receipt_id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-sm text-blue-600">{receipt.receipt_number}</span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{formatDate(receipt.payment_date)}</td>
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{receipt.pid}</span>
-                        <p className="text-sm text-slate-700 mt-0.5">{receipt.project_name}</p>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{receipt.client_name}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="font-semibold text-green-600">{formatCurrency(receipt.amount)}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant="outline" className="text-xs capitalize">{receipt.payment_mode?.replace('_', ' ')}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{receipt.account_name}</td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => handleViewReceipt(receipt.receipt_id)} data-testid={`view-receipt-${receipt.receipt_id}`}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDownloadPDF(receipt.receipt_id, receipt.receipt_number)} data-testid={`download-receipt-${receipt.receipt_id}`}>
-                            <Download className="w-4 h-4 text-blue-600" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredReceipts.map((receipt) => {
+                    const isCancelled = receipt.status === 'cancelled';
+                    return (
+                      <tr key={receipt.receipt_id} className={cn("hover:bg-slate-50", isCancelled && "bg-red-50/30")}>
+                        <td className="px-4 py-3">
+                          <span className={cn("font-mono text-sm", isCancelled ? "text-slate-400 line-through" : "text-blue-600")}>
+                            {receipt.receipt_number}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{formatDate(receipt.payment_date)}</td>
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{receipt.pid}</span>
+                          <p className="text-sm text-slate-700 mt-0.5">{receipt.project_name}</p>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{receipt.client_name}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={cn("font-semibold", isCancelled ? "text-slate-400 line-through" : "text-green-600")}>
+                            {formatCurrency(receipt.amount)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {getStatusBadge(receipt.status)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant="outline" className="text-xs capitalize">{receipt.payment_mode?.replace('_', ' ')}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleViewReceipt(receipt.receipt_id)} 
+                              data-testid={`view-receipt-${receipt.receipt_id}`}
+                              title="View Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleDownloadPDF(receipt.receipt_id, receipt.receipt_number)} 
+                              data-testid={`download-receipt-${receipt.receipt_id}`}
+                              title="Download PDF"
+                            >
+                              <Download className="w-4 h-4 text-blue-600" />
+                            </Button>
+                            {!isCancelled && hasPermission('finance.issue_refund') && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => openCancelDialog(receipt)}
+                                data-testid={`cancel-receipt-${receipt.receipt_id}`}
+                                title="Cancel Receipt"
+                                className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                              >
+                                <Ban className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -382,18 +572,56 @@ const Receipts = () => {
 
       {/* View Receipt Dialog */}
       <Dialog open={!!viewReceipt} onOpenChange={(open) => !open && setViewReceipt(null)}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Receipt className="w-5 h-5 text-green-600" />
               Receipt {viewReceipt?.receipt_number}
+              {viewReceipt && (
+                <span className="ml-2">
+                  {getStatusBadge(viewReceipt.status)}
+                </span>
+              )}
             </DialogTitle>
           </DialogHeader>
           {viewReceipt && (
             <div className="space-y-4 py-4">
-              <div className="p-4 bg-green-50 rounded-lg text-center">
-                <p className="text-3xl font-bold text-green-600">{formatCurrency(viewReceipt.amount)}</p>
-                <p className="text-sm text-green-700 mt-1">Payment Received</p>
+              {/* Cancelled Banner */}
+              {viewReceipt.status === 'cancelled' && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <XCircle className="w-5 h-5 text-red-500 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-medium text-red-700">This receipt has been cancelled</p>
+                      <p className="text-sm text-red-600 mt-1">
+                        Cancelled by {viewReceipt.cancelled_by_name} on {formatDateTime(viewReceipt.cancelled_at)}
+                      </p>
+                      {viewReceipt.cancellation_reason && (
+                        <p className="text-sm text-red-600 mt-1">
+                          Reason: {viewReceipt.cancellation_reason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className={cn(
+                "p-4 rounded-lg text-center",
+                viewReceipt.status === 'cancelled' ? "bg-slate-100" : "bg-green-50"
+              )}>
+                <p className={cn(
+                  "text-3xl font-bold",
+                  viewReceipt.status === 'cancelled' ? "text-slate-400 line-through" : "text-green-600"
+                )}>
+                  {formatCurrency(viewReceipt.amount)}
+                </p>
+                <p className={cn(
+                  "text-sm mt-1",
+                  viewReceipt.status === 'cancelled' ? "text-slate-500" : "text-green-700"
+                )}>
+                  {viewReceipt.status === 'cancelled' ? 'Payment Cancelled' : 'Payment Received'}
+                </p>
               </div>
               
               <div className="grid grid-cols-2 gap-4 text-sm">
@@ -444,10 +672,52 @@ const Receipts = () => {
               )}
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setViewReceipt(null)}>Close</Button>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {/* Actions based on receipt status */}
+            {viewReceipt && viewReceipt.status !== 'cancelled' && (
+              <>
+                {hasPermission('finance.issue_refund') && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setViewReceipt(null);
+                      openCancelDialog(viewReceipt);
+                    }}
+                    className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                    data-testid="cancel-receipt-btn"
+                  >
+                    <Ban className="w-4 h-4 mr-2" />
+                    Cancel Receipt
+                  </Button>
+                )}
+                {isFounderOrAdmin && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setViewReceipt(null);
+                      openDeleteDialog(viewReceipt);
+                    }}
+                    className="text-red-600 border-red-200 hover:bg-red-50"
+                    data-testid="delete-receipt-btn"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </Button>
+                )}
+              </>
+            )}
+            
             <Button 
-              onClick={() => handleDownloadPDF(viewReceipt.receipt_id, viewReceipt.receipt_number)}
+              variant="outline"
+              onClick={() => viewReceipt && handleViewLedger(viewReceipt)}
+              data-testid="view-ledger-btn"
+            >
+              <BookOpen className="w-4 h-4 mr-2" />
+              View Ledger
+            </Button>
+            
+            <Button 
+              onClick={() => viewReceipt && handleDownloadPDF(viewReceipt.receipt_id, viewReceipt.receipt_number)}
               className="bg-blue-600 hover:bg-blue-700"
               data-testid="download-pdf-btn"
             >
@@ -457,6 +727,94 @@ const Receipts = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Cancel Receipt Confirmation Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-orange-500" />
+              Cancel Receipt?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p>
+                  You are about to cancel receipt <strong>{receiptToCancel?.receipt_number}</strong> for{' '}
+                  <strong>{formatCurrency(receiptToCancel?.amount)}</strong>.
+                </p>
+                <div className="bg-orange-50 p-3 rounded-lg text-sm text-orange-800">
+                  <p className="font-medium mb-1">This action will:</p>
+                  <ul className="list-disc ml-4 space-y-1">
+                    <li>Create reverse accounting entries</li>
+                    <li>Reduce project advance received amount</li>
+                    <li>Mark receipt as CANCELLED</li>
+                  </ul>
+                </div>
+                <div>
+                  <Label htmlFor="cancel-reason">Cancellation Reason *</Label>
+                  <Textarea
+                    id="cancel-reason"
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    placeholder="Enter reason for cancellation..."
+                    className="mt-2"
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelling}>Keep Receipt</AlertDialogCancel>
+            <Button
+              onClick={handleCancelReceipt}
+              disabled={cancelling || !cancelReason.trim()}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {cancelling && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Cancel Receipt
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Receipt Confirmation Dialog (Founder/Admin only) */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="w-5 h-5" />
+              Delete Receipt Permanently?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p>
+                  You are about to permanently delete receipt <strong>{receiptToDelete?.receipt_number}</strong>.
+                </p>
+                <div className="bg-red-50 p-3 rounded-lg text-sm text-red-800">
+                  <p className="font-medium mb-1">Warning:</p>
+                  <ul className="list-disc ml-4 space-y-1">
+                    <li>This action cannot be undone</li>
+                    <li>Only delete if receipt was never posted to accounting</li>
+                    <li>Use "Cancel Receipt" instead for posted receipts</li>
+                  </ul>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Keep Receipt</AlertDialogCancel>
+            <Button
+              onClick={handleDeleteReceipt}
+              disabled={deleting}
+              variant="destructive"
+            >
+              {deleting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Delete Permanently
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

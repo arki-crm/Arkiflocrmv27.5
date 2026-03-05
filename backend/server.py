@@ -29118,8 +29118,10 @@ async def get_trial_balance(
     
     # ===== INCOME =====
     # Project Revenue (inflows linked to projects)
+    # Skip double-entry primaries - revenue is handled via counter entries
     project_income = sum(t.get("amount", 0) for t in transactions 
-                        if t.get("project_id") and t.get("transaction_type") == "inflow")
+                        if t.get("project_id") and t.get("transaction_type") == "inflow"
+                        and not (t.get("is_double_entry") and t.get("entry_role") == "primary"))
     
     if project_income > 0:
         trial_balance["income"].append({
@@ -29133,9 +29135,11 @@ async def get_trial_balance(
     
     # Other Income (inflows not linked to projects)
     # Exclude: internal transfers, customer payments (handled via Customer Advance liability)
+    # Skip double-entry primaries
     other_income = sum(t.get("amount", 0) for t in transactions 
                       if not t.get("project_id") and t.get("transaction_type") == "inflow"
-                      and t.get("category_id") not in ["internal_transfer", "customer_payment"])
+                      and t.get("category_id") not in ["internal_transfer", "customer_payment"]
+                      and not (t.get("is_double_entry") and t.get("entry_role") == "primary"))
     
     if other_income > 0:
         trial_balance["income"].append({

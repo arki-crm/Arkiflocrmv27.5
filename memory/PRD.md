@@ -9,8 +9,36 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: General Ledger Corrective Tasks COMPLETE ✅
+## Current Status: General Ledger Filter Architecture FIXED ✅
 **As of March 5, 2026**
+
+### 0️⃣ General Ledger Party Filter Fix ✅
+
+Fixed the `/api/finance/general-ledger/accounts` endpoint which was returning empty lists for customers, vendors, and employees due to incorrect collection names and field mappings.
+
+**Root Cause:** Backend was querying non-existent collections (`customers`, `team_members`) with wrong field names (`vendor_name` instead of `name`).
+
+**Fix Applied:**
+| Party Type | Source Collections | Field Mappings |
+|------------|-------------------|----------------|
+| **Customers** | `projects.client_name` + `accounting_transactions` (party_type='customer') | Merge unique names |
+| **Vendors** | `finance_vendors.name` + `accounting_transactions` (party_type='vendor') | Merge by vendor_id |
+| **Employees** | `users` (with employee roles) + `accounting_transactions` (party_type='employee') | Merge by user_id |
+
+**Results:**
+| Entity | Count |
+|--------|-------|
+| Customers | 26 |
+| Vendors | 19 |
+| Employees | 53 |
+| Projects | 28 |
+
+**Testing (iteration_79.json):** 100% pass rate - 17/17 tests passed (11 backend + 6 frontend)
+
+**Files Modified:**
+- `/app/backend/server.py` - Lines 30731-30847 (party data queries)
+
+---
 
 ### 1️⃣ Historical Data Backfill ✅
 

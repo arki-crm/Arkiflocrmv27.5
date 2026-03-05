@@ -28576,14 +28576,14 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
     
     # Create double-entry pair for liability settlement (after cutoff date)
     if is_double_entry_required(settlement.payment_date):
-        await create_double_entry_pair(
-            db=db,
-            primary_txn=cashbook_txn,
-            category_id="vendor_payment",
-            counter_account_type="accounts_payable",
-            user_id=user.user_id,
-            user_name=user.name
-        )
+        counter_account = COUNTER_ACCOUNT_MAP.get("accounts_payable", DEFAULT_EXPENSE_ACCOUNT)
+        if counter_account:
+            await create_double_entry_pair(
+                primary_txn=cashbook_txn,
+                counter_account_info=counter_account,
+                user_id=user.user_id,
+                user_name=user.name
+            )
     
     # Update account balance (reduce by outflow amount)
     await db.accounting_accounts.update_one(

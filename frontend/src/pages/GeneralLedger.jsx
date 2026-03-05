@@ -558,6 +558,9 @@ export default function GeneralLedger() {
                     <TableRow key={entry.transaction_id || idx} className="hover:bg-gray-50">
                       <TableCell className="text-sm">{entry.date}</TableCell>
                       <TableCell className="font-mono text-xs">{entry.reference}</TableCell>
+                      <TableCell className="text-sm text-gray-700" title={projectLookup[entry.project_id] || ''}>
+                        {entry.project_id ? (projectLookup[entry.project_id] || entry.project_id) : '—'}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">
                           {entry.source_module}

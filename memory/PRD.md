@@ -35,24 +35,31 @@ Refactored Financial Summary to use strict operational source tables instead of 
 | 2 | `GET /finance/project-finance/{id}` | Uses `execution_ledger` + `finance_expense_requests` for costs |
 | 3 | Vendor mapping CRUD | `spending_started` now checks operational tables |
 
+**Bug Fix (White Screen):**
+- Added `transactions` array back to API response (required by frontend)
+- Transactions now built from operational tables (receipts, invoices, expenses)
+
 **Response Structure:**
 ```json
 {
   "summary": {
-    "total_received": 32500,     // From finance_receipts
-    "actual_cost": 7500,         // From execution_ledger + expenses
-    "purchase_invoice_total": 7500,  // Breakdown
-    "expense_total": 0,              // Breakdown
-    "planned_cost": 50000,
-    "remaining_liability": 42500,    // planned - actual
-    "safe_surplus": 25000            // received - actual
-  }
+    "total_received": 32500,
+    "actual_cost": 0,
+    "purchase_invoice_total": 0,
+    "expense_total": 0,
+    "planned_cost": 0,
+    "remaining_liability": 0,
+    "safe_surplus": 32500
+  },
+  "transactions": [...],  // Built from operational tables
+  "vendor_mappings": [...],
+  "comparison": [...]
 }
 ```
 
 **Verification:**
 - Receipt list total matches Finance Summary `total_received` ✅
-- Purchase invoices match `actual_cost` ✅
+- Project Finance Detail page loads correctly ✅
 - Cancelled receipts excluded from totals ✅
 
 ---

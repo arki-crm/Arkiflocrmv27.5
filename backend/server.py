@@ -29103,10 +29103,10 @@ async def get_trial_balance(
     
     # ===== INCOME =====
     # Project Revenue (inflows linked to projects)
-    # Skip double-entry primaries - revenue is handled via counter entries
+    # Only count legacy entries (non-double-entry) - new entries are in system accounts
     project_income = sum(t.get("amount", 0) for t in transactions 
                         if t.get("project_id") and t.get("transaction_type") == "inflow"
-                        and not (t.get("is_double_entry") and t.get("entry_role") == "primary"))
+                        and not t.get("is_double_entry"))
     
     if project_income > 0:
         trial_balance["income"].append({
@@ -29119,12 +29119,12 @@ async def get_trial_balance(
         total_credit += project_income
     
     # Other Income (inflows not linked to projects)
-    # Exclude: internal transfers, customer payments (handled via Customer Advance liability)
-    # Skip double-entry primaries
+    # Only count legacy entries (non-double-entry)
+    # Exclude: internal transfers, customer payments
     other_income = sum(t.get("amount", 0) for t in transactions 
                       if not t.get("project_id") and t.get("transaction_type") == "inflow"
                       and t.get("category_id") not in ["internal_transfer", "customer_payment"]
-                      and not (t.get("is_double_entry") and t.get("entry_role") == "primary"))
+                      and not t.get("is_double_entry"))
     
     if other_income > 0:
         trial_balance["income"].append({
@@ -29138,12 +29138,12 @@ async def get_trial_balance(
     
     # ===== EXPENSES =====
     # Group expenses by category
-    # Only count expenses from counter entries (double-entry) OR primary entries without double-entry
+    # Only count legacy entries (non-double-entry) - new entries are in system accounts
     expense_by_category = {}
     for txn in transactions:
         if txn.get("transaction_type") == "outflow" and txn.get("category_id") != "internal_transfer":
-            # Skip if this is a double-entry primary (expense is already in counter entry)
-            if txn.get("is_double_entry") and txn.get("entry_role") == "primary":
+            # Skip double-entry transactions (handled in system accounts section)
+            if txn.get("is_double_entry"):
                 continue
                 
             cat_id = txn.get("category_id", "uncategorized")

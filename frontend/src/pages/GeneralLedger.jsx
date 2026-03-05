@@ -329,18 +329,6 @@ export default function GeneralLedger() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">All Parties</SelectItem>
-                  {partyFilters.customers?.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 mt-1">
-                        Customers
-                      </div>
-                      {partyFilters.customers.map(c => (
-                        <SelectItem key={c.id} value={`customer:${c.id}`}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
                   {partyFilters.vendors?.length > 0 && (
                     <>
                       <div className="px-2 py-1.5 text-xs font-semibold text-orange-600 bg-orange-50 mt-1">

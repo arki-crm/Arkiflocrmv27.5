@@ -324,26 +324,36 @@ The **Project Filter** is useful because:
 
 ## 7. ACTION ITEMS
 
-### High Priority
-1. **Add party metadata to Vendor Payment (Liability Settlement)**
+### High Priority - ✅ COMPLETED
+1. **Add party metadata to Vendor Payment (Liability Settlement)** ✅
    - Set `party_id = vendor_id`
    - Set `party_type = "vendor"`
    - Set `party_name = vendor_name`
 
-2. **Add party metadata to Salary Payments**
-   - Set `party_id = user_id`
+2. **Add party metadata to Salary Payments** ✅
+   - Set `party_id = employee_id`
    - Set `party_type = "employee"`
-   - Set `party_name = user_name`
+   - Set `party_name = employee_name`
 
-3. **Add party metadata to Purchase Invoice entries**
+3. **Add party metadata to Purchase Invoice entries** ✅
    - Set `party_id = vendor_id`
    - Set `party_type = "vendor"`
    - Set `party_name = vendor_name`
 
-### Medium Priority
-4. **Add party metadata to Stipend Payments**
-5. **Add party metadata to Incentive/Commission Payments**
-6. **Create backfill script for historical transactions**
+4. **Add party metadata to Stipend Payments** ✅
+   - Set `party_id = employee_id`
+   - Set `party_type = "employee"`
+   - Set `party_name = trainee_name`
+
+5. **Add party metadata to Incentive Payments** ✅
+   - Set `party_id = employee_id`
+   - Set `party_type = "employee"`
+   - Set `party_name = employee_name`
+
+6. **Add party metadata to Commission Payments** ✅
+   - Set `party_id = recipient_id`
+   - Set `party_type = recipient_type (vendor/employee)`
+   - Set `party_name = recipient_name`
 
 ### Low Priority
 7. **Consider adding double-entry to Liability Settlement**

@@ -224,9 +224,23 @@ async def create_double_entry_pair(
     Create the counter-entry for double-entry accounting.
     Returns the counter transaction ID.
     
-    Rules:
-    - Primary outflow (bank credit) -> Counter is debit (expense/asset increase)
-    - Primary inflow (bank debit) -> Counter is credit (income/liability increase)
+    Accounting Rules:
+    - Asset/Expense accounts: Debit increases, Credit decreases
+    - Liability/Income/Equity accounts: Credit increases, Debit decreases
+    
+    Transaction Type Mapping:
+    - outflow = Debit (increases expenses/assets, decreases liabilities/income)
+    - inflow = Credit (increases liabilities/income, decreases assets/expenses)
+    
+    Double-Entry Logic:
+    - Primary outflow from Bank (Bank Credit) -> Counter must be Debit
+    - Primary inflow to Bank (Bank Debit) -> Counter must be Credit
+    
+    For Liabilities/Income (credit increases):
+    - When Bank receives money (inflow/debit), Liability/Income increases (inflow/credit)
+    
+    For Assets/Expenses (debit increases):
+    - When Bank pays money (outflow/credit), Expense/Asset increases (outflow/debit)
     """
     # Ensure counter account exists
     await ensure_counter_account_exists(counter_account_info)
@@ -234,9 +248,32 @@ async def create_double_entry_pair(
     now = datetime.now(timezone.utc)
     counter_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
     
-    # Determine counter transaction type (opposite of primary)
     primary_type = primary_txn.get("transaction_type")
-    counter_type = "inflow" if primary_type == "outflow" else "outflow"
+    counter_account_type = counter_account_info.get("account_type", "expense")
+    
+    # Determine counter transaction type based on accounting rules
+    # The goal: Total Debits = Total Credits
+    # 
+    # If primary is INFLOW (to bank = bank debit):
+    #   - For liability/income accounts: counter should be INFLOW (credit) - increases liability
+    #   - For asset/expense accounts: counter should be OUTFLOW (debit) - but this is unusual
+    #
+    # If primary is OUTFLOW (from bank = bank credit):
+    #   - For expense/asset accounts: counter should be OUTFLOW (debit) - increases expense
+    #   - For liability accounts: counter should be INFLOW (credit) - but this means paying liability
+    
+    if primary_type == "inflow":
+        # Bank received money (Bank Debit)
+        # Counter must be Credit to balance
+        # For liability/income: inflow = credit (correct - increases)
+        # For expense/asset: inflow = credit (unusual - would decrease)
+        counter_type = "inflow"  # Credit
+    else:
+        # Bank paid money (Bank Credit)
+        # Counter must be Debit to balance
+        # For expense/asset: outflow = debit (correct - increases)
+        # For liability: outflow = debit (correct - decreases when paying)
+        counter_type = "outflow"  # Debit
     
     # Create counter entry
     counter_txn = {

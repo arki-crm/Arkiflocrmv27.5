@@ -12,39 +12,69 @@ Tests that:
 import pytest
 import requests
 import os
+import time
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
-class TestLedgerIntegrity:
-    """Test ledger integrity - party dropdown and filtering"""
+# Global session to avoid rate limiting
+_session = None
+_logged_in = False
+
+def get_authenticated_session():
+    """Get or create authenticated session (singleton to avoid rate limits)"""
+    global _session, _logged_in
     
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Setup - login and get session"""
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        
-        # Login
-        login_response = self.session.post(
+    if _session is None:
+        _session = requests.Session()
+        _session.headers.update({"Content-Type": "application/json"})
+    
+    if not _logged_in:
+        login_response = _session.post(
             f"{BASE_URL}/api/auth/local-login",
             json={
                 "email": "sidheeq.arkidots@gmail.com",
                 "password": "founder123"
             }
         )
+        if login_response.status_code == 200:
+            _logged_in = True
+            print(f"✓ Login successful")
+        elif login_response.status_code == 429:
+            # Rate limited - wait and retry
+            time.sleep(60)
+            login_response = _session.post(
+                f"{BASE_URL}/api/auth/local-login",
+                json={
+                    "email": "sidheeq.arkidots@gmail.com",
+                    "password": "founder123"
+                }
+            )
+            if login_response.status_code == 200:
+                _logged_in = True
+        
         assert login_response.status_code == 200, f"Login failed: {login_response.text}"
-        print(f"✓ Login successful")
-        yield
     
-    def test_general_ledger_accounts_endpoint_returns_200(self):
+    return _session
+
+
+@pytest.fixture(scope="module")
+def session():
+    """Module-scoped session fixture to avoid rate limiting"""
+    return get_authenticated_session()
+
+
+class TestLedgerIntegrity:
+    """Test ledger integrity - party dropdown and filtering"""
+    
+    def test_general_ledger_accounts_endpoint_returns_200(self, session):
         """Test that /api/finance/general-ledger/accounts returns 200"""
-        response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         print(f"✓ GET /api/finance/general-ledger/accounts returns 200")
     
-    def test_party_filters_structure(self):
+    def test_party_filters_structure(self, session):
         """Test that party_filters has correct structure with customers, vendors, employees"""
-        response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert response.status_code == 200
         data = response.json()
         
@@ -60,9 +90,9 @@ class TestLedgerIntegrity:
         
         print(f"✓ party_filters has correct structure")
     
-    def test_customers_from_master_data(self):
+    def test_customers_from_master_data(self, session):
         """Test that customers are from projects collection (master data)"""
-        response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert response.status_code == 200
         data = response.json()
         
@@ -85,9 +115,9 @@ class TestLedgerIntegrity:
             assert customer_id is not None, "Customer ID should not be None"
             print(f"✓ Customer structure valid: id={customer_id}, name={first_customer['name']}")
     
-    def test_vendors_from_master_data(self):
+    def test_vendors_from_master_data(self, session):
         """Test that vendors are from finance_vendors collection (master data)"""
-        response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert response.status_code == 200
         data = response.json()
         
@@ -110,9 +140,9 @@ class TestLedgerIntegrity:
             assert vendor_id is not None, "Vendor ID should not be None"
             print(f"✓ Vendor structure valid: id={vendor_id}, name={first_vendor['name']}")
     
-    def test_employees_from_master_data(self):
+    def test_employees_from_master_data(self, session):
         """Test that employees are from users collection (master data)"""
-        response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert response.status_code == 200
         data = response.json()
         
@@ -135,9 +165,9 @@ class TestLedgerIntegrity:
             assert employee_id is not None, "Employee ID should not be None"
             print(f"✓ Employee structure valid: id={employee_id}, name={first_employee['name']}")
     
-    def test_general_ledger_filter_by_party_type_customer(self):
+    def test_general_ledger_filter_by_party_type_customer(self, session):
         """Test General Ledger filter by party_type=customer"""
-        response = self.session.get(
+        response = session.get(
             f"{BASE_URL}/api/finance/general-ledger",
             params={"party_type": "customer", "period": "fy"}
         )
@@ -149,9 +179,9 @@ class TestLedgerIntegrity:
             f"Response should have ledger structure, got: {list(data.keys())}"
         print(f"✓ Filter by party_type=customer returns 200")
     
-    def test_general_ledger_filter_by_party_type_vendor(self):
+    def test_general_ledger_filter_by_party_type_vendor(self, session):
         """Test General Ledger filter by party_type=vendor"""
-        response = self.session.get(
+        response = session.get(
             f"{BASE_URL}/api/finance/general-ledger",
             params={"party_type": "vendor", "period": "fy"}
         )
@@ -162,9 +192,9 @@ class TestLedgerIntegrity:
             f"Response should have ledger structure, got: {list(data.keys())}"
         print(f"✓ Filter by party_type=vendor returns 200")
     
-    def test_general_ledger_filter_by_party_type_employee(self):
+    def test_general_ledger_filter_by_party_type_employee(self, session):
         """Test General Ledger filter by party_type=employee"""
-        response = self.session.get(
+        response = session.get(
             f"{BASE_URL}/api/finance/general-ledger",
             params={"party_type": "employee", "period": "fy"}
         )
@@ -175,10 +205,10 @@ class TestLedgerIntegrity:
             f"Response should have ledger structure, got: {list(data.keys())}"
         print(f"✓ Filter by party_type=employee returns 200")
     
-    def test_general_ledger_filter_by_party_id(self):
+    def test_general_ledger_filter_by_party_id(self, session):
         """Test General Ledger filter by specific party_id"""
         # First get a customer ID from the accounts endpoint
-        accounts_response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        accounts_response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert accounts_response.status_code == 200
         data = accounts_response.json()
         
@@ -191,17 +221,17 @@ class TestLedgerIntegrity:
         customer_name = customers[0]["name"]
         
         # Filter by party_id
-        response = self.session.get(
+        response = session.get(
             f"{BASE_URL}/api/finance/general-ledger",
             params={"party_id": customer_id, "party_type": "customer", "period": "fy"}
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         print(f"✓ Filter by party_id={customer_id} ({customer_name}) returns 200")
     
-    def test_general_ledger_filter_by_vendor_id(self):
+    def test_general_ledger_filter_by_vendor_id(self, session):
         """Test General Ledger filter by specific vendor_id"""
         # First get a vendor ID from the accounts endpoint
-        accounts_response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        accounts_response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert accounts_response.status_code == 200
         data = accounts_response.json()
         
@@ -214,17 +244,17 @@ class TestLedgerIntegrity:
         vendor_name = vendors[0]["name"]
         
         # Filter by party_id
-        response = self.session.get(
+        response = session.get(
             f"{BASE_URL}/api/finance/general-ledger",
             params={"party_id": vendor_id, "party_type": "vendor", "period": "fy"}
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         print(f"✓ Filter by vendor party_id={vendor_id} ({vendor_name}) returns 200")
     
-    def test_general_ledger_filter_by_employee_id(self):
+    def test_general_ledger_filter_by_employee_id(self, session):
         """Test General Ledger filter by specific employee_id"""
         # First get an employee ID from the accounts endpoint
-        accounts_response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        accounts_response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert accounts_response.status_code == 200
         data = accounts_response.json()
         
@@ -237,17 +267,17 @@ class TestLedgerIntegrity:
         employee_name = employees[0]["name"]
         
         # Filter by party_id
-        response = self.session.get(
+        response = session.get(
             f"{BASE_URL}/api/finance/general-ledger",
             params={"party_id": employee_id, "party_type": "employee", "period": "fy"}
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         print(f"✓ Filter by employee party_id={employee_id} ({employee_name}) returns 200")
     
-    def test_customer_ids_are_project_ids(self):
+    def test_customer_ids_are_project_ids(self, session):
         """Verify customer IDs are project_ids (stable identifiers)"""
         # Get customers from party_filters
-        accounts_response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        accounts_response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert accounts_response.status_code == 200
         data = accounts_response.json()
         
@@ -275,9 +305,9 @@ class TestLedgerIntegrity:
         assert len(matching_ids) > 0 or len(customers) > 0, \
             "Customer IDs should be project_ids (stable identifiers)"
     
-    def test_vendor_ids_are_from_finance_vendors(self):
+    def test_vendor_ids_are_from_finance_vendors(self, session):
         """Verify vendor IDs are vendor_ids from finance_vendors"""
-        accounts_response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        accounts_response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert accounts_response.status_code == 200
         data = accounts_response.json()
         
@@ -294,9 +324,9 @@ class TestLedgerIntegrity:
         
         print(f"✓ Vendor IDs are valid vendor_ids from finance_vendors")
     
-    def test_employee_ids_are_user_ids(self):
+    def test_employee_ids_are_user_ids(self, session):
         """Verify employee IDs are user_ids from users collection"""
-        accounts_response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        accounts_response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert accounts_response.status_code == 200
         data = accounts_response.json()
         
@@ -313,9 +343,9 @@ class TestLedgerIntegrity:
         
         print(f"✓ Employee IDs are valid user_ids from users collection")
     
-    def test_no_duplicate_customers(self):
+    def test_no_duplicate_customers(self, session):
         """Verify no duplicate customers in the list"""
-        accounts_response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        accounts_response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert accounts_response.status_code == 200
         data = accounts_response.json()
         
@@ -337,9 +367,9 @@ class TestLedgerIntegrity:
         
         print(f"✓ No duplicate customers: {len(customers)} unique customers")
     
-    def test_no_duplicate_vendors(self):
+    def test_no_duplicate_vendors(self, session):
         """Verify no duplicate vendors in the list"""
-        accounts_response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        accounts_response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert accounts_response.status_code == 200
         data = accounts_response.json()
         
@@ -354,9 +384,9 @@ class TestLedgerIntegrity:
         
         print(f"✓ No duplicate vendors: {len(vendors)} unique vendors")
     
-    def test_no_duplicate_employees(self):
+    def test_no_duplicate_employees(self, session):
         """Verify no duplicate employees in the list"""
-        accounts_response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        accounts_response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert accounts_response.status_code == 200
         data = accounts_response.json()
         
@@ -375,26 +405,9 @@ class TestLedgerIntegrity:
 class TestMasterDataCounts:
     """Verify expected counts from master data sources"""
     
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Setup - login and get session"""
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        
-        # Login
-        login_response = self.session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={
-                "email": "sidheeq.arkidots@gmail.com",
-                "password": "founder123"
-            }
-        )
-        assert login_response.status_code == 200, f"Login failed: {login_response.text}"
-        yield
-    
-    def test_expected_customer_count(self):
+    def test_expected_customer_count(self, session):
         """Verify expected customer count (~26 from projects)"""
-        response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert response.status_code == 200
         data = response.json()
         
@@ -406,9 +419,9 @@ class TestMasterDataCounts:
         assert count >= 20, f"Expected at least 20 customers, got {count}"
         assert count <= 50, f"Expected at most 50 customers, got {count}"
     
-    def test_expected_vendor_count(self):
+    def test_expected_vendor_count(self, session):
         """Verify expected vendor count (~9 from finance_vendors)"""
-        response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert response.status_code == 200
         data = response.json()
         
@@ -420,9 +433,9 @@ class TestMasterDataCounts:
         assert count >= 5, f"Expected at least 5 vendors, got {count}"
         assert count <= 30, f"Expected at most 30 vendors, got {count}"
     
-    def test_expected_employee_count(self):
+    def test_expected_employee_count(self, session):
         """Verify expected employee count (~49 from users)"""
-        response = self.session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
+        response = session.get(f"{BASE_URL}/api/finance/general-ledger/accounts")
         assert response.status_code == 200
         data = response.json()
         

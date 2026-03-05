@@ -177,7 +177,7 @@ DOUBLE_ENTRY_COUNTER_ACCOUNTS = {
     "hr_expense": {"account_id": "acc_hr_expense", "account_name": "HR Expense", "account_type": "expense"},
     "business_development_expense": {"account_id": "acc_bd_expense", "account_name": "Business Development Expense", "account_type": "expense"},
     "vendor_refund": {"account_id": "acc_vendor_payable", "account_name": "Accounts Payable", "account_type": "liability"},
-    "customer_payment": {"account_id": "acc_revenue", "account_name": "Sales Revenue", "account_type": "income"},
+    "customer_payment": {"account_id": "acc_customer_advance", "account_name": "Customer Advance", "account_type": "liability"},
     "internal_transfer": None,  # Already double-entry
     "journal_entry": None,  # Already double-entry
 }

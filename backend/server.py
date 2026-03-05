@@ -269,6 +269,11 @@ async def create_double_entry_pair(
         "project_id": primary_txn.get("project_id"),
         "remarks": f"[DE] {primary_txn.get('remarks', '')}",
         
+        # Party metadata (copy from primary for traceability)
+        "party_id": primary_txn.get("party_id"),
+        "party_type": primary_txn.get("party_type"),
+        "party_name": primary_txn.get("party_name"),
+        
         # Double-entry linking
         "is_double_entry": True,
         "paired_transaction_id": primary_txn.get("transaction_id"),

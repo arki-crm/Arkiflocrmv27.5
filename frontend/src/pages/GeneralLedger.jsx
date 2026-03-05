@@ -527,6 +527,7 @@ export default function GeneralLedger() {
                   <TableRow className="bg-gray-50">
                     <TableHead className="w-[100px]">Date</TableHead>
                     <TableHead className="w-[120px]">Reference</TableHead>
+                    <TableHead className="w-[180px]">Project</TableHead>
                     <TableHead className="w-[100px]">Source</TableHead>
                     <TableHead>Narration</TableHead>
                     <TableHead className="text-right w-[120px]">Debit</TableHead>

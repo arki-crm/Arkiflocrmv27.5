@@ -30145,6 +30145,31 @@ async def get_general_ledger(
     start_iso = start.isoformat()
     end_iso = end.isoformat()
     
+    # ============================================================
+    # Handle "All Accounts" mode
+    # ============================================================
+    if not account_id or account_id == "all":
+        return await get_all_accounts_general_ledger(
+            start_iso=start_iso,
+            end_iso=end_iso,
+            period_label=period_label,
+            party_id=party_id,
+            party_type=party_type,
+            project_id=project_id
+        )
+    
+    # ============================================================
+    # Handle Party filter mode (when account_id is specific but party filter provided)
+    # ============================================================
+    # Build transaction filter for party/project
+    party_filter = {}
+    if party_id:
+        party_filter["party_id"] = party_id
+    if party_type:
+        party_filter["party_type"] = party_type
+    if project_id:
+        party_filter["project_id"] = project_id
+    
     # Get account details
     account = await db.finance_accounts.find_one({"account_id": account_id}, {"_id": 0})
     if not account:

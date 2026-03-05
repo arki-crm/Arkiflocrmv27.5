@@ -23778,72 +23778,55 @@ async def get_project_finance_detail(project_id: str, request: Request):
         planned_by_category[cat] = planned_by_category.get(cat, 0) + vm.get("planned_amount", 0)
     total_planned = sum(planned_by_category.values())
     
-    # Get actual liabilities for this project (unpaid vendor amounts)
-    # Include both "open" and "partially_settled" statuses - these represent real unpaid obligations
-    liabilities = await db.finance_liabilities.find(
-        {"project_id": project_id, "status": {"$in": ["open", "partially_settled"]}},
-        {"_id": 0, "amount_remaining": 1}
-    ).to_list(100)
-    total_open_liability = sum(l.get("amount_remaining", 0) for l in liabilities)
-    # Ensure no negative liability values
-    total_open_liability = max(0, total_open_liability)
+    # ============================================================
+    # STRICT SOURCE TABLES - NO accounting_transactions for summaries
+    # ============================================================
     
-    # Get actual transactions from cashbook (EXCLUDE credit purchase daybook entries)
-    transactions = await db.accounting_transactions.find(
-        {
-            "project_id": project_id,
-            # Exclude non-cashbook entries (credit purchases)
-            "$and": [
-                {"$or": [
-                    {"is_cashbook_entry": {"$ne": False}},
-                    {"is_cashbook_entry": {"$exists": False}}
-                ]},
-                # Also exclude old credit purchase entries that don't have the flag
-                {"entry_type": {"$nin": ["purchase_invoice", "purchase_invoice_credit"]}}
-            ]
-        },
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(500)
-    
-    # Get category names for enrichment
-    categories = {c["category_id"]: c for c in await db.accounting_categories.find({}, {"_id": 0}).to_list(100)}
-    accounts = {a["account_id"]: a for a in await db.accounting_accounts.find({}, {"_id": 0}).to_list(100)}
-    
-    # Enrich transactions
-    enriched_txns = []
-    for t in transactions:
-        t["category_name"] = categories.get(t.get("category_id"), {}).get("name", "Unknown")
-        t["account_name"] = accounts.get(t.get("account_id"), {}).get("account_name", "Unknown")
-        enriched_txns.append(t)
-    
-    # Calculate total_received from receipts (PRIMARY SOURCE - excludes cancelled)
-    # This is the authoritative source for customer payments
+    # 1. TOTAL RECEIVED: From finance_receipts (status = active)
     project_receipts = await db.finance_receipts.find(
         {"project_id": project_id, "status": {"$ne": "cancelled"}},
         {"_id": 0, "amount": 1}
     ).to_list(1000)
-    total_received_from_receipts = sum(r.get("amount", 0) for r in project_receipts)
+    total_inflow = sum(r.get("amount", 0) for r in project_receipts)
     
-    # Check if this project has ANY receipt records (including cancelled)
-    has_any_receipts = await db.finance_receipts.find_one({"project_id": project_id}) is not None
+    # 2. ACTUAL COST: From execution_ledger (purchase invoices) + approved expense_requests
+    # 2a. Purchase invoices from execution_ledger (grand_total = amount with GST)
+    purchase_invoices = await db.execution_ledger.find(
+        {"project_id": project_id},
+        {"_id": 0, "grand_total": 1, "total_value": 1, "category": 1}
+    ).to_list(1000)
+    purchase_invoice_total = sum(p.get("grand_total") or p.get("total_value", 0) for p in purchase_invoices)
     
-    # Calculate actuals from transactions
-    total_inflow_from_txns = sum(t["amount"] for t in transactions if t.get("transaction_type") == "inflow" and not t.get("is_cancelled"))
-    total_outflow = sum(t["amount"] for t in transactions if t.get("transaction_type") == "outflow")
+    # 2b. Approved expense requests
+    approved_expenses = await db.finance_expense_requests.find(
+        {"project_id": project_id, "status": "approved"},
+        {"_id": 0, "amount": 1, "category": 1}
+    ).to_list(1000)
+    approved_expense_total = sum(e.get("amount", 0) for e in approved_expenses)
     
-    # Use receipts as primary source for total_received
-    # Only fall back to txns for legacy projects without ANY receipt records
-    if has_any_receipts:
-        total_inflow = total_received_from_receipts
-    else:
-        total_inflow = total_inflow_from_txns
+    # 2c. Recorded (paid) expense requests
+    recorded_expenses = await db.finance_expense_requests.find(
+        {"project_id": project_id, "status": "recorded"},
+        {"_id": 0, "amount": 1, "category": 1}
+    ).to_list(1000)
+    recorded_expense_total = sum(e.get("amount", 0) for e in recorded_expenses)
     
-    # Group actual outflows by expense category
+    total_outflow = purchase_invoice_total + approved_expense_total + recorded_expense_total
+    
+    # 3. Group actual costs by category (for comparison)
     actual_by_category = {}
-    for t in transactions:
-        if t.get("transaction_type") == "outflow":
-            cat_name = t.get("category_name", "Other")
-            actual_by_category[cat_name] = actual_by_category.get(cat_name, 0) + t.get("amount", 0)
+    for p in purchase_invoices:
+        cat = p.get("category", "Other")
+        actual_by_category[cat] = actual_by_category.get(cat, 0) + (p.get("grand_total") or p.get("total_value", 0))
+    for e in approved_expenses + recorded_expenses:
+        cat = e.get("category", "Other")
+        actual_by_category[cat] = actual_by_category.get(cat, 0) + e.get("amount", 0)
+    
+    # 4. REMAINING LIABILITY: planned_cost - actual_cost
+    remaining_liability = max(0, total_planned - total_outflow) if total_planned > 0 else 0
+    
+    # 5. SAFE SURPLUS: total_received - actual_cost
+    safe_surplus = total_inflow - total_outflow
     
     # Build planned vs actual comparison
     all_categories = set(list(planned_by_category.keys()) + list(actual_by_category.keys()))
@@ -23858,6 +23841,9 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "difference": planned - actual,
             "over_budget": actual > planned if planned > 0 else False
         })
+    
+    # Check if spending has started (any purchase invoices or expense requests exist)
+    spending_started = len(purchase_invoices) > 0 or len(approved_expenses) > 0 or len(recorded_expenses) > 0
     
     # GOVERNANCE: If signoff not locked, zero out revenue-dependent calculations
     if signoff_value <= 0:

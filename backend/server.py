@@ -29149,9 +29149,14 @@ async def get_trial_balance(
     
     # ===== EXPENSES =====
     # Group expenses by category
+    # Only count expenses from counter entries (double-entry) OR primary entries without double-entry
     expense_by_category = {}
     for txn in transactions:
         if txn.get("transaction_type") == "outflow" and txn.get("category_id") != "internal_transfer":
+            # Skip if this is a double-entry primary (expense is already in counter entry)
+            if txn.get("is_double_entry") and txn.get("entry_role") == "primary":
+                continue
+                
             cat_id = txn.get("category_id", "uncategorized")
             cat_name = categories_map.get(cat_id, {}).get("name", cat_id.replace("_", " ").title() if cat_id else "Uncategorized")
             

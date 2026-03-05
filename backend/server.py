@@ -23842,6 +23842,52 @@ async def get_project_finance_detail(project_id: str, request: Request):
     # Check if spending has started (any purchase invoices or expense requests exist)
     spending_started = len(purchase_invoices) > 0 or len(approved_expenses) > 0 or len(recorded_expenses) > 0
     
+    # Build transactions list for frontend display (from operational tables)
+    # This replaces the old accounting_transactions-based list
+    transactions = []
+    
+    # Add purchase invoices as transactions
+    for p in purchase_invoices:
+        transactions.append({
+            "transaction_id": p.get("execution_id", ""),
+            "transaction_type": "outflow",
+            "amount": p.get("grand_total") or p.get("total_value", 0),
+            "description": f"Purchase Invoice: {p.get('invoice_no', 'N/A')} - {p.get('vendor_name', 'Unknown Vendor')}",
+            "category_name": p.get("category", "Purchase"),
+            "account_name": "Vendor Payment",
+            "created_at": p.get("created_at", ""),
+            "source": "execution_ledger"
+        })
+    
+    # Add approved/recorded expenses as transactions
+    for e in approved_expenses + recorded_expenses:
+        transactions.append({
+            "transaction_id": e.get("request_id", ""),
+            "transaction_type": "outflow",
+            "amount": e.get("amount", 0),
+            "description": f"Expense: {e.get('description', 'N/A')}",
+            "category_name": e.get("category", "Expense"),
+            "account_name": "Expense",
+            "created_at": e.get("created_at", ""),
+            "source": "finance_expense_requests"
+        })
+    
+    # Add receipts as inflow transactions
+    for r in project_receipts:
+        transactions.append({
+            "transaction_id": r.get("receipt_id", ""),
+            "transaction_type": "inflow",
+            "amount": r.get("amount", 0),
+            "description": f"Receipt from customer",
+            "category_name": "Customer Receipt",
+            "account_name": "Customer Payment",
+            "created_at": r.get("created_at", ""),
+            "source": "finance_receipts"
+        })
+    
+    # Sort by created_at descending
+    transactions.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    
     # GOVERNANCE: If signoff not locked, zero out revenue-dependent calculations
     if signoff_value <= 0:
         return {

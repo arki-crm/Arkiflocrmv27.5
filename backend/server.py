@@ -22706,6 +22706,15 @@ async def create_transaction(txn: TransactionCreate, request: Request):
         "is_verified": False,
         "verified_by": None,
         "verified_at": None,
+        # Party metadata for ledger traceability
+        # Note: party_id and party_type should be set based on context
+        "party_id": vendor_id if vendor_id else None,
+        "party_type": "vendor" if vendor_id else None,
+        "party_name": paid_to if vendor_id else None,
+        # Reference for audit trail
+        "reference_id": txn.expense_request_id if txn.expense_request_id else txn_id,
+        "source_module": "cashbook",
+        "source_id": txn_id,
         # Accountability fields
         "requested_by": txn.requested_by or user.user_id,
         "requested_by_name": txn.requested_by_name or user.name,

@@ -32097,6 +32097,11 @@ async def cancel_receipt(receipt_id: str, request: Request):
         "project_id": project_id,
         "remarks": f"Reversal: Receipt {receipt.get('receipt_number')} cancelled - {reason}",
         
+        # Party metadata for ledger traceability
+        "party_id": project_id,  # Use project_id as customer identifier
+        "party_type": "customer",
+        "party_name": party_name,
+        
         # Linking
         "is_reversal": True,
         "reverses_transaction_id": original_txn_id,

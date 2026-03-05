@@ -30723,9 +30723,19 @@ async def get_ledger_accounts(request: Request):
         ).to_list(100)
         accounts = accounting_accs
     
-    # Get categories
+    # Get categories (exclude system transaction types - these are actions, not accounts)
+    SYSTEM_TRANSACTION_TYPES = [
+        "liability_settlement",
+        "invoice_payment", 
+        "salary_payment",
+        "internal_transfer",
+        "customer_payment"
+    ]
     categories = await db.accounting_categories.find(
-        {"is_active": {"$ne": False}},
+        {
+            "is_active": {"$ne": False},
+            "category_id": {"$nin": SYSTEM_TRANSACTION_TYPES}
+        },
         {"_id": 0, "category_id": 1, "name": 1}
     ).to_list(100)
     

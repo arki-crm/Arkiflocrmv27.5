@@ -38330,6 +38330,17 @@ async def record_recurring_payment(payable_id: str, payment: RecordPaymentReques
     
     await db.accounting_transactions.insert_one(new_txn)
     
+    # Create double-entry pair for recurring payment (after cutoff date)
+    if is_double_entry_required(payment.payment_date):
+        await create_double_entry_pair(
+            db=db,
+            primary_txn=new_txn,
+            category_id=payable.get("category_id", "general_expense"),
+            counter_account_type="expense",
+            user_id=user.user_id,
+            user_name=user.name
+        )
+    
     # Update account balance
     await db.accounting_accounts.update_one(
         {"account_id": payable["account_id"]},

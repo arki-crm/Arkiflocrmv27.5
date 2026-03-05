@@ -35452,6 +35452,10 @@ async def create_stipend_payment(data: StipendPaymentRequest, request: Request):
         "project_id": None,
         "paid_to": employee.get("name", "Employee"),
         "vendor_id": None,
+        # Party metadata for ledger traceability
+        "party_id": data.employee_id,
+        "party_type": "employee",
+        "party_name": employee.get("name", "Trainee"),
         "remarks": data.notes or f"Stipend for {data.month_year}: {employee.get('name', 'Trainee')}",
         "system_generated": True,
         "source_module": "stipend",

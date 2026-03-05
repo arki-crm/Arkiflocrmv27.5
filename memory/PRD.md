@@ -9,8 +9,38 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Receipt Management UI & Double-Entry Accounting COMPLETE ✅
+## Current Status: Finance Summary Cancelled Receipt Exclusion COMPLETE ✅
 **As of March 5, 2026**
+
+### Finance Summary Fix - Exclude Cancelled Receipts from Totals
+
+Fixed all financial summary calculations to exclude cancelled receipts from totals.
+
+| # | Endpoint/Function | Issue Fixed | Status |
+|---|-------------------|-------------|--------|
+| 1 | CEO Overview Dashboard | `receipts_in_period` included cancelled | ✅ |
+| 2 | P&L Report | `receipts` sum included cancelled | ✅ |
+| 3 | `get_project_profit` | `total_received` used max(receipts, inflows) | ✅ |
+| 4 | Payment Reminder | `receipts` for pending calculation | ✅ |
+| 5 | Overdue Payment List | `receipts` for pending amount | ✅ |
+| 6 | Profitability Report | `receipts` sum for total_received | ✅ |
+
+**Rule Applied:**
+```python
+# All receipt queries now include:
+{"status": {"$ne": "cancelled"}}
+```
+
+**Key Changes:**
+- `get_project_profit`: Now uses receipts as primary source of truth, falls back to accounting_transactions only for legacy projects without receipts
+- All dashboard summaries exclude cancelled receipts
+- Cancelled receipts remain visible in history but don't affect financial totals
+
+**Verification:**
+- Project with ₹35,000 total receipts (₹32,500 active + ₹2,500 cancelled) → `total_received = ₹32,500` ✅
+- Project with all receipts cancelled → `total_received = ₹0` ✅
+
+---
 
 ### Receipt Management UI (Safe Cancellation & Deletion)
 

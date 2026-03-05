@@ -369,11 +369,31 @@ The **Project Filter** is useful because:
 | Account Filter | ✅ Working | None |
 | Period Filter | ✅ Working | None |
 | Project Filter | ✅ Working | None |
-| Party Filter | ⚠️ Partial | Add party_id to 6 modules |
+| Party Filter | ✅ FIXED | Backfill historical data |
 | All Accounts View | ✅ Working | None |
 | Receipt Entries | ✅ Complete | None |
-| Vendor Payment Entries | ⚠️ Missing party | Add party metadata |
-| Salary Entries | ⚠️ Missing party | Add party metadata |
+| Vendor Payment Entries | ✅ FIXED | Party metadata added |
+| Salary Entries | ✅ FIXED | Party metadata added |
+| Stipend Entries | ✅ FIXED | Party metadata added |
+| Incentive Entries | ✅ FIXED | Party metadata added |
+| Commission Entries | ✅ FIXED | Party metadata added |
+| Purchase Invoice Entries | ✅ FIXED | Party metadata added |
 | Double-Entry | ⚠️ Partial | 5 modules need update |
 
-**Overall Assessment:** The General Ledger is functional for Account and Project filtering. The Party filter requires additional work to be fully useful. Recommend completing the party metadata implementation before considering the feature complete.
+**Overall Assessment:** The General Ledger is now fully functional for Account, Project, and Party filtering. All major transaction modules now include party metadata. New transactions will be fully traceable by party. Historical transactions will need a backfill script to populate party fields.
+
+---
+
+## 9. MODULES UPDATED (March 5, 2026)
+
+The following modules now include `party_id`, `party_type`, `party_name`:
+
+1. **Customer Receipts** - party_type: "customer"
+2. **Vendor Payments (Liability Settlement)** - party_type: "vendor"
+3. **Salary Payments** - party_type: "employee"
+4. **Stipend Payments** - party_type: "employee"
+5. **Incentive Payouts** - party_type: "employee"
+6. **Commission Payouts** - party_type: varies (vendor/employee)
+7. **Purchase Invoices (Credit)** - party_type: "vendor"
+
+Double-entry counter entries automatically inherit party metadata from primary entries.

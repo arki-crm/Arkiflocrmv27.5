@@ -40200,9 +40200,10 @@ async def update_sales_return_refund(
         if update.refund_account_id:
             # Create cashbook outflow entry
             txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+            refund_date = update.refund_date or now.strftime("%Y-%m-%d")
             cashbook_entry = {
                 "transaction_id": txn_id,
-                "transaction_date": update.refund_date or now.strftime("%Y-%m-%d"),
+                "transaction_date": refund_date,
                 "transaction_type": "outflow",
                 "entry_type": "sales_return_refund",
                 "amount": update.refund_amount_given,
@@ -40210,6 +40211,10 @@ async def update_sales_return_refund(
                 "account_id": update.refund_account_id,
                 "project_id": return_doc.get("project_id"),
                 "customer_id": return_doc.get("customer_id"),
+                # Party metadata for ledger traceability
+                "party_id": return_doc.get("customer_id"),
+                "party_type": "customer",
+                "party_name": return_doc.get("customer_name"),
                 "reference_type": "sales_return",
                 "reference_id": return_id,
                 "created_by": user.user_id,
@@ -40217,6 +40222,17 @@ async def update_sales_return_refund(
                 "created_at": now.isoformat()
             }
             await db.accounting_transactions.insert_one(cashbook_entry)
+            
+            # Create double-entry pair for sales return refund (after cutoff date)
+            if is_double_entry_required(refund_date):
+                await create_double_entry_pair(
+                    db=db,
+                    primary_txn=cashbook_entry,
+                    category_id="sales_return",
+                    counter_account_type="customer_refund",
+                    user_id=user.user_id,
+                    user_name=user_doc.get("name", "Unknown")
+                )
             
             # Update account balance
             await db.accounting_accounts.update_one(

@@ -30701,7 +30701,38 @@ async def get_ledger_accounts(request: Request):
     employee_accounts = [p for p in party_accounts if p.get("party_type") == "employee" and not p.get("is_control")]
     control_accounts = [p for p in party_accounts if p.get("is_control")]
     
+    # Get customers list for party filter
+    customers_list = await db.customers.find(
+        {"status": {"$ne": "deleted"}},
+        {"_id": 0, "customer_id": 1, "client_name": 1}
+    ).sort("client_name", 1).to_list(1000)
+    
+    # Get vendors list for party filter
+    vendors_list = await db.finance_vendors.find(
+        {},
+        {"_id": 0, "vendor_id": 1, "vendor_name": 1}
+    ).sort("vendor_name", 1).to_list(1000)
+    
+    # Get employees list for party filter  
+    employees_list = await db.team_members.find(
+        {"status": "Active"},
+        {"_id": 0, "user_id": 1, "name": 1}
+    ).sort("name", 1).to_list(500)
+    
+    # Get projects for project filter
+    projects_list = await db.projects.find(
+        {"status": {"$nin": ["Cancelled", "On Hold"]}},
+        {"_id": 0, "project_id": 1, "pid": 1, "project_name": 1}
+    ).sort("project_name", 1).to_list(1000)
+    
     return {
+        # Special "All Accounts" option
+        "all_accounts_option": {
+            "id": "all",
+            "name": "📊 All Accounts (Combined Ledger)",
+            "type": "combined",
+            "group": "View All"
+        },
         "accounts": [
             {
                 "id": acc.get("account_id"),
@@ -30768,7 +30799,26 @@ async def get_ledger_accounts(request: Request):
                 "balance": ctrl.get("current_balance", 0)
             }
             for ctrl in control_accounts
-        ]
+        ],
+        # Party filters for filtering transactions
+        "party_filters": {
+            "customers": [
+                {"id": c.get("customer_id"), "name": c.get("client_name"), "type": "customer"}
+                for c in customers_list
+            ],
+            "vendors": [
+                {"id": v.get("vendor_id"), "name": v.get("vendor_name"), "type": "vendor"}
+                for v in vendors_list
+            ],
+            "employees": [
+                {"id": e.get("user_id"), "name": e.get("name"), "type": "employee"}
+                for e in employees_list
+            ],
+            "projects": [
+                {"id": p.get("project_id"), "name": f"{p.get('pid', '')} - {p.get('project_name', '')}"}
+                for p in projects_list
+            ]
+        }
     }
 
 

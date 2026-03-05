@@ -13,10 +13,14 @@ import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # MongoDB connection
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
-DB_NAME = os.environ.get("DB_NAME", "arkidots")
+DB_NAME = os.environ.get("DB_NAME", "test_database")
 
 async def backfill_party_metadata():
     """Main backfill function"""

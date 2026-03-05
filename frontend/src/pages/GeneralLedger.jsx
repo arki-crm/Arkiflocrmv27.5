@@ -78,6 +78,8 @@ export default function GeneralLedger() {
       setVendors(res.data.vendors || []);
       setCustomers(res.data.customers || []);
       setEmployees(res.data.employees || []);
+      setAllAccountsOption(res.data.all_accounts_option || null);
+      setPartyFilters(res.data.party_filters || { customers: [], vendors: [], employees: [], projects: [] });
     } catch (err) {
       console.error('Failed to fetch accounts:', err);
       if (err.response?.status === 403) {

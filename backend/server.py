@@ -31923,6 +31923,10 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
         "category_id": "customer_payment",  # Customer payment category
         "account_id": receipt.account_id,
         "project_id": receipt.project_id,
+        # Party metadata for ledger traceability
+        "party_id": project.get("customer_id"),
+        "party_type": "customer",
+        "party_name": project.get("client_name"),
         "paid_to": None,
         "received_from": project.get("client_name"),
         "remarks": f"Payment receipt {receipt_number} - {receipt.stage_name or 'Customer Payment'}",

@@ -272,9 +272,11 @@ export default function GeneralLedger() {
                       </SelectItem>
                     </>
                   )}
+                  
+                  {/* Bank & Cash Accounts (Real Accounts) */}
                   {accounts.length > 0 && (
                     <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-gray-50 mt-1">
+                      <div className="px-2 py-1.5 text-xs font-semibold text-green-600 bg-green-50 mt-1">
                         Bank & Cash Accounts
                       </div>
                       {accounts.map(acc => (
@@ -284,42 +286,22 @@ export default function GeneralLedger() {
                       ))}
                     </>
                   )}
-                  {vendors.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-orange-600 bg-orange-50 mt-1">
-                        Accounts Payable (Vendors)
-                      </div>
-                      {vendors.map(v => (
-                        <SelectItem key={v.id} value={v.id}>
-                          {v.name} <span className="text-gray-400 text-xs">{formatCurrency(v.balance)}</span>
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
-                  {customers.length > 0 && (
+                  
+                  {/* Control Accounts (Customer Advance, Accounts Payable, etc.) */}
+                  {controlAccounts.length > 0 && (
                     <>
                       <div className="px-2 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 mt-1">
-                        Accounts Receivable (Customers)
+                        Control Accounts
                       </div>
-                      {customers.map(c => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name} <span className="text-gray-400 text-xs">{formatCurrency(c.balance)}</span>
+                      {controlAccounts.map(ctrl => (
+                        <SelectItem key={ctrl.id} value={ctrl.id}>
+                          {ctrl.name} <span className="text-gray-400 text-xs">{formatCurrency(ctrl.balance)}</span>
                         </SelectItem>
                       ))}
                     </>
                   )}
-                  {employees.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-purple-600 bg-purple-50 mt-1">
-                        Employee Payables
-                      </div>
-                      {employees.map(e => (
-                        <SelectItem key={e.id} value={e.id}>
-                          {e.name} <span className="text-gray-400 text-xs">{formatCurrency(e.balance)}</span>
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
+                  
+                  {/* Expense/Income Categories */}
                   {categories.length > 0 && (
                     <>
                       <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-gray-50 mt-1">
@@ -339,7 +321,7 @@ export default function GeneralLedger() {
             {/* Party Filter */}
             <div className="w-56">
               <Label className="text-sm text-gray-600 mb-1.5 block">
-                Party (Customer/Vendor)
+                Party (Customer/Vendor/Employee)
               </Label>
               <Select value={selectedParty} onValueChange={setSelectedParty}>
                 <SelectTrigger data-testid="party-select">

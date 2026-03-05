@@ -541,6 +541,7 @@ export default function GeneralLedger() {
                     <TableCell>{ledgerData.start_date}</TableCell>
                     <TableCell>—</TableCell>
                     <TableCell>—</TableCell>
+                    <TableCell>—</TableCell>
                     <TableCell>Opening Balance</TableCell>
                     <TableCell className="text-right">—</TableCell>
                     <TableCell className="text-right">—</TableCell>

@@ -23862,19 +23862,21 @@ async def get_project_finance_detail(project_id: str, request: Request):
                 "message": "Financial metrics require sign-off lock.",
                 "signoff_value": 0,
                 "signoff_locked": False,
-                # Cost metrics (still valid)
+                # Cost metrics (still valid) - from strict source tables
                 "total_received": total_inflow,
                 "planned_cost": total_planned,
                 "actual_cost": total_outflow,
-                "remaining_liability": total_open_liability,
-                "safe_surplus": total_inflow - total_outflow,
+                "remaining_liability": remaining_liability,
+                "safe_surplus": safe_surplus,
                 "has_overspend": total_outflow > total_planned if total_planned > 0 else False,
                 # Revenue-dependent metrics zeroed
                 "gross_profit": 0,
-                "profit_margin": 0
+                "profit_margin": 0,
+                # Source breakdowns
+                "purchase_invoice_total": purchase_invoice_total,
+                "expense_total": approved_expense_total + recorded_expense_total
             },
             "vendor_mappings": vendor_mappings,
-            "transactions": enriched_txns,
             "comparison": comparison,
             "can_edit_vendor_mapping": not spending_started and not production_started,
             "spending_started": spending_started,
@@ -23882,9 +23884,6 @@ async def get_project_finance_detail(project_id: str, request: Request):
         }
     
     # Full financial summary with signoff_value
-    remaining_liability = total_open_liability
-    safe_surplus = total_inflow - total_outflow
-    
     return {
         "project": {
             "project_id": project.get("project_id"),
@@ -23900,7 +23899,7 @@ async def get_project_finance_detail(project_id: str, request: Request):
             # Governance-safe revenue baseline (signoff_value ONLY)
             "signoff_value": signoff_value,
             "signoff_locked": signoff_locked,
-            # Financial metrics
+            # Financial metrics - from strict source tables
             "total_received": total_inflow,
             "planned_cost": total_planned,
             "actual_cost": total_outflow,
@@ -23909,10 +23908,12 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "has_overspend": total_outflow > total_planned if total_planned > 0 else False,
             # Profitability (based on signoff_value as revenue baseline)
             "gross_profit": signoff_value - total_outflow,
-            "profit_margin": round(((signoff_value - total_outflow) / signoff_value) * 100, 1) if signoff_value > 0 else 0
+            "profit_margin": round(((signoff_value - total_outflow) / signoff_value) * 100, 1) if signoff_value > 0 else 0,
+            # Source breakdowns
+            "purchase_invoice_total": purchase_invoice_total,
+            "expense_total": approved_expense_total + recorded_expense_total
         },
         "vendor_mappings": vendor_mappings,
-        "transactions": enriched_txns,
         "comparison": comparison,
         "can_edit_vendor_mapping": not spending_started and not production_started,
         "spending_started": spending_started,

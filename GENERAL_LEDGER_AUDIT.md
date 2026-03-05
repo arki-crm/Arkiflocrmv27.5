@@ -355,6 +355,16 @@ The **Project Filter** is useful because:
    - Set `party_type = recipient_type (vendor/employee)`
    - Set `party_name = recipient_name`
 
+7. **Backfill Historical Data** ✅ COMPLETED
+   - Ran backfill script for 389 transactions
+   - Updated 108 transactions with party metadata
+   - 281 skipped (transfers, journal entries without party)
+
+### Double-Entry Fixes - ✅ COMPLETED
+8. **Liability Settlement** ✅ - Now creates double-entry
+9. **Recurring Payments** ✅ - Now creates double-entry
+10. **Sales Return Refund** ✅ - Now creates double-entry + party metadata
+
 ### Remaining Items
 7. **Create backfill script for historical transactions** (Medium Priority)
 8. **Consider adding double-entry to Liability Settlement** (Low Priority)

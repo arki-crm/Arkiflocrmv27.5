@@ -28897,11 +28897,20 @@ async def get_trial_balance(
     total_credit = 0
     
     # ===== ASSETS =====
-    # Bank and Cash accounts
+    # Bank and Cash accounts only (exclude system accounts which are handled separately)
     for account in accounts:
         acc_id = account.get("account_id")
+        
+        # Skip system accounts - they are handled in the System Accounts section
+        if account.get("is_system_account"):
+            continue
+            
         acc_name = account.get("account_name") or account.get("name", "Unknown")
         acc_type = account.get("account_type", "bank")
+        
+        # Only include bank/cash type accounts in Assets
+        if acc_type not in ["bank", "cash", "upi", "wallet"]:
+            continue
         
         # Calculate balance from transactions in period
         acc_inflows = sum(t.get("amount", 0) for t in transactions 

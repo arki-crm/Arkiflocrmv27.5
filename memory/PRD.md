@@ -9,38 +9,47 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: General Ledger Filter Architecture FIXED ✅
+## Current Status: Ledger Integrity Audit COMPLETE ✅
 **As of March 5, 2026**
 
-### 0️⃣ General Ledger Party Filter Fix ✅
+### 0️⃣ Ledger Integrity Audit ✅ (LATEST)
 
-Fixed the `/api/finance/general-ledger/accounts` endpoint which was returning empty lists for customers, vendors, and employees due to incorrect collection names and field mappings.
+Ensured all financial transactions writing to `accounting_transactions` populate required fields consistently, and party dropdown uses master data sources ONLY (not derived from transaction data).
 
-**Root Cause:** Backend was querying non-existent collections (`customers`, `team_members`) with wrong field names (`vendor_name` instead of `name`).
+**Requirements Addressed:**
+1. All transaction-writing modules must populate: `account_id`, `party_id`, `party_type`, `project_id`, `reference_id`, `transaction_type`
+2. Party dropdown built from **master data sources ONLY**
+3. Ledger filtering uses **IDs, not names**
 
-**Fix Applied:**
-| Party Type | Source Collections | Field Mappings |
-|------------|-------------------|----------------|
-| **Customers** | `projects.client_name` + `accounting_transactions` (party_type='customer') | Merge unique names |
-| **Vendors** | `finance_vendors.name` + `accounting_transactions` (party_type='vendor') | Merge by vendor_id |
-| **Employees** | `users` (with employee roles) + `accounting_transactions` (party_type='employee') | Merge by user_id |
+**Data Sources Implemented:**
+| Party Type | Master Collection | ID Field | Name Field |
+|------------|------------------|----------|------------|
+| **Customers** | `projects` | `project_id` | `client_name` |
+| **Vendors** | `finance_vendors` | `vendor_id` | `name` |
+| **Employees** | `users` (with employee roles) | `user_id` | `name` |
+
+**Modules Fixed:**
+- Receipt Creation: Added `party_id`, `party_type`, `party_name`, `reference_id`, `source_module`
+- Receipt Cancellation: Added party metadata to reversal entries
+- Cashbook Transactions: Added party metadata when vendor_id provided
 
 **Results:**
-| Entity | Count |
-|--------|-------|
-| Customers | 26 |
-| Vendors | 19 |
-| Employees | 53 |
-| Projects | 28 |
+| Entity | Count | Source |
+|--------|-------|--------|
+| Customers | 26 | projects (master data) |
+| Vendors | 9 | finance_vendors (master data) |
+| Employees | 49 | users (master data) |
+| Projects | 28 | projects (master data) |
 
-**Testing (iteration_79.json):** 100% pass rate - 17/17 tests passed (11 backend + 6 frontend)
+**Testing (iteration_80.json):** 100% pass rate - 20/20 tests passed
 
-**Files Modified:**
-- `/app/backend/server.py` - Lines 30731-30847 (party data queries)
+**Audit Report:** `/app/LEDGER_INTEGRITY_AUDIT.md`
+
+⚠️ **Data Model Limitation:** No dedicated `customers` collection exists. Customer IDs use `project_id` as proxy.
 
 ---
 
-### 1️⃣ Historical Data Backfill ✅
+### Previous: General Ledger Party Filter Fix ✅
 
 Ran backfill script to populate `party_id`, `party_type`, `party_name` for historical transactions.
 

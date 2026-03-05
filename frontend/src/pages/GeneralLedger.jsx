@@ -350,7 +350,7 @@ export default function GeneralLedger() {
                   <SelectValue placeholder="All Parties" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Parties</SelectItem>
+                  <SelectItem value="__all__">All Parties</SelectItem>
                   {partyFilters.customers?.length > 0 && (
                     <>
                       <div className="px-2 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 mt-1">
@@ -401,7 +401,7 @@ export default function GeneralLedger() {
                   <SelectValue placeholder="All Projects" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Projects</SelectItem>
+                  <SelectItem value="__all__">All Projects</SelectItem>
                   {partyFilters.projects?.map(p => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}

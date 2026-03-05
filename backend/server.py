@@ -30337,6 +30337,201 @@ async def get_general_ledger(
     }
 
 
+async def get_all_accounts_general_ledger(
+    start_iso: str,
+    end_iso: str,
+    period_label: str,
+    party_id: Optional[str] = None,
+    party_type: Optional[str] = None,
+    project_id: Optional[str] = None
+) -> dict:
+    """Generate General Ledger for ALL accounts combined.
+    
+    Returns transactions grouped by account, ordered by date.
+    Useful for viewing complete ledger across all accounts.
+    """
+    now = datetime.now(timezone.utc)
+    
+    # Build query filter
+    query = {"created_at": {"$gte": start_iso, "$lte": end_iso}}
+    if party_id:
+        query["party_id"] = party_id
+    if party_type:
+        query["party_type"] = party_type
+    if project_id:
+        query["project_id"] = project_id
+    
+    # Get all transactions within the period
+    transactions = await db.accounting_transactions.find(query, {"_id": 0}).to_list(100000)
+    
+    # Sort by date, then account_id for grouping
+    transactions.sort(key=lambda x: (x.get("created_at", ""), x.get("account_id", "")))
+    
+    # Get all account details for lookup
+    all_accounts = {}
+    
+    # Bank/Cash accounts
+    finance_accounts = await db.finance_accounts.find({}, {"_id": 0}).to_list(100)
+    for acc in finance_accounts:
+        all_accounts[acc.get("account_id")] = {
+            "name": acc.get("account_name") or acc.get("name"),
+            "type": acc.get("account_type", "asset"),
+            "opening_balance": acc.get("opening_balance", 0) or 0
+        }
+    
+    accounting_accounts = await db.accounting_accounts.find({}, {"_id": 0}).to_list(100)
+    for acc in accounting_accounts:
+        if acc.get("account_id") not in all_accounts:
+            all_accounts[acc.get("account_id")] = {
+                "name": acc.get("account_name") or acc.get("name"),
+                "type": acc.get("account_type", "asset"),
+                "opening_balance": acc.get("opening_balance", 0) or 0
+            }
+    
+    # Categories
+    categories = await db.accounting_categories.find({}, {"_id": 0}).to_list(100)
+    for cat in categories:
+        all_accounts[cat.get("category_id")] = {
+            "name": cat.get("name"),
+            "type": "category",
+            "opening_balance": 0
+        }
+    
+    # Build ledger entries grouped by account
+    ledger_by_account = {}
+    total_debit = 0
+    total_credit = 0
+    
+    for txn in transactions:
+        account_id = txn.get("account_id", "unknown")
+        
+        if account_id not in ledger_by_account:
+            acc_info = all_accounts.get(account_id, {"name": account_id, "type": "unknown", "opening_balance": 0})
+            ledger_by_account[account_id] = {
+                "account_id": account_id,
+                "account_name": acc_info["name"],
+                "account_type": acc_info["type"],
+                "entries": [],
+                "total_debit": 0,
+                "total_credit": 0
+            }
+        
+        acc_type = ledger_by_account[account_id]["account_type"]
+        txn_type = txn.get("transaction_type", "")
+        amount = txn.get("amount", 0) or 0
+        
+        # Determine debit/credit based on account type
+        if acc_type in ["liability", "income"]:
+            if txn_type == "outflow":
+                debit, credit = 0, amount
+            else:
+                debit, credit = amount, 0
+        else:
+            if txn_type == "inflow":
+                debit, credit = amount, 0
+            else:
+                debit, credit = 0, amount
+        
+        txn_date = txn.get("date") or txn.get("created_at", "")[:10]
+        
+        ledger_by_account[account_id]["entries"].append({
+            "date": txn_date,
+            "transaction_id": txn.get("transaction_id"),
+            "reference": txn.get("reference_id") or txn.get("transaction_id", "")[:12],
+            "source_module": txn.get("source_module", "cashbook"),
+            "narration": txn.get("remarks") or txn.get("description", ""),
+            "category": txn.get("category_id"),
+            "project_id": txn.get("project_id"),
+            "party_id": txn.get("party_id"),
+            "party_type": txn.get("party_type"),
+            "party_name": txn.get("party_name"),
+            "debit": debit,
+            "credit": credit
+        })
+        
+        ledger_by_account[account_id]["total_debit"] += debit
+        ledger_by_account[account_id]["total_credit"] += credit
+        total_debit += debit
+        total_credit += credit
+    
+    # Convert to list and sort by account name
+    accounts_list = sorted(ledger_by_account.values(), key=lambda x: x["account_name"])
+    
+    # Build flat entries list (all entries sorted by date)
+    all_entries = []
+    for acc in transactions:
+        acc_id = acc.get("account_id", "unknown")
+        acc_info = all_accounts.get(acc_id, {"name": acc_id, "type": "unknown"})
+        acc_type = acc_info["type"]
+        txn_type = acc.get("transaction_type", "")
+        amount = acc.get("amount", 0) or 0
+        
+        if acc_type in ["liability", "income"]:
+            if txn_type == "outflow":
+                debit, credit = 0, amount
+            else:
+                debit, credit = amount, 0
+        else:
+            if txn_type == "inflow":
+                debit, credit = amount, 0
+            else:
+                debit, credit = 0, amount
+        
+        txn_date = acc.get("date") or acc.get("created_at", "")[:10]
+        
+        all_entries.append({
+            "date": txn_date,
+            "account_id": acc_id,
+            "account_name": acc_info["name"],
+            "transaction_id": acc.get("transaction_id"),
+            "reference": acc.get("reference_id") or acc.get("transaction_id", "")[:12],
+            "source_module": acc.get("source_module", "cashbook"),
+            "narration": acc.get("remarks") or acc.get("description", ""),
+            "project_id": acc.get("project_id"),
+            "party_id": acc.get("party_id"),
+            "party_type": acc.get("party_type"),
+            "party_name": acc.get("party_name"),
+            "debit": debit,
+            "credit": credit
+        })
+    
+    # Sort all entries by date
+    all_entries.sort(key=lambda x: x["date"])
+    
+    return {
+        "mode": "all_accounts",
+        "account_id": "all",
+        "account_name": "All Accounts",
+        "account_type": "combined",
+        
+        "period_label": period_label,
+        "start_date": start_iso[:10],
+        "end_date": end_iso[:10],
+        "generated_at": now.isoformat(),
+        
+        # Filters applied
+        "filters": {
+            "party_id": party_id,
+            "party_type": party_type,
+            "project_id": project_id
+        },
+        
+        "summary": {
+            "total_debit": total_debit,
+            "total_credit": total_credit,
+            "net_movement": total_credit - total_debit,
+            "accounts_count": len(accounts_list)
+        },
+        
+        # Grouped by account
+        "accounts": accounts_list,
+        
+        # Flat list sorted by date
+        "entries": all_entries,
+        "entry_count": len(all_entries)
+    }
+
+
 async def get_party_general_ledger(
     account_id: str,
     party_account: dict,

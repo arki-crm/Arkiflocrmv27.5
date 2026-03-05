@@ -355,9 +355,10 @@ The **Project Filter** is useful because:
    - Set `party_type = recipient_type (vendor/employee)`
    - Set `party_name = recipient_name`
 
-### Low Priority
-7. **Consider adding double-entry to Liability Settlement**
-8. **Review Sales Return double-entry requirements**
+### Remaining Items
+7. **Create backfill script for historical transactions** (Medium Priority)
+8. **Consider adding double-entry to Liability Settlement** (Low Priority)
+9. **Review Sales Return double-entry requirements** (Low Priority)
 
 ---
 

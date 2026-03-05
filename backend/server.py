@@ -38703,6 +38703,10 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
             "category_id": None,
             "project_id": entry.project_id,
             "vendor_id": vendor_id,
+            # Party metadata for ledger traceability
+            "party_id": vendor_id,
+            "party_type": "vendor",
+            "party_name": vendor_name,
             "reference_type": "execution_ledger",
             "reference_id": entry_id,
             "liability_id": liability_id,

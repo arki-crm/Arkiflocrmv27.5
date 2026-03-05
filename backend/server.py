@@ -31779,14 +31779,11 @@ async def cancel_receipt(receipt_id: str, request: Request):
         entity_type="receipt",
         entity_id=receipt_id,
         action="cancelled",
-        changes={
-            "status": {"old": receipt.get("status", "active"), "new": "cancelled"},
-            "amount": receipt_amount,
-            "reason": reason,
-            "reversal_transaction_id": reversal_txn_id
-        },
         user_id=user.user_id,
-        user_name=user.name
+        user_name=user.name,
+        old_value={"status": receipt.get("status", "active"), "amount": receipt_amount},
+        new_value={"status": "cancelled", "reversal_txn_id": reversal_txn_id},
+        details=f"Receipt cancelled. Reason: {reason}. Amount reversed: ₹{receipt_amount:,.0f}"
     )
     
     return {

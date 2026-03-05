@@ -30136,18 +30136,48 @@ async def get_general_ledger(
         txn_type = txn.get("transaction_type", "")
         amount = txn.get("amount", 0) or 0
         
-        # Determine debit/credit based on transaction type
-        # For accounts: inflow = credit (money coming in), outflow = debit (money going out)
-        if txn_type == "inflow":
-            debit = 0
-            credit = amount
-            running_balance += amount
-            total_credit += amount
-        else:  # outflow
-            debit = amount
-            credit = 0
-            running_balance -= amount
-            total_debit += amount
+        # Determine debit/credit based on transaction type AND account type
+        # 
+        # For Asset accounts (Bank/Cash): 
+        #   - inflow = Debit (increases asset)
+        #   - outflow = Credit (decreases asset)
+        #
+        # For Liability accounts (Customer Advance, Accounts Payable):
+        #   - outflow = Credit (increases liability)
+        #   - inflow = Debit (decreases liability)
+        #
+        # For Expense accounts:
+        #   - inflow = Debit (increases expense)
+        #   - outflow = Credit (decreases expense - rare)
+        #
+        # For Income accounts:
+        #   - outflow = Credit (increases income)
+        #   - inflow = Debit (decreases income - rare)
+        
+        if account_type in ["liability", "income"]:
+            # Liability/Income: Credit increases, Debit decreases
+            if txn_type == "outflow":
+                debit = 0
+                credit = amount
+                running_balance += amount  # Credit increases liability
+                total_credit += amount
+            else:  # inflow
+                debit = amount
+                credit = 0
+                running_balance -= amount  # Debit decreases liability
+                total_debit += amount
+        else:
+            # Asset/Expense/Default: Debit increases, Credit decreases
+            if txn_type == "inflow":
+                debit = amount
+                credit = 0
+                running_balance += amount  # Debit increases asset
+                total_debit += amount
+            else:  # outflow
+                debit = 0
+                credit = amount
+                running_balance -= amount  # Credit decreases asset
+                total_credit += amount
         
         # Extract date (handle both ISO and date-only formats)
         txn_date = txn.get("date") or txn.get("created_at", "")[:10]

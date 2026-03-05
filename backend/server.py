@@ -30439,13 +30439,17 @@ async def get_all_accounts_general_ledger(
     total_credit = 0
     
     for txn in transactions:
-        account_id = txn.get("account_id", "unknown")
+        account_id = txn.get("account_id")
+        
+        # Skip transactions without account_id
+        if not account_id:
+            continue
         
         if account_id not in ledger_by_account:
             acc_info = all_accounts.get(account_id, {"name": account_id, "type": "unknown", "opening_balance": 0})
             ledger_by_account[account_id] = {
                 "account_id": account_id,
-                "account_name": acc_info["name"],
+                "account_name": acc_info["name"] or account_id,
                 "account_type": acc_info["type"],
                 "entries": [],
                 "total_debit": 0,

@@ -42,9 +42,7 @@ export default function GeneralLedger() {
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [vendors, setVendors] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [employees, setEmployees] = useState([]);
+  const [controlAccounts, setControlAccounts] = useState([]);
   const [partyFilters, setPartyFilters] = useState({ customers: [], vendors: [], employees: [], projects: [] });
   const [allAccountsOption, setAllAccountsOption] = useState(null);
   const [error, setError] = useState(null);

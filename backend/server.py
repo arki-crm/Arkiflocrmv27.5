@@ -30490,8 +30490,8 @@ async def get_all_accounts_general_ledger(
         total_debit += debit
         total_credit += credit
     
-    # Convert to list and sort by account name
-    accounts_list = sorted(ledger_by_account.values(), key=lambda x: x["account_name"])
+    # Convert to list and sort by account name (handle None values)
+    accounts_list = sorted(ledger_by_account.values(), key=lambda x: x.get("account_name") or "")
     
     # Build flat entries list (all entries sorted by date)
     all_entries = []

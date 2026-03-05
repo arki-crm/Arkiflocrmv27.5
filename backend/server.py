@@ -30069,18 +30069,26 @@ async def export_journal_entries_excel(
 @api_router.get("/finance/general-ledger")
 async def get_general_ledger(
     request: Request,
-    account_id: str,  # Mandatory - account to view
+    account_id: str = None,  # Optional - if not provided or "all", show all accounts
+    party_id: str = None,  # Optional - filter by customer/vendor/employee
+    party_type: str = None,  # Optional - customer/vendor/employee
+    project_id: str = None,  # Optional - filter by project
     period: str = "month",  # month, quarter, fy, custom
     start_date: Optional[str] = None,
     end_date: Optional[str] = None
 ):
-    """Get General Ledger for a specific account
+    """Get General Ledger for a specific account or all accounts
     
     Shows:
     - Opening balance (sum of all transactions before start date)
     - Transaction history within date range
     - Running balance
     - Closing balance
+    
+    New Features:
+    - account_id="all" or empty: Returns ledger grouped by account
+    - party_id/party_type: Filter by customer/vendor/employee
+    - project_id: Filter by project
     
     Reads strictly from accounting_transactions.
     Must match Trial Balance for same account/date range.
@@ -30092,9 +30100,6 @@ async def get_general_ledger(
     user_doc = await db.users.find_one({"user_id": user.user_id})
     if not has_permission(user_doc, "finance.general_ledger.view"):
         raise HTTPException(status_code=403, detail="Access denied - no finance.general_ledger.view permission")
-    
-    if not account_id:
-        raise HTTPException(status_code=400, detail="account_id is required")
     
     now = datetime.now(timezone.utc)
     

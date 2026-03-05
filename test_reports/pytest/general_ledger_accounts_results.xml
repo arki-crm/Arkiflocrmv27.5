@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="6" failures="0" skipped="0" tests="11" time="3.030" timestamp="2026-03-05T19:04:25.338829+00:00" hostname="agent-env-fdb04f4e-8734-4f82-8504-18a6a9f28897"><testcase classname="backend.tests.test_general_ledger_accounts.TestGeneralLedgerAccounts" name="test_endpoint_returns_200" time="0.500" /><testcase classname="backend.tests.test_general_ledger_accounts.TestGeneralLedgerAccounts" name="test_response_structure" time="0.425" /><testcase classname="backend.tests.test_general_ledger_accounts.TestGeneralLedgerAccounts" name="test_customers_not_empty" time="0.396" /><testcase classname="backend.tests.test_general_ledger_accounts.TestGeneralLedgerAccounts" name="test_vendors_not_empty" time="0.435" /><testcase classname="backend.tests.test_general_ledger_accounts.TestGeneralLedgerAccounts" name="test_employees_not_empty" time="0.423" /><testcase classname="backend.tests.test_general_ledger_accounts.TestGeneralLedgerAccounts" name="test_projects_not_empty" time="0.122"><error message="failed on setup with &quot;AssertionError: Login failed: {&quot;error&quot;:&quot;Rate limit exceeded: 5 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429]&gt;.status_code&quot;">backend/tests/test_general_ledger_accounts.py:25: in setup
+    assert login_response.status_code == 200, f"Login failed: {login_response.text}"
+E   AssertionError: Login failed: {"error":"Rate limit exceeded: 5 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_general_ledger_accounts.TestGeneralLedgerAccounts" name="test_expected_counts" time="0.117"><error message="failed on setup with &quot;AssertionError: Login failed: {&quot;error&quot;:&quot;Rate limit exceeded: 5 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429]&gt;.status_code&quot;">backend/tests/test_general_ledger_accounts.py:25: in setup
+    assert login_response.status_code == 200, f"Login failed: {login_response.text}"
+E   AssertionError: Login failed: {"error":"Rate limit exceeded: 5 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_general_ledger_accounts.TestGeneralLedgerAccounts" name="test_accounts_have_valid_structure" time="0.107"><error message="failed on setup with &quot;AssertionError: Login failed: {&quot;error&quot;:&quot;Rate limit exceeded: 5 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429]&gt;.status_code&quot;">backend/tests/test_general_ledger_accounts.py:25: in setup
+    assert login_response.status_code == 200, f"Login failed: {login_response.text}"
+E   AssertionError: Login failed: {"error":"Rate limit exceeded: 5 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_general_ledger_accounts.TestGeneralLedgerAccounts" name="test_control_accounts_exist" time="0.113"><error message="failed on setup with &quot;AssertionError: Login failed: {&quot;error&quot;:&quot;Rate limit exceeded: 5 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429]&gt;.status_code&quot;">backend/tests/test_general_ledger_accounts.py:25: in setup
+    assert login_response.status_code == 200, f"Login failed: {login_response.text}"
+E   AssertionError: Login failed: {"error":"Rate limit exceeded: 5 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_general_ledger_accounts.TestGeneralLedgerFiltering" name="test_filter_by_customer" time="0.160"><error message="failed on setup with &quot;assert 429 == 200&#10; +  where 429 = &lt;Response [429]&gt;.status_code&quot;">backend/tests/test_general_ledger_accounts.py:155: in setup
+    assert login_response.status_code == 200
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_general_ledger_accounts.TestGeneralLedgerFiltering" name="test_filter_by_vendor" time="0.125"><error message="failed on setup with &quot;assert 429 == 200&#10; +  where 429 = &lt;Response [429]&gt;.status_code&quot;">backend/tests/test_general_ledger_accounts.py:155: in setup
+    assert login_response.status_code == 200
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429]&gt;.status_code</error></testcase></testsuite></testsuites>

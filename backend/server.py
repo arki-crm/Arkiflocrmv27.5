@@ -31968,15 +31968,19 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
         "account_id": receipt.account_id,
         "project_id": receipt.project_id,
         # Party metadata for ledger traceability
-        "party_id": project.get("customer_id"),
+        # Note: Using project_id as party_id since customers don't have dedicated IDs
+        "party_id": receipt.project_id,  # Use project_id as customer identifier
         "party_type": "customer",
         "party_name": project.get("client_name"),
         "paid_to": None,
         "received_from": project.get("client_name"),
+        "reference_id": receipt_doc["receipt_id"],  # Link to receipt
         "remarks": f"Payment receipt {receipt_number} - {receipt.stage_name or 'Customer Payment'}",
         "receipt_id": receipt_doc["receipt_id"],
         "is_receipt_linked": True,  # Mark as receipt-linked to prevent duplicates
         "is_verified": False,
+        "source_module": "receipts",
+        "source_id": receipt_doc["receipt_id"],
         "created_by": user.user_id,
         "created_by_name": user.name,
         "created_at": now,

@@ -23672,13 +23672,22 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         actual_result = await db.accounting_transactions.aggregate(actual_outflow_pipeline).to_list(1)
         actual_cost = actual_result[0]["total"] if actual_result else 0
         
-        # Get total received from cashbook (inflows linked to this project)
-        inflow_pipeline = [
-            {"$match": {"project_id": project_id, "transaction_type": "inflow"}},
-            {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
-        ]
-        inflow_result = await db.accounting_transactions.aggregate(inflow_pipeline).to_list(1)
-        total_received = inflow_result[0]["total"] if inflow_result else 0
+        # Get total received from receipts (PRIMARY SOURCE - excludes cancelled)
+        # This is the authoritative source for customer payments
+        receipts = await db.finance_receipts.find(
+            {"project_id": project_id, "status": {"$ne": "cancelled"}},
+            {"_id": 0, "amount": 1}
+        ).to_list(1000)
+        total_received = sum(r.get("amount", 0) for r in receipts)
+        
+        # Fallback to accounting_transactions only for legacy projects without receipt records
+        if total_received == 0:
+            inflow_pipeline = [
+                {"$match": {"project_id": project_id, "transaction_type": "inflow", "is_cancelled": {"$ne": True}}},
+                {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+            ]
+            inflow_result = await db.accounting_transactions.aggregate(inflow_pipeline).to_list(1)
+            total_received = inflow_result[0]["total"] if inflow_result else 0
         
         # Get actual remaining liability from finance_liabilities collection
         # Include both "open" and "partially_settled" - real unpaid obligations

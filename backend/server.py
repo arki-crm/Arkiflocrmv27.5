@@ -29064,6 +29064,58 @@ async def get_trial_balance(
             total_debit += bal["debit"]
             total_credit += bal["credit"]
     
+    # ===== SYSTEM ACCOUNTS (Double-Entry Counter Accounts) =====
+    # Get all counter entries for system accounts in period
+    counter_entries = await db.accounting_transactions.find({
+        "created_at": {"$gte": start_iso, "$lte": end_iso},
+        "entry_role": "counter",
+        "is_double_entry": True
+    }, {"_id": 0}).to_list(50000)
+    
+    # Group counter entries by account_id
+    system_account_balances = {}
+    for entry in counter_entries:
+        acc_id = entry.get("account_id")
+        if acc_id not in system_account_balances:
+            # Lookup account type from accounting_accounts
+            acc_doc = await db.accounting_accounts.find_one({"account_id": acc_id}, {"_id": 0})
+            acc_name = acc_doc.get("account_name", acc_id) if acc_doc else acc_id
+            acc_type = acc_doc.get("account_type", "expense") if acc_doc else "expense"
+            system_account_balances[acc_id] = {
+                "account_name": acc_name,
+                "account_id": acc_id,
+                "account_type": acc_type,
+                "debit": 0,
+                "credit": 0
+            }
+        
+        amount = entry.get("amount", 0)
+        # inflow = credit increase, outflow = debit increase
+        if entry.get("transaction_type") == "inflow":
+            system_account_balances[acc_id]["credit"] += amount
+        else:
+            system_account_balances[acc_id]["debit"] += amount
+    
+    # Add system accounts to appropriate groups
+    for acc_id, bal in system_account_balances.items():
+        if bal["debit"] == 0 and bal["credit"] == 0:
+            continue
+            
+        acc_type = bal["account_type"]
+        bal["net"] = bal["debit"] - bal["credit"] if acc_type in ["asset", "expense"] else bal["credit"] - bal["debit"]
+        
+        if acc_type == "liability":
+            trial_balance["liabilities"].append(bal)
+        elif acc_type == "income":
+            trial_balance["income"].append(bal)
+        elif acc_type == "expense":
+            trial_balance["expenses"].append(bal)
+        elif acc_type == "asset":
+            trial_balance["assets"].append(bal)
+        
+        total_debit += bal["debit"]
+        total_credit += bal["credit"]
+    
     # ===== INCOME =====
     # Project Revenue (inflows linked to projects)
     project_income = sum(t.get("amount", 0) for t in transactions 

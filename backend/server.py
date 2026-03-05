@@ -23674,14 +23674,18 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         
         # Get total received from receipts (PRIMARY SOURCE - excludes cancelled)
         # This is the authoritative source for customer payments
-        receipts = await db.finance_receipts.find(
+        active_receipts = await db.finance_receipts.find(
             {"project_id": project_id, "status": {"$ne": "cancelled"}},
             {"_id": 0, "amount": 1}
         ).to_list(1000)
-        total_received = sum(r.get("amount", 0) for r in receipts)
+        total_received = sum(r.get("amount", 0) for r in active_receipts)
         
-        # Fallback to accounting_transactions only for legacy projects without receipt records
-        if total_received == 0:
+        # Check if this project has ANY receipt records (including cancelled)
+        # Only fall back to accounting_transactions for truly legacy projects with no receipts
+        has_any_receipts = await db.finance_receipts.find_one({"project_id": project_id}) is not None
+        
+        if not has_any_receipts and total_received == 0:
+            # Legacy project without receipt records - use accounting transactions
             inflow_pipeline = [
                 {"$match": {"project_id": project_id, "transaction_type": "inflow", "is_cancelled": {"$ne": True}}},
                 {"$group": {"_id": None, "total": {"$sum": "$amount"}}}

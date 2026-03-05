@@ -249,31 +249,13 @@ async def create_double_entry_pair(
     counter_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
     
     primary_type = primary_txn.get("transaction_type")
-    counter_account_type = counter_account_info.get("account_type", "expense")
     
-    # Determine counter transaction type based on accounting rules
-    # The goal: Total Debits = Total Credits
-    # 
-    # If primary is INFLOW (to bank = bank debit):
-    #   - For liability/income accounts: counter should be INFLOW (credit) - increases liability
-    #   - For asset/expense accounts: counter should be OUTFLOW (debit) - but this is unusual
-    #
-    # If primary is OUTFLOW (from bank = bank credit):
-    #   - For expense/asset accounts: counter should be OUTFLOW (debit) - increases expense
-    #   - For liability accounts: counter should be INFLOW (credit) - but this means paying liability
-    
+    # Counter entry must use OPPOSITE transaction_type of primary
+    # This ensures: Total Debits = Total Credits
     if primary_type == "inflow":
-        # Bank received money (Bank Debit)
-        # Counter must be Credit to balance
-        # For liability/income: inflow = credit (correct - increases)
-        # For expense/asset: inflow = credit (unusual - would decrease)
-        counter_type = "inflow"  # Credit
+        counter_type = "outflow"
     else:
-        # Bank paid money (Bank Credit)
-        # Counter must be Debit to balance
-        # For expense/asset: outflow = debit (correct - increases)
-        # For liability: outflow = debit (correct - decreases when paying)
-        counter_type = "outflow"  # Debit
+        counter_type = "inflow"
     
     # Create counter entry
     counter_txn = {

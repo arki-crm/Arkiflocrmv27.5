@@ -45,10 +45,14 @@ export default function GeneralLedger() {
   const [vendors, setVendors] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [partyFilters, setPartyFilters] = useState({ customers: [], vendors: [], employees: [], projects: [] });
+  const [allAccountsOption, setAllAccountsOption] = useState(null);
   const [error, setError] = useState(null);
   
   // Filters
   const [selectedAccount, setSelectedAccount] = useState('');
+  const [selectedParty, setSelectedParty] = useState('');
+  const [selectedProject, setSelectedProject] = useState('');
   const [period, setPeriod] = useState('month');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');

@@ -34095,6 +34095,10 @@ async def create_salary_payment(data: SalaryPaymentCreate, request: Request):
         # Additional metadata for reports
         "employee_id": data.employee_id,
         "employee_name": salary_master.get("employee_name", "Unknown"),
+        # Party metadata for ledger traceability
+        "party_id": data.employee_id,
+        "party_type": "employee",
+        "party_name": salary_master.get("employee_name", "Unknown"),
         "payment_category": data.payment_type,  # advance, salary, final_settlement
         "created_at": now.isoformat(),
         "created_by": user.user_id,

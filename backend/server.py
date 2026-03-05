@@ -31602,13 +31602,30 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
 
 
 @api_router.post("/finance/receipts/{receipt_id}/cancel")
-async def cancel_receipt(receipt_id: str, reason: str, request: Request):
-    """Cancel a receipt"""
+async def cancel_receipt(receipt_id: str, request: Request):
+    """Cancel a receipt with full accounting reversal
+    
+    This endpoint:
+    1. Creates automatic reverse accounting entries (double-entry)
+    2. Reduces project advance_received amount
+    3. Marks receipt status as CANCELLED
+    4. Maintains audit log
+    
+    Note: Receipt corrections must be done through this endpoint, NOT journal entries.
+    Journal entry reversals do NOT affect project financials.
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
     if not has_permission(user_doc, "finance.issue_refund"):
         raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get cancellation reason from request body
+    try:
+        body = await request.json()
+        reason = body.get("reason", "Receipt cancelled")
+    except:
+        reason = "Receipt cancelled"
     
     receipt = await db.finance_receipts.find_one({"receipt_id": receipt_id})
     if not receipt:
@@ -31618,25 +31635,168 @@ async def cancel_receipt(receipt_id: str, reason: str, request: Request):
         raise HTTPException(status_code=400, detail="Receipt already cancelled")
     
     now = datetime.now(timezone.utc)
+    receipt_amount = receipt.get("amount", 0)
+    project_id = receipt.get("project_id")
+    account_id = receipt.get("account_id")
+    original_txn_id = receipt.get("transaction_id")
     
+    # 1. Mark receipt as CANCELLED
     await db.finance_receipts.update_one(
         {"receipt_id": receipt_id},
         {"$set": {
             "status": "cancelled",
             "cancelled_by": user.user_id,
             "cancelled_by_name": user.name,
-            "cancelled_at": now,
+            "cancelled_at": now.isoformat(),
             "cancellation_reason": reason
         }}
     )
     
-    # Also cancel the linked transaction
-    await db.accounting_transactions.update_one(
-        {"receipt_id": receipt_id},
-        {"$set": {"is_cancelled": True, "cancelled_at": now, "cancellation_reason": reason}}
+    # 2. Create REVERSE accounting entries (double-entry)
+    # Original receipt was: Bank Debit, Customer Advance Credit
+    # Reversal must be: Bank Credit, Customer Advance Debit
+    
+    reversal_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+    reversal_date = now.strftime("%Y-%m-%d")
+    
+    # Primary reversal entry: Outflow from Bank (Bank Credit)
+    primary_reversal = {
+        "transaction_id": reversal_txn_id,
+        "transaction_date": reversal_date,
+        "transaction_type": "outflow",  # Bank Credit (reduces bank)
+        "amount": receipt_amount,
+        "mode": receipt.get("payment_mode", "bank_transfer"),
+        "category_id": "receipt_cancellation",
+        "account_id": account_id,
+        "project_id": project_id,
+        "remarks": f"Reversal: Receipt {receipt.get('receipt_number')} cancelled - {reason}",
+        
+        # Linking
+        "is_reversal": True,
+        "reverses_transaction_id": original_txn_id,
+        "receipt_id": receipt_id,
+        "reference_id": receipt_id,
+        
+        # Double-entry markers
+        "is_double_entry": True,
+        "entry_role": "primary",
+        
+        # Flags
+        "is_cashbook_entry": True,
+        "is_daybook_entry": True,
+        "source_module": "receipt_cancellation",
+        "source_id": receipt_id,
+        
+        # Metadata
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "updated_at": now.isoformat()
+    }
+    
+    await db.accounting_transactions.insert_one(primary_reversal)
+    
+    # Counter reversal entry: Inflow to Customer Advance (Liability Debit - reduces liability)
+    if is_double_entry_required(reversal_date):
+        counter_reversal_id = f"txn_{uuid.uuid4().hex[:12]}"
+        counter_reversal = {
+            "transaction_id": counter_reversal_id,
+            "transaction_date": reversal_date,
+            "transaction_type": "inflow",  # Liability Debit (reduces Customer Advance)
+            "amount": receipt_amount,
+            "mode": "double_entry",
+            "category_id": "receipt_cancellation",
+            "account_id": "acc_customer_advance",
+            "project_id": project_id,
+            "remarks": f"[DE] Reversal: Receipt {receipt.get('receipt_number')} cancelled",
+            
+            # Linking
+            "is_reversal": True,
+            "is_double_entry": True,
+            "paired_transaction_id": reversal_txn_id,
+            "reference_id": receipt_id,
+            "entry_role": "counter",
+            
+            # Metadata
+            "is_system_generated": True,
+            "source_module": "receipt_cancellation",
+            "created_at": now.isoformat(),
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "updated_at": now.isoformat()
+        }
+        
+        await db.accounting_transactions.insert_one(counter_reversal)
+        
+        # Update primary with paired_transaction_id
+        await db.accounting_transactions.update_one(
+            {"transaction_id": reversal_txn_id},
+            {"$set": {"paired_transaction_id": counter_reversal_id}}
+        )
+    
+    # 3. Update bank account balance (reduce by outflow)
+    await db.accounting_accounts.update_one(
+        {"account_id": account_id},
+        {"$inc": {"current_balance": -receipt_amount}}
     )
     
-    return {"success": True, "message": "Receipt cancelled"}
+    # 4. Reduce project advance_received amount
+    if project_id:
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {"$inc": {"advance_received": -receipt_amount}}
+        )
+    
+    # 5. Mark original transaction as cancelled (soft delete)
+    if original_txn_id:
+        await db.accounting_transactions.update_one(
+            {"transaction_id": original_txn_id},
+            {"$set": {
+                "is_cancelled": True,
+                "cancelled_at": now.isoformat(),
+                "cancellation_reason": reason,
+                "reversed_by_transaction_id": reversal_txn_id
+            }}
+        )
+        
+        # Also mark the original counter entry as cancelled
+        original_counter = await db.accounting_transactions.find_one({
+            "paired_transaction_id": original_txn_id,
+            "entry_role": "counter"
+        })
+        if original_counter:
+            await db.accounting_transactions.update_one(
+                {"transaction_id": original_counter["transaction_id"]},
+                {"$set": {
+                    "is_cancelled": True,
+                    "cancelled_at": now.isoformat(),
+                    "cancellation_reason": reason
+                }}
+            )
+    
+    # 6. Create audit log
+    await create_audit_log(
+        entity_type="receipt",
+        entity_id=receipt_id,
+        action="cancelled",
+        changes={
+            "status": {"old": receipt.get("status", "active"), "new": "cancelled"},
+            "amount": receipt_amount,
+            "reason": reason,
+            "reversal_transaction_id": reversal_txn_id
+        },
+        user_id=user.user_id,
+        user_name=user.name
+    )
+    
+    return {
+        "success": True,
+        "message": f"Receipt {receipt.get('receipt_number')} cancelled successfully",
+        "receipt_id": receipt_id,
+        "amount_reversed": receipt_amount,
+        "reversal_transaction_id": reversal_txn_id,
+        "project_advance_reduced": project_id is not None
+    }
 
 
 # ============ REFUNDS ============

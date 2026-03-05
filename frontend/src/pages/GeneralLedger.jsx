@@ -102,6 +102,15 @@ export default function GeneralLedger() {
       if (period === 'custom' && customStart && customEnd) {
         url += `&start_date=${customStart}&end_date=${customEnd}`;
       }
+      // Add party filter if selected
+      if (selectedParty) {
+        const [partyType, partyId] = selectedParty.split(':');
+        url += `&party_id=${partyId}&party_type=${partyType}`;
+      }
+      // Add project filter if selected
+      if (selectedProject) {
+        url += `&project_id=${selectedProject}`;
+      }
       
       const res = await axios.get(url, { withCredentials: true });
       setLedgerData(res.data);

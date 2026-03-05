@@ -30760,6 +30760,11 @@ async def get_ledger_accounts(request: Request):
             "type": "combined",
             "group": "View All"
         },
+        
+        # ============================================================
+        # REAL ACCOUNTS ONLY (for Account dropdown)
+        # These are chart of accounts entries, NOT party sub-ledgers
+        # ============================================================
         "accounts": [
             {
                 "id": acc.get("account_id"),
@@ -30780,54 +30785,25 @@ async def get_ledger_accounts(request: Request):
             }
             for cat in categories
         ],
-        "vendors": [
-            {
-                "id": v.get("account_id"),
-                "name": v.get("account_name"),
-                "type": "party_subledger",
-                "party_type": "vendor",
-                "party_id": v.get("party_id"),
-                "group": "Accounts Payable",
-                "balance": v.get("current_balance", 0)
-            }
-            for v in vendor_accounts
-        ],
-        "customers": [
-            {
-                "id": c.get("account_id"),
-                "name": c.get("account_name"),
-                "type": "party_subledger",
-                "party_type": "customer",
-                "party_id": c.get("party_id"),
-                "group": "Accounts Receivable",
-                "balance": c.get("current_balance", 0)
-            }
-            for c in customer_accounts
-        ],
-        "employees": [
-            {
-                "id": e.get("account_id"),
-                "name": e.get("account_name"),
-                "type": "party_subledger",
-                "party_type": "employee",
-                "party_id": e.get("party_id"),
-                "group": "Employee Control",
-                "balance": e.get("current_balance", 0)
-            }
-            for e in employee_accounts
-        ],
+        # Control accounts (Customer Advance, Accounts Payable, etc.)
+        # These ARE real accounts and should be in Account dropdown
         "control_accounts": [
             {
                 "id": ctrl.get("account_id"),
                 "name": ctrl.get("account_name"),
-                "type": "control",
+                "type": ctrl.get("account_type", "control"),
                 "party_type": ctrl.get("party_type"),
                 "group": "Control Accounts",
                 "balance": ctrl.get("current_balance", 0)
             }
             for ctrl in control_accounts
         ],
-        # Party filters for filtering transactions
+        
+        # ============================================================
+        # PARTY FILTERS (for Party dropdown)
+        # These are sub-ledger entities (customers, vendors, employees)
+        # NOT accounts - they are filtered via party_id, not account_id
+        # ============================================================
         "party_filters": {
             "customers": [
                 {"id": c.get("customer_id"), "name": c.get("client_name"), "type": "customer"}

@@ -30728,119 +30728,60 @@ async def get_ledger_accounts(request: Request):
     employee_accounts = [p for p in party_accounts if p.get("party_type") == "employee" and not p.get("is_control")]
     control_accounts = [p for p in party_accounts if p.get("is_control")]
     
-    # Get customers list for party filter
-    # Customers are stored as client_name in projects collection
-    # Also get unique customers from accounting_transactions for completeness
+    # ==========================================================================
+    # PARTY FILTERS - MASTER DATA SOURCES ONLY
+    # Do NOT derive parties from accounting_transactions to avoid duplicates
+    # Filtering must rely on IDs, not names
+    # ==========================================================================
+    
+    # CUSTOMERS: Use project_id as customer identifier since no customer master exists
+    # Each project has a unique client, identified by project_id
+    # Note: This is a data model limitation - consider creating a customers collection
     projects_with_clients = await db.projects.find(
-        {"client_name": {"$ne": None}},
-        {"_id": 0, "project_id": 1, "client_name": 1}
+        {"client_name": {"$ne": None}, "status": {"$nin": ["Cancelled"]}},
+        {"_id": 0, "project_id": 1, "client_name": 1, "client_phone": 1}
     ).sort("client_name", 1).to_list(1000)
     
-    # Get unique customers from accounting_transactions (the authoritative source)
-    customer_transactions = await db.accounting_transactions.aggregate([
-        {"$match": {"party_type": "customer", "party_name": {"$ne": None}}},
-        {"$group": {
-            "_id": {"party_id": "$party_id", "party_name": "$party_name"},
-            "party_id": {"$first": "$party_id"},
-            "party_name": {"$first": "$party_name"}
-        }},
-        {"$sort": {"party_name": 1}}
-    ]).to_list(1000)
-    
-    # Merge customers from both sources (prefer transactions as they have party_id)
-    seen_customers = set()
+    # Dedupe customers by name (multiple projects can have same client)
+    seen_customer_names = {}
     customers_list = []
-    for c in customer_transactions:
-        key = (c.get("party_id") or "", c.get("party_name") or "")
-        if key not in seen_customers and c.get("party_name"):
-            seen_customers.add(key)
-            customers_list.append({
-                "customer_id": c.get("party_id") or f"customer_{c.get('party_name', '').lower().replace(' ', '_')}",
-                "client_name": c.get("party_name")
-            })
-    # Add from projects if not already present
     for p in projects_with_clients:
         name = p.get("client_name")
-        if name and (None, name) not in seen_customers and ("", name) not in seen_customers:
-            # Check if this name is already added
-            if not any(c.get("client_name") == name for c in customers_list):
-                customers_list.append({
-                    "customer_id": f"project_{p.get('project_id', '')}",
-                    "client_name": name
-                })
+        if name and name not in seen_customer_names:
+            # Use project_id as the stable identifier for this customer
+            customers_list.append({
+                "customer_id": p.get("project_id"),  # Use project_id as customer identifier
+                "client_name": name
+            })
+            seen_customer_names[name] = p.get("project_id")
     
-    # Get vendors list for party filter
-    # finance_vendors collection uses 'name' field, not 'vendor_name'
+    # VENDORS: Use finance_vendors collection (master data)
+    # vendor_id is the stable identifier
+    vendors_list = []
     vendors_from_db = await db.finance_vendors.find(
         {},
         {"_id": 0, "vendor_id": 1, "name": 1}
     ).sort("name", 1).to_list(1000)
     
-    # Also get unique vendors from accounting_transactions
-    vendor_transactions = await db.accounting_transactions.aggregate([
-        {"$match": {"party_type": "vendor", "party_name": {"$ne": None}}},
-        {"$group": {
-            "_id": {"party_id": "$party_id", "party_name": "$party_name"},
-            "party_id": {"$first": "$party_id"},
-            "party_name": {"$first": "$party_name"}
-        }},
-        {"$sort": {"party_name": 1}}
-    ]).to_list(1000)
-    
-    # Merge vendors
-    seen_vendors = set()
-    vendors_list = []
-    for v in vendor_transactions:
-        key = v.get("party_id") or v.get("party_name")
-        if key and key not in seen_vendors:
-            seen_vendors.add(key)
-            vendors_list.append({
-                "vendor_id": v.get("party_id"),
-                "vendor_name": v.get("party_name")
-            })
     for v in vendors_from_db:
-        key = v.get("vendor_id") or v.get("name")
-        if key and key not in seen_vendors:
-            seen_vendors.add(key)
+        if v.get("vendor_id") and v.get("name"):
             vendors_list.append({
                 "vendor_id": v.get("vendor_id"),
                 "vendor_name": v.get("name")
             })
     
-    # Get employees list for party filter  
-    # Employees are in users collection with specific roles
-    employee_roles = ["Designer", "DesignManager", "ProjectManager", "SiteEngineer", "Sales", "PreSales", "FinanceManager", "HR", "Admin"]
+    # EMPLOYEES: Use users collection (master data)
+    # user_id is the stable identifier
+    employee_roles = ["Designer", "DesignManager", "ProjectManager", "SiteEngineer", 
+                      "Sales", "PreSales", "FinanceManager", "HR", "Admin", "Founder"]
+    employees_list = []
     employees_from_db = await db.users.find(
-        {"role": {"$in": employee_roles}},
-        {"_id": 0, "user_id": 1, "name": 1}
+        {"role": {"$in": employee_roles}, "status": "Active"},
+        {"_id": 0, "user_id": 1, "name": 1, "role": 1}
     ).sort("name", 1).to_list(500)
     
-    # Also get unique employees from accounting_transactions
-    employee_transactions = await db.accounting_transactions.aggregate([
-        {"$match": {"party_type": "employee", "party_name": {"$ne": None}}},
-        {"$group": {
-            "_id": {"party_id": "$party_id", "party_name": "$party_name"},
-            "party_id": {"$first": "$party_id"},
-            "party_name": {"$first": "$party_name"}
-        }},
-        {"$sort": {"party_name": 1}}
-    ]).to_list(500)
-    
-    # Merge employees
-    seen_employees = set()
-    employees_list = []
-    for e in employee_transactions:
-        key = e.get("party_id") or e.get("party_name")
-        if key and key not in seen_employees:
-            seen_employees.add(key)
-            employees_list.append({
-                "user_id": e.get("party_id"),
-                "name": e.get("party_name")
-            })
     for e in employees_from_db:
-        key = e.get("user_id") or e.get("name")
-        if key and key not in seen_employees:
-            seen_employees.add(key)
+        if e.get("user_id") and e.get("name"):
             employees_list.append({
                 "user_id": e.get("user_id"),
                 "name": e.get("name")

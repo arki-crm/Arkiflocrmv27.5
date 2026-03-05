@@ -31424,10 +31424,12 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
     
     # ============ DOUBLE-ENTRY ENFORCEMENT ============
     if is_double_entry_required(payment_date):
-        revenue_account = {"account_id": "acc_revenue", "account_name": "Sales Revenue", "account_type": "income"}
+        # Customer receipts credit Customer Advance (liability), NOT revenue
+        # Revenue is recognized later via Journal Entry when work is completed/billed
+        customer_advance_account = {"account_id": "acc_customer_advance", "account_name": "Customer Advance", "account_type": "liability"}
         await create_double_entry_pair(
             primary_txn=txn_doc,
-            counter_account_info=revenue_account,
+            counter_account_info=customer_advance_account,
             user_id=user.user_id,
             user_name=user.name
         )

@@ -32062,6 +32062,10 @@ async def cancel_receipt(receipt_id: str, request: Request):
     account_id = receipt.get("account_id")
     original_txn_id = receipt.get("transaction_id")
     
+    # Get project for party metadata
+    project = await db.projects.find_one({"project_id": project_id}) if project_id else None
+    party_name = project.get("client_name") if project else None
+    
     # 1. Mark receipt as CANCELLED
     await db.finance_receipts.update_one(
         {"receipt_id": receipt_id},

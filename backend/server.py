@@ -28883,8 +28883,10 @@ async def get_trial_balance(
     start_iso = start.isoformat()
     end_iso = end.isoformat()
     
-    # Get all accounts
+    # Get all bank/cash accounts (check both collections for compatibility)
     accounts = await db.finance_accounts.find({}, {"_id": 0}).to_list(100)
+    if not accounts:
+        accounts = await db.accounting_accounts.find({"is_active": True}, {"_id": 0}).to_list(100)
     accounts_map = {a["account_id"]: a for a in accounts}
     
     # Get all categories

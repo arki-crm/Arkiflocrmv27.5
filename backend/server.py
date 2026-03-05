@@ -30207,10 +30207,13 @@ async def get_general_ledger(
     
     # Calculate Opening Balance
     # Opening = Master opening balance + sum of transactions BEFORE start date
-    transactions_before = await db.accounting_transactions.find({
-        "account_id": account_id,
-        "created_at": {"$lt": start_iso}
-    }, {"_id": 0, "transaction_type": 1, "amount": 1}).to_list(100000)
+    opening_query = {"account_id": account_id, "created_at": {"$lt": start_iso}}
+    if party_filter:
+        opening_query.update(party_filter)
+    
+    transactions_before = await db.accounting_transactions.find(
+        opening_query, {"_id": 0, "transaction_type": 1, "amount": 1}
+    ).to_list(100000)
     
     inflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "inflow")
     outflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "outflow")
@@ -30220,10 +30223,11 @@ async def get_general_ledger(
     calculated_opening = opening_balance_from_master + inflows_before - outflows_before
     
     # Get transactions within the period
-    transactions = await db.accounting_transactions.find({
-        "account_id": account_id,
-        "created_at": {"$gte": start_iso, "$lte": end_iso}
-    }, {"_id": 0}).to_list(50000)
+    period_query = {"account_id": account_id, "created_at": {"$gte": start_iso, "$lte": end_iso}}
+    if party_filter:
+        period_query.update(party_filter)
+    
+    transactions = await db.accounting_transactions.find(period_query, {"_id": 0}).to_list(50000)
     
     # Sort by date (created_at), then by transaction_id for consistency
     transactions.sort(key=lambda x: (x.get("created_at", ""), x.get("transaction_id", "")))

@@ -73,9 +73,7 @@ export default function GeneralLedger() {
       });
       setAccounts(res.data.accounts || []);
       setCategories(res.data.categories || []);
-      setVendors(res.data.vendors || []);
-      setCustomers(res.data.customers || []);
-      setEmployees(res.data.employees || []);
+      setControlAccounts(res.data.control_accounts || []);
       setAllAccountsOption(res.data.all_accounts_option || null);
       setPartyFilters(res.data.party_filters || { customers: [], vendors: [], employees: [], projects: [] });
     } catch (err) {

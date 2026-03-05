@@ -365,10 +365,10 @@ The **Project Filter** is useful because:
 9. **Recurring Payments** ✅ - Now creates double-entry
 10. **Sales Return Refund** ✅ - Now creates double-entry + party metadata
 
-### Remaining Items
-7. **Create backfill script for historical transactions** (Medium Priority)
-8. **Consider adding double-entry to Liability Settlement** (Low Priority)
-9. **Review Sales Return double-entry requirements** (Low Priority)
+### Remaining Items - DONE
+All high and medium priority items completed. Remaining low-priority items:
+- Credit/Debit notes: Daybook entries, no double-entry needed
+- Cash disbursement: Review if needed (rare usage)
 
 ---
 

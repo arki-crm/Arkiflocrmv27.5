@@ -1798,7 +1798,7 @@ const ProjectFinanceDetail = () => {
                     <tr>
                       <td colSpan={2} className="px-4 py-3 text-sm font-semibold text-slate-700">Total Received</td>
                       <td className="px-4 py-3 text-sm font-bold text-green-600 text-right">
-                        {formatCurrency(projectReceipts.reduce((sum, r) => sum + (r.amount || 0), 0))}
+                        {formatCurrency(projectReceipts.filter(r => r.status !== 'cancelled').reduce((sum, r) => sum + (r.amount || 0), 0))}
                       </td>
                       <td colSpan={3}></td>
                     </tr>

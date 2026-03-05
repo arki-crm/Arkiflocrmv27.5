@@ -29132,9 +29132,10 @@ async def get_trial_balance(
         total_credit += project_income
     
     # Other Income (inflows not linked to projects)
+    # Exclude: internal transfers, customer payments (handled via Customer Advance liability)
     other_income = sum(t.get("amount", 0) for t in transactions 
                       if not t.get("project_id") and t.get("transaction_type") == "inflow"
-                      and t.get("category_id") != "internal_transfer")
+                      and t.get("category_id") not in ["internal_transfer", "customer_payment"])
     
     if other_income > 0:
         trial_balance["income"].append({

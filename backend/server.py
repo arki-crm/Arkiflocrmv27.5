@@ -32141,6 +32141,11 @@ async def cancel_receipt(receipt_id: str, request: Request):
             "project_id": project_id,
             "remarks": f"[DE] Reversal: Receipt {receipt.get('receipt_number')} cancelled",
             
+            # Party metadata (copy from primary for traceability)
+            "party_id": project_id,
+            "party_type": "customer",
+            "party_name": party_name,
+            
             # Linking
             "is_reversal": True,
             "is_double_entry": True,

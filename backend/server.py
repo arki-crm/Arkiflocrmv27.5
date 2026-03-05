@@ -35980,6 +35980,10 @@ async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, requ
         # Additional metadata
         "employee_id": incentive.get("employee_id"),
         "employee_name": incentive.get("employee_name", "Employee"),
+        # Party metadata for ledger traceability
+        "party_id": incentive.get("employee_id"),
+        "party_type": "employee",
+        "party_name": incentive.get("employee_name", "Employee"),
         "payment_category": "incentive",
         "incentive_type": incentive.get("incentive_type"),
         "created_at": now.isoformat(),

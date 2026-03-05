@@ -9,62 +9,59 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Finance Summary Strict Source Tables COMPLETE ✅
+## Current Status: General Ledger Improvements COMPLETE ✅
 **As of March 5, 2026**
 
-### Finance Summary Refactor - Strict Source Tables (No accounting_transactions)
+### General Ledger Module Improvements
 
-Refactored Financial Summary to use strict operational source tables instead of `accounting_transactions`.
+Two major enhancements implemented for accountant workflow.
 
-| Metric | Source Table | Query |
-|--------|--------------|-------|
-| **Total Received** | `finance_receipts` | `SUM(amount WHERE status != "cancelled")` |
-| **Actual Cost** | `execution_ledger` + `finance_expense_requests` | `SUM(purchase invoices) + SUM(approved/recorded expenses)` |
-| **Planned Cost** | `finance_vendor_mappings` | `SUM(planned_amount)` |
-| **Remaining Liability** | Calculated | `planned_cost - actual_cost` |
-| **Safe Surplus** | Calculated | `total_received - actual_cost` |
+#### 1. "All Accounts" Combined Ledger View
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **All Accounts Option** | New option in Account dropdown | ✅ |
+| **Combined View** | Shows transactions from ALL accounts grouped by date | ✅ |
+| **Summary Totals** | Total Debit, Total Credit, Accounts Count | ✅ |
+| **Flat Entry List** | All entries sorted by date for chronological view | ✅ |
 
-**Key Principle:**
-- `accounting_transactions` is for **LEDGER ONLY** (Trial Balance, General Ledger, Daybook)
-- **Operational summaries** must use **operational tables** (receipts, invoices, expenses)
+**API:** `GET /finance/general-ledger?account_id=all&period=month`
 
-**Endpoints Updated:**
-| # | Endpoint | Changes |
-|---|----------|---------|
-| 1 | `GET /finance/project-finance` | Removed all `accounting_transactions` queries |
-| 2 | `GET /finance/project-finance/{id}` | Uses `execution_ledger` + `finance_expense_requests` for costs |
-| 3 | Vendor mapping CRUD | `spending_started` now checks operational tables |
+#### 2. Party Filter for Customer/Vendor Transactions
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Party Dropdown** | Filter by Customer, Vendor, or Employee | ✅ |
+| **Project Dropdown** | Filter by Project | ✅ |
+| **Party Metadata** | Transactions now include `party_id`, `party_type`, `party_name` | ✅ |
+| **Double-Entry Support** | Counter entries also store party metadata | ✅ |
 
-**Bug Fix (White Screen):**
-- Added `transactions` array back to API response (required by frontend)
-- Transactions now built from operational tables (receipts, invoices, expenses)
+**API Parameters:**
+- `party_id` - Filter by specific customer/vendor/employee ID
+- `party_type` - "customer", "vendor", or "employee"
+- `project_id` - Filter by project
 
-**Response Structure:**
+**Ledger Entry Structure:**
 ```json
 {
-  "summary": {
-    "total_received": 32500,
-    "actual_cost": 0,
-    "purchase_invoice_total": 0,
-    "expense_total": 0,
-    "planned_cost": 0,
-    "remaining_liability": 0,
-    "safe_surplus": 32500
-  },
-  "transactions": [...],  // Built from operational tables
-  "vendor_mappings": [...],
-  "comparison": [...]
+  "date": "2026-03-05",
+  "account_name": "Petty Cash",
+  "narration": "Customer advance payment",
+  "party_id": "cust_12345",
+  "party_type": "customer",
+  "party_name": "Acme Corp",
+  "project_id": "proj_8aeea5f1",
+  "debit": 10000,
+  "credit": 0
 }
 ```
 
-**Verification:**
-- Receipt list total matches Finance Summary `total_received` ✅
-- Project Finance Detail page loads correctly ✅
-- Cancelled receipts excluded from totals ✅
+**Use Cases:**
+1. Accountants can view full ledger across all accounts for date range
+2. Filter transactions by specific customer to trace all their payments
+3. Filter by project to see all financial activity for a project
 
 ---
 
-### Previous: Finance Summary Aggregation Fix
+### Previous: Finance Summary Strict Source Tables
 
 Implemented a full Receipt Management UI with safe cancellation workflow that ensures accounting integrity.
 

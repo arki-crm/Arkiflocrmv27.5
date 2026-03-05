@@ -23958,6 +23958,7 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "expense_total": approved_expense_total + recorded_expense_total
         },
         "vendor_mappings": vendor_mappings,
+        "transactions": transactions,
         "comparison": comparison,
         "can_edit_vendor_mapping": not spending_started and not production_started,
         "spending_started": spending_started,

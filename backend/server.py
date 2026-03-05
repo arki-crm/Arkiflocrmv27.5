@@ -28892,8 +28892,10 @@ async def get_trial_balance(
     categories_map = {c["category_id"]: c for c in categories}
     
     # Get transactions in the period
+    # Exclude double-entry counter transactions to avoid double-counting
     transactions = await db.accounting_transactions.find({
-        "created_at": {"$gte": start_iso, "$lte": end_iso}
+        "created_at": {"$gte": start_iso, "$lte": end_iso},
+        "entry_role": {"$ne": "counter"}  # Exclude counter entries - they are paired with primaries
     }, {"_id": 0}).to_list(50000)
     
     # Initialize trial balance structure

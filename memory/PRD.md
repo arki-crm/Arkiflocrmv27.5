@@ -9,44 +9,55 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Finance Summary Aggregation Fix COMPLETE ✅
+## Current Status: Finance Summary Strict Source Tables COMPLETE ✅
 **As of March 5, 2026**
 
-### Finance Summary Widget - Query-Based Calculation (Not Event-Based)
+### Finance Summary Refactor - Strict Source Tables (No accounting_transactions)
 
-Fixed the root cause where Finance Summary was using event-based incrementing via `accounting_transactions` instead of query-based calculation from `finance_receipts`.
+Refactored Financial Summary to use strict operational source tables instead of `accounting_transactions`.
 
-| # | Endpoint | Issue | Fix Applied | Status |
-|---|----------|-------|-------------|--------|
-| 1 | `/finance/project-finance` | Used `accounting_transactions` inflows | Now uses `finance_receipts` with `status != cancelled` | ✅ |
-| 2 | `/finance/project-finance/{id}` | `total_inflow` from transactions | Now uses `finance_receipts` as primary source | ✅ |
-| 3 | `/finance/project-profit/{id}` | Fallback to inflows if receipts=0 | Only fallback if NO receipt records exist | ✅ |
+| Metric | Source Table | Query |
+|--------|--------------|-------|
+| **Total Received** | `finance_receipts` | `SUM(amount WHERE status != "cancelled")` |
+| **Actual Cost** | `execution_ledger` + `finance_expense_requests` | `SUM(purchase invoices) + SUM(approved/recorded expenses)` |
+| **Planned Cost** | `finance_vendor_mappings` | `SUM(planned_amount)` |
+| **Remaining Liability** | Calculated | `planned_cost - actual_cost` |
+| **Safe Surplus** | Calculated | `total_received - actual_cost` |
 
-**Root Cause:**
-- Summary was calculating `total_received` from `accounting_transactions.inflow` 
-- When receipt cancelled, reverse entry created but original inflow still counted
-- Fallback logic activated when active receipts = 0 (even if cancelled receipts existed)
+**Key Principle:**
+- `accounting_transactions` is for **LEDGER ONLY** (Trial Balance, General Ledger, Daybook)
+- **Operational summaries** must use **operational tables** (receipts, invoices, expenses)
 
-**Fix Applied:**
-```python
-# Check if project has ANY receipt records (including cancelled)
-has_any_receipts = await db.finance_receipts.find_one({"project_id": project_id})
+**Endpoints Updated:**
+| # | Endpoint | Changes |
+|---|----------|---------|
+| 1 | `GET /finance/project-finance` | Removed all `accounting_transactions` queries |
+| 2 | `GET /finance/project-finance/{id}` | Uses `execution_ledger` + `finance_expense_requests` for costs |
+| 3 | Vendor mapping CRUD | `spending_started` now checks operational tables |
 
-# Only fall back to transactions for legacy projects without ANY receipts
-if has_any_receipts:
-    total_received = sum(active_receipts)  # From finance_receipts
-else:
-    total_received = sum(inflows)  # Legacy fallback
+**Response Structure:**
+```json
+{
+  "summary": {
+    "total_received": 32500,     // From finance_receipts
+    "actual_cost": 7500,         // From execution_ledger + expenses
+    "purchase_invoice_total": 7500,  // Breakdown
+    "expense_total": 0,              // Breakdown
+    "planned_cost": 50000,
+    "remaining_liability": 42500,    // planned - actual
+    "safe_surplus": 25000            // received - actual
+  }
+}
 ```
 
 **Verification:**
-- Project with all receipts cancelled (₹204,000 total) → `total_received = ₹0` ✅
-- Project with 6 active (₹32,500) + 1 cancelled (₹2,500) → `total_received = ₹32,500` ✅
-- All endpoints consistent: `/project-finance`, `/project-profit`, `/payment-schedule` ✅
+- Receipt list total matches Finance Summary `total_received` ✅
+- Purchase invoices match `actual_cost` ✅
+- Cancelled receipts excluded from totals ✅
 
 ---
 
-### Previous: Finance Summary Cancelled Receipt Exclusion
+### Previous: Finance Summary Aggregation Fix
 
 Implemented a full Receipt Management UI with safe cancellation workflow that ensures accounting integrity.
 

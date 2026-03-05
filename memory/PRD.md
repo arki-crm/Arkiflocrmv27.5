@@ -9,59 +9,49 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: General Ledger Improvements COMPLETE ✅
+## Current Status: General Ledger Audit & Party Metadata COMPLETE ✅
 **As of March 5, 2026**
 
-### General Ledger Module Improvements
+### General Ledger Module Full Audit
 
-Two major enhancements implemented for accountant workflow.
+Performed comprehensive audit and implemented fixes for party traceability.
 
-#### 1. "All Accounts" Combined Ledger View
-| Feature | Description | Status |
-|---------|-------------|--------|
-| **All Accounts Option** | New option in Account dropdown | ✅ |
-| **Combined View** | Shows transactions from ALL accounts grouped by date | ✅ |
-| **Summary Totals** | Total Debit, Total Credit, Accounts Count | ✅ |
-| **Flat Entry List** | All entries sorted by date for chronological view | ✅ |
+**Audit Report:** `/app/GENERAL_LEDGER_AUDIT.md`
 
-**API:** `GET /finance/general-ledger?account_id=all&period=month`
+#### Data Sources Identified (18 modules write to ledger)
+- Cashbook, Self Transfer, Receipts, Salary, Stipend, Incentive, Commission
+- Expense Recording/Refund, Liability Settlement, Purchase Invoice
+- Sales Return, Credit Notes, Cash Disbursement, Import Transactions
 
-#### 2. Party Filter for Customer/Vendor Transactions
-| Feature | Description | Status |
-|---------|-------------|--------|
-| **Party Dropdown** | Filter by Customer, Vendor, or Employee | ✅ |
-| **Project Dropdown** | Filter by Project | ✅ |
-| **Party Metadata** | Transactions now include `party_id`, `party_type`, `party_name` | ✅ |
-| **Double-Entry Support** | Counter entries also store party metadata | ✅ |
+#### Party Metadata Implementation ✅
 
-**API Parameters:**
-- `party_id` - Filter by specific customer/vendor/employee ID
-- `party_type` - "customer", "vendor", or "employee"
-- `project_id` - Filter by project
+All major modules now include standardized party fields:
 
-**Ledger Entry Structure:**
-```json
-{
-  "date": "2026-03-05",
-  "account_name": "Petty Cash",
-  "narration": "Customer advance payment",
-  "party_id": "cust_12345",
-  "party_type": "customer",
-  "party_name": "Acme Corp",
-  "project_id": "proj_8aeea5f1",
-  "debit": 10000,
-  "credit": 0
-}
-```
+| Module | party_id | party_type | party_name | Status |
+|--------|----------|------------|------------|--------|
+| Customer Receipts | customer_id | "customer" | client_name | ✅ |
+| Vendor Payments | vendor_id | "vendor" | vendor_name | ✅ |
+| Salary Payments | employee_id | "employee" | employee_name | ✅ |
+| Stipend Payments | employee_id | "employee" | trainee_name | ✅ |
+| Incentive Payouts | employee_id | "employee" | employee_name | ✅ |
+| Commission Payouts | recipient_id | varies | recipient_name | ✅ |
+| Purchase Invoices | vendor_id | "vendor" | vendor_name | ✅ |
 
-**Use Cases:**
-1. Accountants can view full ledger across all accounts for date range
-2. Filter transactions by specific customer to trace all their payments
-3. Filter by project to see all financial activity for a project
+#### Filter Verification
+| Filter | Status | Notes |
+|--------|--------|-------|
+| Account | ✅ Working | Filters by account_id or "all" |
+| Period | ✅ Working | month/quarter/fy/custom |
+| Project | ✅ Working | Most transactions have project_id |
+| Party | ✅ NOW WORKING | New transactions fully traceable |
+
+#### Remaining Work
+- Backfill script for historical transactions (party_id was missing before)
+- 5 modules need double-entry review (Liability Settlement, Sales Return, etc.)
 
 ---
 
-### Previous: Finance Summary Strict Source Tables
+### Previous: General Ledger Improvements
 
 Implemented a full Receipt Management UI with safe cancellation workflow that ensures accounting integrity.
 

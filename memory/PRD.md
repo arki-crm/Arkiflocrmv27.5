@@ -22,11 +22,11 @@ Ensured all financial transactions writing to `accounting_transactions` populate
 3. Ledger filtering uses **IDs, not names**
 
 **Data Sources Implemented:**
-| Party Type | Master Collection | ID Field | Name Field |
-|------------|------------------|----------|------------|
-| **Customers** | `projects` | `project_id` | `client_name` |
-| **Vendors** | `finance_vendors` | `vendor_id` | `name` |
-| **Employees** | `users` (with employee roles) | `user_id` | `name` |
+ Party Type | Master Collection | ID Field | Name Field |
+------------|------------------|----------|------------|
+ **Customers** | `projects` | `project_id` | `client_name` |
+ **Vendors** | `finance_vendors` | `vendor_id` | `name` |
+ **Employees** | `users` (with employee roles) | `user_id` | `name` |
 
 **Modules Fixed:**
 - Receipt Creation: Added `party_id`, `party_type`, `party_name`, `reference_id`, `source_module`
@@ -34,12 +34,12 @@ Ensured all financial transactions writing to `accounting_transactions` populate
 - Cashbook Transactions: Added party metadata when vendor_id provided
 
 **Results:**
-| Entity | Count | Source |
-|--------|-------|--------|
-| Customers | 26 | projects (master data) |
-| Vendors | 9 | finance_vendors (master data) |
-| Employees | 49 | users (master data) |
-| Projects | 28 | projects (master data) |
+ Entity | Count | Source |
+--------|-------|--------|
+ Customers | 26 | projects (master data) |
+ Vendors | 9 | finance_vendors (master data) |
+ Employees | 49 | users (master data) |
+ Projects | 28 | projects (master data) |
 
 **Testing (iteration_80.json):** 100% pass rate - 20/20 tests passed
 

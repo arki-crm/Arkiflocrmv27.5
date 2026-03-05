@@ -23648,60 +23648,52 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         signoff_value = p.get("signoff_value") or 0
         signoff_locked = p.get("signoff_locked", False)
         
-        # Get vendor mappings total (planned cost)
-        vendor_mappings = await db.finance_vendor_mappings.find(
-            {"project_id": project_id},
-            {"_id": 0, "planned_amount": 1}
-        ).to_list(100)
-        planned_cost = sum(v.get("planned_amount", 0) for v in vendor_mappings)
+        # ============================================================
+        # STRICT SOURCE TABLES - NO accounting_transactions
+        # ============================================================
         
-        # Get actual cost from cashbook (EXCLUDE credit purchase daybook entries)
-        actual_outflow_pipeline = [
-            {"$match": {
-                "project_id": project_id, 
-                "transaction_type": "outflow",
-                # Exclude non-cashbook entries
-                "$or": [
-                    {"is_cashbook_entry": {"$ne": False}},
-                    {"is_cashbook_entry": {"$exists": False}}
-                ],
-                "entry_type": {"$nin": ["purchase_invoice", "purchase_invoice_credit"]}
-            }},
-            {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
-        ]
-        actual_result = await db.accounting_transactions.aggregate(actual_outflow_pipeline).to_list(1)
-        actual_cost = actual_result[0]["total"] if actual_result else 0
-        
-        # Get total received from receipts (PRIMARY SOURCE - excludes cancelled)
-        # This is the authoritative source for customer payments
+        # 1. TOTAL RECEIVED: From finance_receipts (status = active)
         active_receipts = await db.finance_receipts.find(
             {"project_id": project_id, "status": {"$ne": "cancelled"}},
             {"_id": 0, "amount": 1}
         ).to_list(1000)
         total_received = sum(r.get("amount", 0) for r in active_receipts)
         
-        # Check if this project has ANY receipt records (including cancelled)
-        # Only fall back to accounting_transactions for truly legacy projects with no receipts
-        has_any_receipts = await db.finance_receipts.find_one({"project_id": project_id}) is not None
+        # 2. ACTUAL COST: From execution_ledger (purchase invoices) + approved expense_requests
+        # 2a. Purchase invoices from execution_ledger (grand_total = amount with GST)
+        purchase_invoices = await db.execution_ledger.find(
+            {"project_id": project_id},
+            {"_id": 0, "grand_total": 1, "total_value": 1}
+        ).to_list(1000)
+        purchase_invoice_total = sum(p.get("grand_total") or p.get("total_value", 0) for p in purchase_invoices)
         
-        if not has_any_receipts and total_received == 0:
-            # Legacy project without receipt records - use accounting transactions
-            inflow_pipeline = [
-                {"$match": {"project_id": project_id, "transaction_type": "inflow", "is_cancelled": {"$ne": True}}},
-                {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
-            ]
-            inflow_result = await db.accounting_transactions.aggregate(inflow_pipeline).to_list(1)
-            total_received = inflow_result[0]["total"] if inflow_result else 0
+        # 2b. Approved expense requests
+        approved_expenses = await db.finance_expense_requests.find(
+            {"project_id": project_id, "status": "approved"},
+            {"_id": 0, "amount": 1}
+        ).to_list(1000)
+        approved_expense_total = sum(e.get("amount", 0) for e in approved_expenses)
         
-        # Get actual remaining liability from finance_liabilities collection
-        # Include both "open" and "partially_settled" - real unpaid obligations
-        liability_pipeline = [
-            {"$match": {"project_id": project_id, "status": {"$in": ["open", "partially_settled"]}}},
-            {"$group": {"_id": None, "total": {"$sum": "$amount_remaining"}}}
-        ]
-        liability_result = await db.finance_liabilities.aggregate(liability_pipeline).to_list(1)
-        remaining_liability = max(0, liability_result[0]["total"] if liability_result else 0)
+        # 2c. Recorded (paid) expense requests
+        recorded_expenses = await db.finance_expense_requests.find(
+            {"project_id": project_id, "status": "recorded"},
+            {"_id": 0, "amount": 1}
+        ).to_list(1000)
+        recorded_expense_total = sum(e.get("amount", 0) for e in recorded_expenses)
         
+        actual_cost = purchase_invoice_total + approved_expense_total + recorded_expense_total
+        
+        # 3. PLANNED COST: From finance_vendor_mappings
+        vendor_mappings = await db.finance_vendor_mappings.find(
+            {"project_id": project_id},
+            {"_id": 0, "planned_amount": 1}
+        ).to_list(100)
+        planned_cost = sum(v.get("planned_amount", 0) for v in vendor_mappings)
+        
+        # 4. REMAINING LIABILITY: planned_cost - actual_cost (or from liabilities if available)
+        remaining_liability = max(0, planned_cost - actual_cost) if planned_cost > 0 else 0
+        
+        # 5. SAFE SURPLUS: total_received - actual_cost
         safe_surplus = total_received - actual_cost
         
         # Determine status based on signoff_value

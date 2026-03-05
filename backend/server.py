@@ -36473,6 +36473,10 @@ async def payout_commission(commission_id: str, data: CommissionPayoutRequest, r
         # Additional metadata
         "recipient_id": commission.get("recipient_id"),
         "recipient_name": commission.get("recipient_name", "Recipient"),
+        # Party metadata for ledger traceability
+        "party_id": commission.get("recipient_id"),
+        "party_type": commission.get("recipient_type", "vendor"),  # Could be employee or vendor
+        "party_name": commission.get("recipient_name", "Recipient"),
         "payment_category": "commission",
         "commission_type": commission.get("commission_type"),
         "created_at": now.isoformat(),

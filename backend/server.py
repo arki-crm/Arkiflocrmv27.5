@@ -30779,19 +30779,27 @@ async def get_ledger_accounts(request: Request):
             seen_customer_names[name] = p.get("project_id")
     
     # VENDORS: Use finance_vendors collection (master data)
+    # Load ALL vendors from Vendor Master - no filters except basic validation
     # vendor_id is the stable identifier
     vendors_list = []
-    vendors_from_db = await db.finance_vendors.find(
-        {},
-        {"_id": 0, "vendor_id": 1, "name": 1}
-    ).sort("name", 1).to_list(1000)
-    
-    for v in vendors_from_db:
-        if v.get("vendor_id") and v.get("name"):
-            vendors_list.append({
-                "vendor_id": v.get("vendor_id"),
-                "vendor_name": v.get("name")
-            })
+    try:
+        vendors_from_db = await db.finance_vendors.find(
+            {},  # No filters - get ALL vendors
+            {"_id": 0, "vendor_id": 1, "name": 1}
+        ).sort("name", 1).to_list(1000)
+        
+        for v in vendors_from_db:
+            vendor_id = v.get("vendor_id")
+            vendor_name = v.get("name")
+            # Include vendor if it has either vendor_id or name
+            if vendor_id or vendor_name:
+                vendors_list.append({
+                    "vendor_id": vendor_id or f"unknown_{len(vendors_list)}",
+                    "vendor_name": vendor_name or "Unnamed Vendor"
+                })
+    except Exception as e:
+        print(f"Error loading vendors: {e}")
+        vendors_list = []
     
     # EMPLOYEES: Use users collection (master data)
     # user_id is the stable identifier

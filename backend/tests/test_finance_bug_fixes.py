@@ -8,7 +8,7 @@ import uuid
 import sys
 
 # Test configuration
-BASE_URL = "https://general-ledger-fix.preview.emergentagent.com/api"
+BASE_URL = "https://cash-holder-report.preview.emergentagent.com/api"
 FOUNDER_EMAIL = "sidheeq.arkidots@gmail.com"
 FOUNDER_PASSWORD = "founder123"
 

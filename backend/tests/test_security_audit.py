@@ -182,7 +182,7 @@ class Test04APIEndpointSecurity:
         """Verify CORS headers are properly configured"""
         response = requests.options(
             f"{BASE_URL}/api/health",
-            headers={"Origin": "https://general-ledger-fix.preview.emergentagent.com"}
+            headers={"Origin": "https://cash-holder-report.preview.emergentagent.com"}
         )
         
         # Check for CORS headers

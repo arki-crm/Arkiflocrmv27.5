@@ -21686,7 +21686,7 @@ async def delete_academy_file(filename: str, request: Request):
 # Pydantic Models for Accounting
 class AccountCreate(BaseModel):
     account_name: str
-    account_type: str  # "bank" or "cash"
+    account_type: str  # "bank", "cash", or "upi_wallet"
     bank_name: Optional[str] = None
     branch: Optional[str] = None
     account_number: Optional[str] = None  # For bank accounts
@@ -21694,6 +21694,7 @@ class AccountCreate(BaseModel):
     category: str  # "operating", "collection", "expense", "petty_cash"
     opening_balance: float = 0.0
     opening_balance_date: Optional[str] = None  # ISO date when balance was set
+    holder: Optional[str] = None  # Account holder/owner (e.g., "Saran", "Sidheeq", "Office")
     is_active: bool = True
 
 class AccountUpdate(BaseModel):
@@ -21703,6 +21704,7 @@ class AccountUpdate(BaseModel):
     account_number: Optional[str] = None
     ifsc_code: Optional[str] = None
     category: Optional[str] = None
+    holder: Optional[str] = None  # Account holder/owner
     is_active: Optional[bool] = None
 
 class CategoryCreate(BaseModel):

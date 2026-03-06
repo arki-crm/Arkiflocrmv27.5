@@ -5,11 +5,32 @@ Build a full-stack CRM application for an interior design company, managing the 
 
 ## Architecture
 - **Frontend**: React 19 + TailwindCSS + Shadcn UI
-- **Backend**: FastAPI (Python) - Currently monolithic server.py (~41,000+ lines)
+- **Backend**: FastAPI (Python) - Currently monolithic server.py (~43,600+ lines)
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Ledger Integrity Audit COMPLETE ✅
+## Current Status: Receipts Module Bug Fixes COMPLETE ✅
+**As of March 6, 2026**
+
+### Receipts Module Fixes ✅ (LATEST)
+
+**Issue 1: Receipt Amount Source Fixed**
+- Receipt calculations now use `signoff_value` (the locked contract value from KWS Sign-Off) instead of deprecated `project_value`
+- Updated `/api/finance/receipts/{receipt_id}` and `/api/finance/receipts` POST endpoints
+- Financial summary now correctly shows: Contract Value, Total Received, Balance Remaining
+
+**Issue 2: Receipt View Modal UI Overflow Fixed**
+- Fixed green "Payment Received" banner that was overflowing outside modal boundaries
+- Added proper CSS constraints for modal scrolling and overflow handling
+- Modal now respects container boundaries on all receipt statuses (Active/Cancelled)
+
+**Files Modified:**
+- `/app/backend/server.py` (lines ~32004-32027, ~32094)
+- `/app/frontend/src/pages/Receipts.jsx` (Dialog content styling)
+
+---
+
+## Previous Status: Ledger Integrity Audit COMPLETE ✅
 **As of March 5, 2026**
 
 ### 0️⃣ Ledger Integrity Audit ✅ (LATEST)

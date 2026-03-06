@@ -672,13 +672,14 @@ const Receipts = () => {
               )}
             </div>
           )}
-          <DialogFooter className="flex-col sm:flex-row gap-2">
+          <DialogFooter className="flex flex-wrap justify-end gap-2 pt-4 border-t mt-4">
             {/* Actions based on receipt status */}
             {viewReceipt && viewReceipt.status !== 'cancelled' && (
               <>
                 {hasPermission('finance.issue_refund') && (
                   <Button 
                     variant="outline"
+                    size="sm"
                     onClick={() => {
                       setViewReceipt(null);
                       openCancelDialog(viewReceipt);
@@ -686,13 +687,14 @@ const Receipts = () => {
                     className="text-orange-600 border-orange-200 hover:bg-orange-50"
                     data-testid="cancel-receipt-btn"
                   >
-                    <Ban className="w-4 h-4 mr-2" />
-                    Cancel Receipt
+                    <Ban className="w-4 h-4 mr-1" />
+                    Cancel
                   </Button>
                 )}
                 {isFounderOrAdmin && (
                   <Button 
                     variant="outline"
+                    size="sm"
                     onClick={() => {
                       setViewReceipt(null);
                       openDeleteDialog(viewReceipt);
@@ -700,7 +702,7 @@ const Receipts = () => {
                     className="text-red-600 border-red-200 hover:bg-red-50"
                     data-testid="delete-receipt-btn"
                   >
-                    <Trash2 className="w-4 h-4 mr-2" />
+                    <Trash2 className="w-4 h-4 mr-1" />
                     Delete
                   </Button>
                 )}
@@ -709,20 +711,22 @@ const Receipts = () => {
             
             <Button 
               variant="outline"
+              size="sm"
               onClick={() => viewReceipt && handleViewLedger(viewReceipt)}
               data-testid="view-ledger-btn"
             >
-              <BookOpen className="w-4 h-4 mr-2" />
-              View Ledger
+              <BookOpen className="w-4 h-4 mr-1" />
+              Ledger
             </Button>
             
             <Button 
+              size="sm"
               onClick={() => viewReceipt && handleDownloadPDF(viewReceipt.receipt_id, viewReceipt.receipt_number)}
               className="bg-blue-600 hover:bg-blue-700"
               data-testid="download-pdf-btn"
             >
-              <Download className="w-4 h-4 mr-2" />
-              Download PDF
+              <Download className="w-4 h-4 mr-1" />
+              PDF
             </Button>
           </DialogFooter>
         </DialogContent>

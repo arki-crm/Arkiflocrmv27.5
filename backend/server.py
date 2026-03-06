@@ -30778,25 +30778,49 @@ async def get_ledger_accounts(request: Request):
             })
             seen_customer_names[name] = p.get("project_id")
     
-    # VENDORS: Use finance_vendors collection (master data)
-    # Load ALL vendors from Vendor Master - no filters except basic validation
-    # vendor_id is the stable identifier
+    # VENDORS: Load from BOTH vendor collections (accounting_vendors and finance_vendors)
+    # - accounting_vendors: Created via Finance Settings → Vendors UI (uses vendor_name field)
+    # - finance_vendors: Legacy/auto-created vendors (uses name field)
+    # Merge both to ensure all vendors appear in Party filter
     vendors_list = []
+    seen_vendor_ids = set()
+    
     try:
-        vendors_from_db = await db.finance_vendors.find(
-            {},  # No filters - get ALL vendors
+        # Load from accounting_vendors (primary - UI creates here)
+        accounting_vendors = await db.accounting_vendors.find(
+            {"is_active": {"$ne": False}},
+            {"_id": 0, "vendor_id": 1, "vendor_name": 1}
+        ).sort("vendor_name", 1).to_list(1000)
+        
+        for v in accounting_vendors:
+            vendor_id = v.get("vendor_id")
+            vendor_name = v.get("vendor_name")
+            if vendor_id and vendor_id not in seen_vendor_ids:
+                seen_vendor_ids.add(vendor_id)
+                vendors_list.append({
+                    "vendor_id": vendor_id,
+                    "vendor_name": vendor_name or "Unnamed Vendor"
+                })
+        
+        # Load from finance_vendors (legacy - for backwards compatibility)
+        finance_vendors = await db.finance_vendors.find(
+            {},
             {"_id": 0, "vendor_id": 1, "name": 1}
         ).sort("name", 1).to_list(1000)
         
-        for v in vendors_from_db:
+        for v in finance_vendors:
             vendor_id = v.get("vendor_id")
             vendor_name = v.get("name")
-            # Include vendor if it has either vendor_id or name
-            if vendor_id or vendor_name:
+            if vendor_id and vendor_id not in seen_vendor_ids:
+                seen_vendor_ids.add(vendor_id)
                 vendors_list.append({
-                    "vendor_id": vendor_id or f"unknown_{len(vendors_list)}",
+                    "vendor_id": vendor_id,
                     "vendor_name": vendor_name or "Unnamed Vendor"
                 })
+        
+        # Sort combined list by name
+        vendors_list.sort(key=lambda x: x.get("vendor_name", "").lower())
+        
     except Exception as e:
         print(f"Error loading vendors: {e}")
         vendors_list = []

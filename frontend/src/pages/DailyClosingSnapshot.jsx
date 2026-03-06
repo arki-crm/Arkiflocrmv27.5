@@ -12,7 +12,8 @@ import {
   Smartphone,
   ChevronLeft,
   ChevronRight,
-  Landmark
+  Landmark,
+  Users
 } from 'lucide-react';
 import { format, subDays, addDays } from 'date-fns';
 import { toast } from 'sonner';
@@ -79,67 +80,86 @@ export default function DailyClosingSnapshot() {
   const isToday = format(selectedDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
 
   return (
-    <div className="p-6 max-w-4xl mx-auto" data-testid="daily-closing-snapshot">
-      {/* Header - Clean layout with title left, refresh right */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6 max-w-5xl mx-auto" data-testid="daily-closing-snapshot">
+      {/* Header - Title left, Refresh right */}
+      <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Daily Closing Snapshot</h1>
-          <p className="text-sm text-gray-500">Founder liquidity view - Account balances by holder</p>
+          <div className="flex items-center gap-2 mb-1">
+            <Landmark className="w-6 h-6 text-blue-600" />
+            <h1 className="text-2xl font-bold text-blue-600">Daily Closing Snapshot</h1>
+          </div>
+          <p className="text-gray-500">Founder liquidity view - Account balances as of selected date</p>
         </div>
         <Button 
           variant="outline" 
           size="sm" 
           onClick={fetchSnapshot}
           disabled={loading}
+          className="mt-1"
         >
           <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
           Refresh
         </Button>
       </div>
 
-      {/* Date Navigation - Centered */}
-      <div className="flex items-center justify-center gap-4 mb-6">
-        <Button variant="ghost" size="icon" onClick={goToPreviousDay}>
-          <ChevronLeft className="w-5 h-5" />
-        </Button>
-        
-        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="min-w-[140px]">
-              <CalendarIcon className="w-4 h-4 mr-2" />
-              {format(selectedDate, 'dd/MM/yyyy')}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="center">
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={(date) => {
-                if (date) {
-                  setSelectedDate(date);
-                  setCalendarOpen(false);
-                }
-              }}
-              disabled={(date) => date > new Date()}
-            />
-          </PopoverContent>
-        </Popover>
-        
-        {!isToday && (
-          <Button variant="outline" size="sm" onClick={goToToday}>
-            Today
-          </Button>
-        )}
-        
-        <Button 
-          variant="ghost" 
-          size="icon"
-          onClick={goToNextDay}
-          disabled={isToday}
-        >
-          <ChevronRight className="w-5 h-5" />
-        </Button>
-      </div>
+      {/* Date Navigation Card */}
+      <Card className="mb-6">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            {/* Left side - Date picker with arrows */}
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" onClick={goToPreviousDay} className="h-8 w-8">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="h-9 px-3">
+                    <CalendarIcon className="w-4 h-4 mr-2 text-gray-500" />
+                    <span>{format(selectedDate, 'dd/MM/yyyy')}</span>
+                    <CalendarIcon className="w-4 h-4 ml-2 text-gray-500" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(date) => {
+                      if (date) {
+                        setSelectedDate(date);
+                        setCalendarOpen(false);
+                      }
+                    }}
+                    disabled={(date) => date > new Date()}
+                  />
+                </PopoverContent>
+              </Popover>
+              
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={goToNextDay}
+                disabled={isToday}
+                className="h-8 w-8"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            {/* Right side - Today badge and formatted date */}
+            <div className="flex items-center gap-3">
+              {isToday && (
+                <Badge variant="outline" className="bg-green-50 text-green-600 border-green-200">
+                  Today
+                </Badge>
+              )}
+              <span className="text-lg font-semibold text-blue-600">
+                {format(selectedDate, 'MMMM dd, yyyy')}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {loading ? (
         <div className="flex justify-center py-12">
@@ -147,64 +167,71 @@ export default function DailyClosingSnapshot() {
         </div>
       ) : data ? (
         <>
-          {/* Summary Row - Cash | Bank | UPI Wallet | Total */}
-          <div className="grid grid-cols-4 gap-3 mb-6" data-testid="summary-row">
-            <Card className="bg-green-50 border-green-200">
-              <CardContent className="py-3 px-4">
-                <div className="flex items-center gap-2 mb-1">
+          {/* Summary Cards - Cash | Bank | UPI/Wallet | Total Liquidity */}
+          <div className="grid grid-cols-4 gap-4 mb-6" data-testid="summary-cards">
+            {/* Cash Card */}
+            <Card className="bg-green-50 border-green-100">
+              <CardContent className="py-4 px-4">
+                <div className="flex items-center gap-2 mb-2">
                   <Wallet className="w-4 h-4 text-green-600" />
-                  <span className="text-xs font-medium text-green-600 uppercase">Cash</span>
+                  <span className="text-xs font-semibold text-green-600 uppercase tracking-wide">Cash</span>
                 </div>
-                <p className="text-lg font-bold text-green-700">
+                <p className="text-2xl font-bold text-green-700">
                   {formatCurrency(data.summary?.total_cash || 0)}
                 </p>
               </CardContent>
             </Card>
             
-            <Card className="bg-blue-50 border-blue-200">
-              <CardContent className="py-3 px-4">
-                <div className="flex items-center gap-2 mb-1">
+            {/* Bank Card */}
+            <Card className="bg-blue-50 border-blue-100">
+              <CardContent className="py-4 px-4">
+                <div className="flex items-center gap-2 mb-2">
                   <Building2 className="w-4 h-4 text-blue-600" />
-                  <span className="text-xs font-medium text-blue-600 uppercase">Bank</span>
+                  <span className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Bank</span>
                 </div>
-                <p className="text-lg font-bold text-blue-700">
+                <p className="text-2xl font-bold text-blue-700">
                   {formatCurrency(data.summary?.total_bank || 0)}
                 </p>
               </CardContent>
             </Card>
             
-            <Card className="bg-purple-50 border-purple-200">
-              <CardContent className="py-3 px-4">
-                <div className="flex items-center gap-2 mb-1">
+            {/* UPI/Wallet Card */}
+            <Card className="bg-purple-50 border-purple-100">
+              <CardContent className="py-4 px-4">
+                <div className="flex items-center gap-2 mb-2">
                   <Smartphone className="w-4 h-4 text-purple-600" />
-                  <span className="text-xs font-medium text-purple-600 uppercase">UPI Wallet</span>
+                  <span className="text-xs font-semibold text-purple-600 uppercase tracking-wide">UPI/Wallet</span>
                 </div>
-                <p className="text-lg font-bold text-purple-700">
+                <p className="text-2xl font-bold text-purple-700">
                   {formatCurrency(data.summary?.total_upi_wallet || 0)}
                 </p>
               </CardContent>
             </Card>
             
-            <Card className="bg-indigo-600 border-0">
-              <CardContent className="py-3 px-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <Landmark className="w-4 h-4 text-indigo-200" />
-                  <span className="text-xs font-medium text-indigo-200 uppercase">Total</span>
+            {/* Total Liquidity Card */}
+            <Card className="bg-blue-600 border-0">
+              <CardContent className="py-4 px-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Landmark className="w-4 h-4 text-blue-200" />
+                  <span className="text-xs font-semibold text-blue-200 uppercase tracking-wide">Total Liquidity</span>
                 </div>
-                <p className="text-lg font-bold text-white">
+                <p className="text-2xl font-bold text-white">
                   {formatCurrency(data.total_liquidity || 0)}
                 </p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Accounts Grouped by Holder */}
-          <Card data-testid="accounts-by-holder">
+          {/* Daily Cash Position - Grouped by Holder */}
+          <Card data-testid="daily-cash-position">
             <CardHeader className="py-3 bg-gray-50 border-b">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold">Accounts by Holder</CardTitle>
-                <Badge variant="outline" className="text-xs">
-                  {data.account_count} accounts
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-gray-600" />
+                  <CardTitle className="text-base font-semibold">Daily Cash Position</CardTitle>
+                </div>
+                <Badge variant="outline" className="text-xs bg-white">
+                  Grouped by Holder
                 </Badge>
               </div>
             </CardHeader>
@@ -258,7 +285,7 @@ export default function DailyClosingSnapshot() {
                   ))}
                   
                   {/* Grand Total */}
-                  <div className="px-4 py-3 bg-indigo-600 flex justify-between items-center">
+                  <div className="px-4 py-3 bg-blue-600 flex justify-between items-center">
                     <span className="font-semibold text-white">Total Liquidity</span>
                     <span className="font-mono text-lg font-bold text-white">
                       {formatCurrency(data.total_liquidity || 0)}

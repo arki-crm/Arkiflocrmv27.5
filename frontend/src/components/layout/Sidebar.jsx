@@ -337,12 +337,37 @@ const Sidebar = () => {
     }
   }, [location.pathname]);
 
-  // Get role-specific navigation items with senior manager view permission
-  const roleBasedItems = getRoleNavItems(user?.role, user?.senior_manager_view);
+  // Check if user has any finance permission
+  const hasAnyFinancePermission = 
+    hasPermission('finance.view_dashboard') ||
+    hasPermission('finance.view_cashbook') ||
+    hasPermission('finance.general_ledger.view') ||
+    hasPermission('finance.journal_entry.view') ||
+    hasPermission('finance.journal_entry.create') ||
+    hasPermission('finance.view_vendors') ||
+    hasPermission('finance.view_reports') ||
+    hasPermission('finance.receipts.view') ||
+    hasPermission('finance.liabilities.view');
+
+  // Get role-specific navigation items with senior manager view permission and finance permission
+  const roleBasedItems = getRoleNavItems(user?.role, user?.senior_manager_view, hasAnyFinancePermission);
   
   // Permission-based navigation additions
   // These items are added based on permissions, regardless of role
   const permissionBasedItems = [];
+  
+  // Finance menu - show if user has any finance permission but role doesn't include it
+  const hasFinanceInRoleItems = roleBasedItems.some(item => item.path === '/finance' || item.isParent && item.label === 'Finance');
+  if (hasAnyFinancePermission && !hasFinanceInRoleItems) {
+    const financeParentItem = { 
+      path: '/finance', 
+      label: 'Finance', 
+      icon: Wallet, 
+      isParent: true,
+      children: financeSubItems
+    };
+    permissionBasedItems.push(financeParentItem);
+  }
   
   // Users management - show if user has admin.manage_users OR admin.assign_permissions
   if (hasPermission('admin.manage_users') || hasPermission('admin.assign_permissions')) {

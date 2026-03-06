@@ -21917,7 +21917,7 @@ async def update_accounting_account(account_id: str, account: AccountUpdate, req
     now = datetime.now(timezone.utc)
     update_dict = {"updated_at": now.isoformat()}
     
-    for field in ["account_name", "bank_name", "branch", "category", "is_active"]:
+    for field in ["account_name", "bank_name", "branch", "category", "holder", "is_active"]:
         value = getattr(account, field, None)
         if value is not None:
             update_dict[field] = value

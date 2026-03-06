@@ -22224,7 +22224,14 @@ async def list_vendors(request: Request, vendor_type: Optional[str] = None, is_a
     if is_active is not None:
         query["is_active"] = is_active
     
-    vendors = await db.accounting_vendors.find(query, {"_id": 0}).sort("vendor_name", 1).to_list(500)
+    # Use finance_vendors as single source of truth
+    vendors = await db.finance_vendors.find(query, {"_id": 0}).sort("name", 1).to_list(500)
+    
+    # Map 'name' to 'vendor_name' for API compatibility
+    for v in vendors:
+        if "name" in v and "vendor_name" not in v:
+            v["vendor_name"] = v["name"]
+    
     return vendors
 
 
@@ -22237,9 +22244,14 @@ async def get_vendor(vendor_id: str, request: Request):
     if not has_permission(user_doc, "finance.view_vendors"):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    vendor = await db.accounting_vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+    # Use finance_vendors as single source of truth
+    vendor = await db.finance_vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    # Map 'name' to 'vendor_name' for API compatibility
+    if "name" in vendor and "vendor_name" not in vendor:
+        vendor["vendor_name"] = vendor["name"]
     
     return vendor
 
@@ -22256,9 +22268,12 @@ async def create_vendor(vendor: VendorCreate, request: Request):
     now = datetime.now(timezone.utc)
     vendor_id = f"vendor_{uuid.uuid4().hex[:8]}"
     
+    # Use finance_vendors as single source of truth
+    # Store as 'name' (finance_vendors schema) but accept vendor_name input
     new_vendor = {
         "vendor_id": vendor_id,
-        "vendor_name": vendor.vendor_name,
+        "name": vendor.vendor_name,  # Store as 'name' in finance_vendors
+        "vendor_name": vendor.vendor_name,  # Keep for API compatibility
         "vendor_type": vendor.vendor_type,
         "contact_person": vendor.contact_person,
         "phone": vendor.phone,
@@ -22276,7 +22291,7 @@ async def create_vendor(vendor: VendorCreate, request: Request):
         "created_by_name": user.name
     }
     
-    await db.accounting_vendors.insert_one(new_vendor)
+    await db.finance_vendors.insert_one(new_vendor)
     
     # Auto-create party sub-ledger account for this vendor
     try:

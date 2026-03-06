@@ -113,8 +113,9 @@ const caFinanceSubItems = [
 
 // ============ V1 SIMPLIFIED RBAC - 6 CORE ROLES ============
 // Each role sees ONLY their relevant items - minimal, clean navigation
+// Finance access is also controlled by permissions for flexibility
 
-const getRoleNavItems = (role, hasSeniorManagerView = false) => {
+const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermission = false) => {
   // Common items for all roles
   const commonItems = [
     { path: '/calendar', label: 'Calendar', icon: Calendar },

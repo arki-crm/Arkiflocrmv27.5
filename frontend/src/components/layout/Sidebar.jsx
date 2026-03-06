@@ -295,10 +295,16 @@ const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermissio
       ];
 
     default:
-      return [
+      // For users with finance permissions but non-finance roles
+      const defaultItems = [
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         ...commonItems
       ];
+      // Add Finance menu if user has finance permissions
+      if (hasFinancePermission) {
+        defaultItems.push(financeParentItem);
+      }
+      return defaultItems;
   }
 };
 

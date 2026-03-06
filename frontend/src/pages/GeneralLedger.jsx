@@ -282,13 +282,13 @@ export default function GeneralLedger() {
                     </>
                   )}
                   
-                  {/* Bank & Cash Accounts (Real Accounts) */}
-                  {accounts.length > 0 && (
+                  {/* Bank & Cash Accounts */}
+                  {accounts.filter(a => a.type === 'bank' || a.type === 'cash').length > 0 && (
                     <>
                       <div className="px-2 py-1.5 text-xs font-semibold text-green-600 bg-green-50 mt-1">
                         Bank & Cash Accounts
                       </div>
-                      {accounts.map(acc => (
+                      {accounts.filter(a => a.type === 'bank' || a.type === 'cash').map(acc => (
                         <SelectItem key={acc.id} value={acc.id}>
                           {acc.name} <span className="text-gray-400 text-xs">({acc.type})</span>
                         </SelectItem>
@@ -296,7 +296,49 @@ export default function GeneralLedger() {
                     </>
                   )}
                   
-                  {/* Control Accounts (Customer Advance, Accounts Payable, etc.) */}
+                  {/* Liability Accounts */}
+                  {accounts.filter(a => a.type === 'liability').length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-amber-600 bg-amber-50 mt-1">
+                        Liabilities
+                      </div>
+                      {accounts.filter(a => a.type === 'liability').map(acc => (
+                        <SelectItem key={acc.id} value={acc.id}>
+                          {acc.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  
+                  {/* Expense Accounts */}
+                  {accounts.filter(a => a.type === 'expense').length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-red-600 bg-red-50 mt-1">
+                        Expenses
+                      </div>
+                      {accounts.filter(a => a.type === 'expense').map(acc => (
+                        <SelectItem key={acc.id} value={acc.id}>
+                          {acc.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  
+                  {/* Income Accounts */}
+                  {accounts.filter(a => a.type === 'income').length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 mt-1">
+                        Income
+                      </div>
+                      {accounts.filter(a => a.type === 'income').map(acc => (
+                        <SelectItem key={acc.id} value={acc.id}>
+                          {acc.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  
+                  {/* Control Accounts (Accounts Payable, Accounts Receivable, etc.) */}
                   {controlAccounts.length > 0 && (
                     <>
                       <div className="px-2 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 mt-1">
@@ -314,7 +356,7 @@ export default function GeneralLedger() {
                   {categories.length > 0 && (
                     <>
                       <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-gray-50 mt-1">
-                        Expense/Income Categories
+                        Expense Categories
                       </div>
                       {categories.map(cat => (
                         <SelectItem key={cat.id} value={cat.id}>

@@ -29569,26 +29569,28 @@ async def get_daily_closing_snapshot(
             "account_id": account_id,
             "account_name": account_name,
             "account_type": normalized_type,
-            "account_type_display": account_type.replace("_", " ").title(),
+            "account_type_display": {
+                "bank": "Bank",
+                "cash": "Cash",
+                "upi_wallet": "UPI/Wallet"
+            }.get(normalized_type, normalized_type.title()),
             "opening_balance": opening_balance,
             "total_inflows": total_inflows,
             "total_outflows": total_outflows,
             "closing_balance": closing_balance,
-            "custodian": custodian,
+            "holder": holder,
             "bank_name": account.get("bank_name"),
             "account_number": account.get("account_number")
         })
     
-    # Sort by account type, then by closing balance (descending)
-    type_order = {"cash": 1, "bank": 2, "upi_wallet": 3, "other": 4}
-    account_balances.sort(key=lambda x: (type_order.get(x["account_type"], 99), -x["closing_balance"]))
+    # Sort by holder, then by closing balance (descending)
+    account_balances.sort(key=lambda x: (x["holder"] or "ZZZ", -x["closing_balance"]))
     
-    # Calculate summary totals by type
+    # Calculate summary totals by type (liquidity only)
     total_cash = sum(a["closing_balance"] for a in account_balances if a["account_type"] == "cash")
     total_bank = sum(a["closing_balance"] for a in account_balances if a["account_type"] == "bank")
     total_upi_wallet = sum(a["closing_balance"] for a in account_balances if a["account_type"] == "upi_wallet")
-    total_other = sum(a["closing_balance"] for a in account_balances if a["account_type"] == "other")
-    grand_total = total_cash + total_bank + total_upi_wallet + total_other
+    total_liquidity = total_cash + total_bank + total_upi_wallet
     
     # Group by type for detailed view
     by_type = {}
@@ -29597,40 +29599,31 @@ async def get_daily_closing_snapshot(
         if acc_type not in by_type:
             by_type[acc_type] = {
                 "type": acc_type,
-                "type_display": {
-                    "cash": "Cash",
-                    "bank": "Bank",
-                    "upi_wallet": "UPI / Wallet",
-                    "other": "Other"
-                }.get(acc_type, acc_type.title()),
+                "type_display": acc["account_type_display"],
                 "accounts": [],
                 "total": 0
             }
         by_type[acc_type]["accounts"].append(acc)
         by_type[acc_type]["total"] += acc["closing_balance"]
     
-    # Custodian split (if custodian data exists)
-    by_custodian = []
-    custodians_exist = any(a.get("custodian") for a in account_balances)
+    # Group by holder/owner for founder view
+    by_holder = {}
+    for acc in account_balances:
+        holder_name = acc.get("holder") or "Unassigned"
+        if holder_name not in by_holder:
+            by_holder[holder_name] = {
+                "holder": holder_name,
+                "accounts": [],
+                "subtotal": 0
+            }
+        by_holder[holder_name]["accounts"].append(acc)
+        by_holder[holder_name]["subtotal"] += acc["closing_balance"]
     
-    if custodians_exist:
-        custodian_totals = {}
-        for acc in account_balances:
-            cust = acc.get("custodian") or "Unassigned"
-            if cust not in custodian_totals:
-                custodian_totals[cust] = {
-                    "custodian": cust,
-                    "total_balance": 0,
-                    "account_count": 0
-                }
-            custodian_totals[cust]["total_balance"] += acc["closing_balance"]
-            custodian_totals[cust]["account_count"] += 1
-        
-        by_custodian = sorted(
-            custodian_totals.values(),
-            key=lambda x: x["total_balance"],
-            reverse=True
-        )
+    # Convert to sorted list
+    by_holder_list = sorted(
+        by_holder.values(),
+        key=lambda x: -x["subtotal"]  # Sort by subtotal descending
+    )
     
     return {
         "date": target_date.strftime("%Y-%m-%d"),
@@ -29644,13 +29637,13 @@ async def get_daily_closing_snapshot(
             "total_cash": total_cash,
             "total_bank": total_bank,
             "total_upi_wallet": total_upi_wallet,
-            "total_other": total_other,
-            "grand_total": grand_total
+            "total_liquidity": total_liquidity
         },
         
         "by_type": by_type,
-        "by_custodian": by_custodian if custodians_exist else None,
+        "by_holder": by_holder_list,
         
+        "total_liquidity": total_liquidity,
         "account_count": len(account_balances)
     }
 

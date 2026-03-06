@@ -32004,11 +32004,15 @@ async def get_receipt(receipt_id: str, request: Request):
     # Enrich
     project = await db.projects.find_one({"project_id": receipt.get("project_id")}, {"_id": 0})
     if project:
+        # GOVERNANCE: Use signoff_value as the single source of truth for contract value
+        # signoff_value is locked after KWS Sign-Off and represents the final approved amount
+        contract_value = project.get("signoff_value") or 0
+        
         receipt["project"] = {
             "pid": (project.get("pid") or "").replace("ARKI-", ""),
             "project_name": project.get("project_name"),
             "client_name": project.get("client_name"),
-            "contract_value": project.get("project_value", 0)
+            "contract_value": contract_value
         }
     
     account = await db.accounting_accounts.find_one({"account_id": receipt.get("account_id")}, {"_id": 0})
@@ -32022,7 +32026,10 @@ async def get_receipt(receipt_id: str, request: Request):
     ).to_list(100)
     total_received = sum(r.get("amount", 0) for r in all_receipts)
     receipt["total_received"] = total_received
-    receipt["balance_remaining"] = (project.get("project_value", 0) or 0) - total_received
+    
+    # GOVERNANCE: Balance calculation uses signoff_value (the locked contract value)
+    contract_value = project.get("signoff_value") or 0 if project else 0
+    receipt["balance_remaining"] = contract_value - total_received
     
     return receipt
 
@@ -32091,7 +32098,8 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
         {"_id": 0, "amount": 1}
     ).to_list(100)
     total_before = sum(r.get("amount", 0) for r in existing_receipts)
-    contract_value = project.get("project_value", 0) or 0
+    # GOVERNANCE: Use signoff_value as single source of truth for contract value
+    contract_value = project.get("signoff_value") or 0
     
     receipt_doc = {
         "receipt_id": f"rcp_{secrets.token_hex(4)}",

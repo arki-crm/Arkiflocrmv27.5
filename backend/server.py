@@ -29467,7 +29467,13 @@ async def get_daily_closing_snapshot(
     if not accounts:
         # Fallback: Get accounts and filter manually
         all_accounts = await db.accounting_accounts.find(
-            {"is_active": {"$ne": False}},
+            {
+                "is_active": {"$ne": False},
+                # Exclude test/development accounts
+                "account_name": {
+                    "$not": {"$regex": "test|restore|casetest|demo|sample|dummy", "$options": "i"}
+                }
+            },
             {"_id": 0}
         ).to_list(100)
         

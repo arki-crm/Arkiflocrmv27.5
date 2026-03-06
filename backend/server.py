@@ -30802,21 +30802,31 @@ async def get_ledger_accounts(request: Request):
         vendors_list = []
     
     # EMPLOYEES: Use users collection (master data)
+    # Load ALL employees with relevant roles - no transaction dependency
     # user_id is the stable identifier
     employee_roles = ["Designer", "DesignManager", "ProjectManager", "SiteEngineer", 
                       "Sales", "PreSales", "FinanceManager", "HR", "Admin", "Founder"]
     employees_list = []
-    employees_from_db = await db.users.find(
-        {"role": {"$in": employee_roles}, "status": "Active"},
-        {"_id": 0, "user_id": 1, "name": 1, "role": 1}
-    ).sort("name", 1).to_list(500)
-    
-    for e in employees_from_db:
-        if e.get("user_id") and e.get("name"):
-            employees_list.append({
-                "user_id": e.get("user_id"),
-                "name": e.get("name")
-            })
+    try:
+        # Query users with employee roles - don't filter by status to ensure all appear
+        employees_from_db = await db.users.find(
+            {"role": {"$in": employee_roles}},
+            {"_id": 0, "user_id": 1, "name": 1, "role": 1, "status": 1}
+        ).sort("name", 1).to_list(500)
+        
+        for e in employees_from_db:
+            user_id = e.get("user_id")
+            user_name = e.get("name")
+            # Include if active or no status field (for backwards compatibility)
+            status = e.get("status", "Active")
+            if status == "Active" and (user_id or user_name):
+                employees_list.append({
+                    "user_id": user_id or f"unknown_{len(employees_list)}",
+                    "name": user_name or "Unnamed Employee"
+                })
+    except Exception as e:
+        print(f"Error loading employees: {e}")
+        employees_list = []
     
     # Get projects for project filter
     projects_list = await db.projects.find(

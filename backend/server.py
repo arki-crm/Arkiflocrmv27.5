@@ -29451,10 +29451,14 @@ async def get_daily_closing_snapshot(
     
     # If no finance_accounts, fall back to accounting_accounts
     if not accounts:
+        # Exclude test/development accounts from the query
         accounts = await db.accounting_accounts.find(
             {
                 "is_active": {"$ne": False},
-                "account_type": {"$in": liquidity_types}
+                "account_type": {"$in": liquidity_types},
+                "account_name": {
+                    "$not": {"$regex": "test|restore|casetest|demo|sample|dummy", "$options": "i"}
+                }
             },
             {"_id": 0}
         ).to_list(100)

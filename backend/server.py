@@ -29467,12 +29467,27 @@ async def get_daily_closing_snapshot(
             {"_id": 0}
         ).to_list(100)
         
-        # Filter to only liquidity accounts
+        # Filter to only liquidity accounts, excluding test accounts
         accounts = []
         for acc in all_accounts:
             acc_type = (acc.get("account_type") or "").lower()
             acc_name = (acc.get("account_name") or "").lower()
             category = (acc.get("category") or "").lower()
+            
+            # EXCLUDE test/development accounts
+            is_test = (
+                "test" in acc_name or
+                "restore" in acc_name or
+                "casetest" in acc_name or
+                "demo" in acc_name or
+                "sample" in acc_name or
+                "dummy" in acc_name or
+                acc_name.startswith("test_") or
+                acc_name.startswith("test ")
+            )
+            
+            if is_test:
+                continue  # Skip test accounts
             
             # Include if it's a liquidity account type
             is_liquidity = (

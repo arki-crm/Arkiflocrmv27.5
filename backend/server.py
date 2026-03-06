@@ -22426,23 +22426,26 @@ async def quick_create_vendor(vendor: VendorQuickCreate, request: Request):
     if not normalized_name:
         raise HTTPException(status_code=400, detail="Vendor name is required")
     
-    # Check if vendor already exists (case-insensitive)
-    existing = await db.accounting_vendors.find_one(
-        {"vendor_name": {"$regex": f"^{re.escape(normalized_name)}$", "$options": "i"}},
+    # Check if vendor already exists in finance_vendors (case-insensitive)
+    existing = await db.finance_vendors.find_one(
+        {"name": {"$regex": f"^{re.escape(normalized_name)}$", "$options": "i"}},
         {"_id": 0}
     )
     
     if existing:
-        # Return existing vendor instead of creating duplicate
+        # Return existing vendor (map name to vendor_name for compatibility)
+        if "name" in existing and "vendor_name" not in existing:
+            existing["vendor_name"] = existing["name"]
         return existing
     
-    # Create new vendor with minimal info
+    # Create new vendor in finance_vendors
     now = datetime.now(timezone.utc)
     vendor_id = f"vendor_{uuid.uuid4().hex[:8]}"
     
     new_vendor = {
         "vendor_id": vendor_id,
-        "vendor_name": normalized_name,
+        "name": normalized_name,  # Store as 'name' in finance_vendors
+        "vendor_name": normalized_name,  # Keep for API compatibility
         "vendor_type": vendor.vendor_type or "material",
         "contact_person": None,
         "phone": None,
@@ -22461,32 +22464,36 @@ async def quick_create_vendor(vendor: VendorQuickCreate, request: Request):
         "created_by_name": user.name
     }
     
-    await db.accounting_vendors.insert_one(new_vendor)
+    await db.finance_vendors.insert_one(new_vendor)
     new_vendor.pop("_id", None)
     
     return new_vendor
 
 
 async def get_or_create_unified_vendor(vendor_name: str, user_id: str = None, user_name: str = None) -> dict:
-    """Get existing vendor or create new one in the unified vendor master (accounting_vendors)"""
+    """Get existing vendor or create new one in finance_vendors (single source of truth)"""
     normalized_name = vendor_name.strip()
     
-    # Check if vendor exists (case-insensitive)
-    existing = await db.accounting_vendors.find_one(
-        {"vendor_name": {"$regex": f"^{re.escape(normalized_name)}$", "$options": "i"}},
+    # Check if vendor exists in finance_vendors (case-insensitive)
+    existing = await db.finance_vendors.find_one(
+        {"name": {"$regex": f"^{re.escape(normalized_name)}$", "$options": "i"}},
         {"_id": 0}
     )
     
     if existing:
+        # Map name to vendor_name for compatibility
+        if "name" in existing and "vendor_name" not in existing:
+            existing["vendor_name"] = existing["name"]
         return existing
     
-    # Create new vendor
+    # Create new vendor in finance_vendors
     now = datetime.now(timezone.utc)
     vendor_id = f"vendor_{uuid.uuid4().hex[:8]}"
     
     new_vendor = {
         "vendor_id": vendor_id,
-        "vendor_name": normalized_name,
+        "name": normalized_name,  # Store as 'name' in finance_vendors
+        "vendor_name": normalized_name,  # Keep for API compatibility
         "vendor_type": "material",
         "is_active": True,
         "auto_created": True,
@@ -22495,7 +22502,7 @@ async def get_or_create_unified_vendor(vendor_name: str, user_id: str = None, us
         "created_by_name": user_name
     }
     
-    await db.accounting_vendors.insert_one(new_vendor)
+    await db.finance_vendors.insert_one(new_vendor)
     return {k: v for k, v in new_vendor.items() if k != "_id"}
 
 

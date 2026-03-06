@@ -311,7 +311,7 @@ export default function DailyClosingSnapshot() {
 
       {/* Summary Cards */}
       {data && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6" data-testid="summary-cards">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" data-testid="summary-cards">
           <Card className="bg-green-50 border-green-200">
             <CardContent className="py-4">
               <div className="flex items-center gap-2 mb-1">
@@ -348,18 +348,6 @@ export default function DailyClosingSnapshot() {
             </CardContent>
           </Card>
           
-          <Card className="bg-gray-50 border-gray-200">
-            <CardContent className="py-4">
-              <div className="flex items-center gap-2 mb-1">
-                <CircleDollarSign className="w-4 h-4 text-gray-600" />
-                <p className="text-xs text-gray-600 uppercase tracking-wide font-medium">Other</p>
-              </div>
-              <p className="text-xl font-bold text-gray-700">
-                {formatCurrency(data.summary.total_other)}
-              </p>
-            </CardContent>
-          </Card>
-          
           <Card className="bg-gradient-to-br from-indigo-500 to-blue-600 border-0">
             <CardContent className="py-4">
               <div className="flex items-center gap-2 mb-1">
@@ -367,17 +355,105 @@ export default function DailyClosingSnapshot() {
                 <p className="text-xs text-indigo-100 uppercase tracking-wide font-medium">Total Liquidity</p>
               </div>
               <p className="text-2xl font-bold text-white">
-                {formatCurrency(data.summary.grand_total)}
+                {formatCurrency(data.summary.total_liquidity || data.summary.grand_total || 0)}
               </p>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* Account Details by Type */}
-      {data && data.by_type && (
-        <div data-testid="accounts-by-type">
-          {['cash', 'bank', 'upi_wallet', 'other'].map(type => {
+      {/* DAILY CASH POSITION - Grouped by Holder */}
+      {data && data.by_holder && data.by_holder.length > 0 && (
+        <Card className="mb-6" data-testid="cash-position-by-holder">
+          <CardHeader className="py-4 bg-gradient-to-r from-slate-50 to-slate-100">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <User className="w-5 h-5 text-slate-600" />
+                <CardTitle className="text-lg">Daily Cash Position</CardTitle>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                Grouped by Holder
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {data.by_holder.map((holderGroup, idx) => (
+              <div key={holderGroup.holder || idx} className={cn(
+                "border-b last:border-b-0",
+                idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
+              )}>
+                {/* Holder Header */}
+                <div className="px-4 py-3 bg-slate-100/80 border-b flex items-center justify-between">
+                  <span className="font-semibold text-slate-700">{holderGroup.holder}</span>
+                  <span className="text-sm text-slate-500">
+                    {holderGroup.accounts.length} account{holderGroup.accounts.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                
+                {/* Accounts under this holder */}
+                <Table>
+                  <TableBody>
+                    {holderGroup.accounts.map((acc, accIdx) => (
+                      <TableRow key={acc.account_id || accIdx} className="hover:bg-slate-50">
+                        <TableCell className="pl-8 py-2">
+                          <div className="flex items-center gap-2">
+                            {acc.account_type === 'bank' && <Building2 className="w-4 h-4 text-blue-500" />}
+                            {acc.account_type === 'cash' && <Wallet className="w-4 h-4 text-green-500" />}
+                            {acc.account_type === 'upi_wallet' && <Smartphone className="w-4 h-4 text-purple-500" />}
+                            <span className="font-medium">{acc.account_name}</span>
+                            {acc.bank_name && (
+                              <span className="text-xs text-gray-400">({acc.bank_name})</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right py-2">
+                          <span className={cn(
+                            "font-mono font-medium",
+                            acc.closing_balance < 0 ? "text-red-600" : "text-gray-900"
+                          )}>
+                            {formatCurrency(acc.closing_balance)}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    
+                    {/* Subtotal row */}
+                    <TableRow className="bg-slate-100/50 border-t">
+                      <TableCell className="pl-8 py-2 font-medium text-slate-600">
+                        Subtotal
+                      </TableCell>
+                      <TableCell className="text-right py-2">
+                        <span className={cn(
+                          "font-mono font-bold",
+                          holderGroup.subtotal < 0 ? "text-red-600" : "text-slate-800"
+                        )}>
+                          {formatCurrency(holderGroup.subtotal)}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            ))}
+            
+            {/* Grand Total */}
+            <div className="px-4 py-4 bg-gradient-to-r from-indigo-600 to-blue-600 flex justify-between items-center">
+              <span className="text-white font-semibold">Total Liquidity</span>
+              <span className="text-white font-bold text-xl font-mono">
+                {formatCurrency(data.total_liquidity || data.summary.total_liquidity || 0)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Account Details by Type (Legacy view - collapsible) */}
+      {data && data.by_type && Object.keys(data.by_type).length > 0 && (
+        <details className="mb-6" data-testid="accounts-by-type">
+          <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700 mb-2">
+            View by Account Type
+          </summary>
+          {['cash', 'bank', 'upi_wallet'].map(type => {
             const typeData = data.by_type[type];
             if (!typeData) return null;
             return (
@@ -389,46 +465,7 @@ export default function DailyClosingSnapshot() {
               />
             );
           })}
-        </div>
-      )}
-
-      {/* Custodian Split (if available) */}
-      {data && data.by_custodian && data.by_custodian.length > 0 && (
-        <Card className="mt-6" data-testid="custodian-split">
-          <CardHeader className="py-3">
-            <div className="flex items-center gap-2">
-              <User className="w-5 h-5 text-gray-600" />
-              <CardTitle className="text-lg">Custodian Split</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Custodian</TableHead>
-                  <TableHead className="text-center">Accounts</TableHead>
-                  <TableHead className="text-right">Total Balance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.by_custodian.map((cust, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="font-medium">{cust.custodian}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="outline">{cust.account_count}</Badge>
-                    </TableCell>
-                    <TableCell className={cn(
-                      "text-right font-mono font-medium",
-                      cust.total_balance < 0 ? "text-red-600" : "text-gray-900"
-                    )}>
-                      {formatCurrency(cust.total_balance)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        </details>
       )}
 
       {/* Empty State */}

@@ -21875,6 +21875,7 @@ async def create_accounting_account(account: AccountCreate, request: Request):
         "category": account.category,
         "opening_balance": account.opening_balance,
         "current_balance": account.opening_balance,
+        "holder": account.holder,  # Account holder/owner
         "is_active": account.is_active,
         "is_archived": False,  # P1-FIX: Archive support
         "created_at": now.isoformat(),

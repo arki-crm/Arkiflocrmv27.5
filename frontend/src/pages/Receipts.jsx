@@ -572,11 +572,11 @@ const Receipts = () => {
 
       {/* View Receipt Dialog */}
       <Dialog open={!!viewReceipt} onOpenChange={(open) => !open && setViewReceipt(null)}>
-        <DialogContent className="sm:max-w-[550px]">
+        <DialogContent className="sm:max-w-[550px] overflow-hidden">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Receipt className="w-5 h-5 text-green-600" />
-              Receipt {viewReceipt?.receipt_number}
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
+              <Receipt className="w-5 h-5 text-green-600 flex-shrink-0" />
+              <span className="break-words">Receipt {viewReceipt?.receipt_number}</span>
               {viewReceipt && (
                 <span className="ml-2">
                   {getStatusBadge(viewReceipt.status)}
@@ -585,7 +585,7 @@ const Receipts = () => {
             </DialogTitle>
           </DialogHeader>
           {viewReceipt && (
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 overflow-hidden">
               {/* Cancelled Banner */}
               {viewReceipt.status === 'cancelled' && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg">

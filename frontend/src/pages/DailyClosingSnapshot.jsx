@@ -80,7 +80,7 @@ export default function DailyClosingSnapshot() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto" data-testid="daily-closing-snapshot">
-      {/* Header */}
+      {/* Header - Clean layout with title left, refresh right */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Daily Closing Snapshot</h1>
@@ -97,59 +97,49 @@ export default function DailyClosingSnapshot() {
         </Button>
       </div>
 
-      {/* Date Navigation */}
-      <Card className="mb-6">
-        <CardContent className="py-3">
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" onClick={goToPreviousDay}>
-              <ChevronLeft className="w-4 h-4" />
+      {/* Date Navigation - Centered */}
+      <div className="flex items-center justify-center gap-4 mb-6">
+        <Button variant="ghost" size="icon" onClick={goToPreviousDay}>
+          <ChevronLeft className="w-5 h-5" />
+        </Button>
+        
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="min-w-[140px]">
+              <CalendarIcon className="w-4 h-4 mr-2" />
+              {format(selectedDate, 'dd/MM/yyyy')}
             </Button>
-            
-            <div className="flex items-center gap-3">
-              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <CalendarIcon className="w-4 h-4 mr-2" />
-                    {format(selectedDate, 'dd/MM/yyyy')}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="center">
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(date) => {
-                      if (date) {
-                        setSelectedDate(date);
-                        setCalendarOpen(false);
-                      }
-                    }}
-                    disabled={(date) => date > new Date()}
-                  />
-                </PopoverContent>
-              </Popover>
-              
-              {!isToday && (
-                <Button variant="outline" size="sm" onClick={goToToday}>
-                  Today
-                </Button>
-              )}
-              
-              <span className="text-lg font-semibold text-gray-700">
-                {format(selectedDate, 'MMMM dd, yyyy')}
-              </span>
-            </div>
-            
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={goToNextDay}
-              disabled={isToday}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="center">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={(date) => {
+                if (date) {
+                  setSelectedDate(date);
+                  setCalendarOpen(false);
+                }
+              }}
+              disabled={(date) => date > new Date()}
+            />
+          </PopoverContent>
+        </Popover>
+        
+        {!isToday && (
+          <Button variant="outline" size="sm" onClick={goToToday}>
+            Today
+          </Button>
+        )}
+        
+        <Button 
+          variant="ghost" 
+          size="icon"
+          onClick={goToNextDay}
+          disabled={isToday}
+        >
+          <ChevronRight className="w-5 h-5" />
+        </Button>
+      </div>
 
       {loading ? (
         <div className="flex justify-center py-12">

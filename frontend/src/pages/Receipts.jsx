@@ -607,11 +607,11 @@ const Receipts = () => {
               )}
 
               <div className={cn(
-                "p-4 rounded-lg text-center",
+                "p-4 rounded-lg text-center w-full max-w-full overflow-hidden box-border",
                 viewReceipt.status === 'cancelled' ? "bg-slate-100" : "bg-green-50"
               )}>
                 <p className={cn(
-                  "text-3xl font-bold",
+                  "text-2xl sm:text-3xl font-bold break-words",
                   viewReceipt.status === 'cancelled' ? "text-slate-400 line-through" : "text-green-600"
                 )}>
                   {formatCurrency(viewReceipt.amount)}

@@ -22335,7 +22335,8 @@ async def update_vendor(vendor_id: str, vendor: VendorUpdate, request: Request):
     if not has_permission(user_doc, "finance.manage_vendors"):
         raise HTTPException(status_code=403, detail="Access denied - no finance.manage_vendors permission")
     
-    existing = await db.accounting_vendors.find_one({"vendor_id": vendor_id})
+    # Use finance_vendors as single source of truth
+    existing = await db.finance_vendors.find_one({"vendor_id": vendor_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Vendor not found")
     
@@ -22344,12 +22345,18 @@ async def update_vendor(vendor_id: str, vendor: VendorUpdate, request: Request):
     
     changes = []
     for field, value in vendor.dict(exclude_unset=True).items():
-        if value is not None and existing.get(field) != value:
-            changes.append(f"{field}: {existing.get(field)} → {value}")
-            update_dict[field] = value
+        if value is not None:
+            # Map vendor_name to name for storage
+            storage_field = "name" if field == "vendor_name" else field
+            existing_value = existing.get(storage_field) or existing.get(field)
+            if existing_value != value:
+                changes.append(f"{field}: {existing_value} → {value}")
+                update_dict[storage_field] = value
+                if field == "vendor_name":
+                    update_dict["vendor_name"] = value  # Keep both for compatibility
     
     if len(update_dict) > 2:  # Has actual changes beyond timestamps
-        await db.accounting_vendors.update_one(
+        await db.finance_vendors.update_one(
             {"vendor_id": vendor_id},
             {"$set": update_dict}
         )
@@ -22361,12 +22368,15 @@ async def update_vendor(vendor_id: str, vendor: VendorUpdate, request: Request):
             "entity_id": vendor_id,
             "user_id": user.user_id,
             "user_name": user.name,
-            "details": f"Updated vendor: {existing.get('vendor_name')}. Changes: {'; '.join(changes)}",
+            "details": f"Updated vendor: {existing.get('name') or existing.get('vendor_name')}. Changes: {'; '.join(changes)}",
             "changes": changes,
             "timestamp": now
         })
     
-    updated = await db.accounting_vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+    updated = await db.finance_vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+    # Map 'name' to 'vendor_name' for API compatibility
+    if "name" in updated and "vendor_name" not in updated:
+        updated["vendor_name"] = updated["name"]
     return updated
 
 
@@ -22379,12 +22389,13 @@ async def deactivate_vendor(vendor_id: str, request: Request):
     if not has_permission(user_doc, "finance.manage_vendors"):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    existing = await db.accounting_vendors.find_one({"vendor_id": vendor_id})
+    # Use finance_vendors as single source of truth
+    existing = await db.finance_vendors.find_one({"vendor_id": vendor_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Vendor not found")
     
     now = datetime.now(timezone.utc)
-    await db.accounting_vendors.update_one(
+    await db.finance_vendors.update_one(
         {"vendor_id": vendor_id},
         {"$set": {"is_active": False, "deactivated_at": now, "deactivated_by": user.user_id}}
     )
@@ -22396,7 +22407,7 @@ async def deactivate_vendor(vendor_id: str, request: Request):
         "entity_id": vendor_id,
         "user_id": user.user_id,
         "user_name": user.name,
-        "details": f"Deactivated vendor: {existing.get('vendor_name')}",
+        "details": f"Deactivated vendor: {existing.get('name') or existing.get('vendor_name')}",
         "timestamp": now
     })
     

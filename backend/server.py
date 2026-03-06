@@ -29396,9 +29396,13 @@ async def get_daily_closing_snapshot(
     """Get Daily Closing Snapshot - Founder Liquidity View
     
     Shows per-account closing balances as of selected date.
+    ONLY includes liquidity accounts (bank, cash, wallet/UPI).
+    Excludes expense, liability, income, and control accounts.
+    
+    Grouped by account holder/owner for operational clarity.
     Visible only to Founder, CEO, FinanceManager roles.
     
-    Data source: accounting_transactions + finance_accounts
+    Data source: accounting_transactions + accounting_accounts
     Does NOT modify any data - read-only reporting.
     """
     user = await get_current_user(request)
@@ -29429,19 +29433,69 @@ async def get_daily_closing_snapshot(
     end_of_day = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
     end_of_day_iso = end_of_day.isoformat()
     
-    # Get all active accounts
+    # LIQUIDITY ACCOUNT TYPES ONLY - exclude expense, liability, income, control accounts
+    liquidity_types = ["bank", "cash", "upi", "wallet", "paytm", "gpay", "phonepe", 
+                       "current", "savings", "petty_cash", "petty cash", "upi_wallet"]
+    
     # Get all active accounts - check both collections for compatibility
     accounts = await db.finance_accounts.find(
-        {"is_active": {"$ne": False}},
+        {
+            "is_active": {"$ne": False},
+            "account_type": {"$in": liquidity_types}
+        },
         {"_id": 0}
     ).to_list(100)
     
     # If no finance_accounts, fall back to accounting_accounts
     if not accounts:
         accounts = await db.accounting_accounts.find(
+            {
+                "is_active": {"$ne": False},
+                "account_type": {"$in": liquidity_types}
+            },
+            {"_id": 0}
+        ).to_list(100)
+    
+    # Also include accounts without account_type but with liquidity-like names/categories
+    if not accounts:
+        # Fallback: Get accounts and filter manually
+        all_accounts = await db.accounting_accounts.find(
             {"is_active": {"$ne": False}},
             {"_id": 0}
         ).to_list(100)
+        
+        # Filter to only liquidity accounts
+        accounts = []
+        for acc in all_accounts:
+            acc_type = (acc.get("account_type") or "").lower()
+            acc_name = (acc.get("account_name") or "").lower()
+            category = (acc.get("category") or "").lower()
+            
+            # Include if it's a liquidity account type
+            is_liquidity = (
+                acc_type in liquidity_types or
+                "bank" in acc_name or "bank" in category or
+                "cash" in acc_name or "cash" in category or
+                "petty" in acc_name or
+                "upi" in acc_name or "wallet" in acc_name or
+                "paytm" in acc_name or "gpay" in acc_name or "phonepe" in acc_name
+            )
+            
+            # Exclude if it's clearly not a liquidity account
+            is_excluded = (
+                acc_type in ["expense", "liability", "income", "control", "asset"] or
+                "expense" in acc_name or "expense" in category or
+                "advance" in acc_name or  # Customer Advance is liability
+                "payable" in acc_name or  # Accounts Payable
+                "receivable" in acc_name or  # Accounts Receivable
+                "income" in acc_name or
+                "salary" in acc_name or
+                "incentive" in acc_name or
+                "commission" in acc_name
+            )
+            
+            if is_liquidity and not is_excluded:
+                accounts.append(acc)
     
     if not accounts:
         return {
@@ -29454,11 +29508,11 @@ async def get_daily_closing_snapshot(
                 "total_cash": 0,
                 "total_bank": 0,
                 "total_upi_wallet": 0,
-                "total_other": 0,
                 "grand_total": 0
             },
             "by_type": {},
-            "by_custodian": None,
+            "by_holder": {},
+            "total_liquidity": 0,
             "account_count": 0
         }
     
@@ -29468,19 +29522,29 @@ async def get_daily_closing_snapshot(
     for account in accounts:
         account_id = account.get("account_id")
         account_name = account.get("account_name") or account.get("name", "Unknown")
-        account_type = account.get("account_type", "other").lower()
+        account_type = (account.get("account_type") or "other").lower()
         opening_balance = account.get("opening_balance", 0) or 0
-        custodian = account.get("custodian") or account.get("owner") or None
+        # Support both 'holder' and 'custodian' field names
+        holder = account.get("holder") or account.get("custodian") or account.get("owner") or "Unassigned"
         
-        # Normalize account type
+        # Normalize account type for liquidity
         if account_type in ["bank", "current", "savings"]:
             normalized_type = "bank"
         elif account_type in ["cash", "petty_cash", "petty cash"]:
             normalized_type = "cash"
-        elif account_type in ["upi", "wallet", "paytm", "gpay", "phonepe"]:
+        elif account_type in ["upi", "wallet", "paytm", "gpay", "phonepe", "upi_wallet"]:
             normalized_type = "upi_wallet"
         else:
-            normalized_type = "other"
+            # Infer type from name for legacy accounts
+            name_lower = account_name.lower()
+            if "bank" in name_lower:
+                normalized_type = "bank"
+            elif "cash" in name_lower or "petty" in name_lower:
+                normalized_type = "cash"
+            elif "upi" in name_lower or "wallet" in name_lower or "paytm" in name_lower:
+                normalized_type = "upi_wallet"
+            else:
+                normalized_type = "cash"  # Default to cash for unknown liquidity accounts
         
         # Get all transactions for this account up to end of selected day
         inflows = await db.accounting_transactions.find({

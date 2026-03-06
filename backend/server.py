@@ -22304,7 +22304,7 @@ async def create_vendor(vendor: VendorCreate, request: Request):
         )
         new_vendor["subledger_account_id"] = subledger_account.get("account_id")
         # Update vendor with linked account
-        await db.accounting_vendors.update_one(
+        await db.finance_vendors.update_one(
             {"vendor_id": vendor_id},
             {"$set": {"subledger_account_id": subledger_account.get("account_id")}}
         )

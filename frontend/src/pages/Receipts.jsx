@@ -585,7 +585,7 @@ const Receipts = () => {
             </DialogTitle>
           </DialogHeader>
           {viewReceipt && (
-            <div className="space-y-4 py-4 overflow-hidden">
+            <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
               {/* Cancelled Banner */}
               {viewReceipt.status === 'cancelled' && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg">

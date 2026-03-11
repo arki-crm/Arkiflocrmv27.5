@@ -23896,7 +23896,7 @@ async def get_project_finance_detail(project_id: str, request: Request):
         ],
         # Exclude non-cashbook entries
         "is_cashbook_entry": {"$ne": False}
-    }, {"_id": 0, "amount": 1, "category_id": 1}).to_list(1000)
+    }, {"_id": 0, "amount": 1, "category_id": 1, "transaction_id": 1, "remarks": 1, "paid_to": 1, "paid_from_account": 1, "created_at": 1}).to_list(1000)
     cashbook_expense_total = sum(e.get("amount", 0) for e in cashbook_expenses)
     
     total_outflow = purchase_invoice_total + approved_expense_total + recorded_expense_total + cashbook_expense_total

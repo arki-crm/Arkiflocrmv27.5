@@ -23706,7 +23706,7 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         signoff_locked = p.get("signoff_locked", False)
         
         # ============================================================
-        # STRICT SOURCE TABLES - NO accounting_transactions
+        # ACTUAL COST SOURCES - Complete project expense tracking
         # ============================================================
         
         # 1. TOTAL RECEIVED: From finance_receipts (status = active)
@@ -23716,7 +23716,7 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         ).to_list(1000)
         total_received = sum(r.get("amount", 0) for r in active_receipts)
         
-        # 2. ACTUAL COST: From execution_ledger (purchase invoices) + approved expense_requests
+        # 2. ACTUAL COST: Multiple sources for complete expense tracking
         # 2a. Purchase invoices from execution_ledger (grand_total = amount with GST)
         purchase_invoices = await db.execution_ledger.find(
             {"project_id": project_id},
@@ -23724,7 +23724,7 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         ).to_list(1000)
         purchase_invoice_total = sum(p.get("grand_total") or p.get("total_value", 0) for p in purchase_invoices)
         
-        # 2b. Approved expense requests
+        # 2b. Approved expense requests (not yet paid)
         approved_expenses = await db.finance_expense_requests.find(
             {"project_id": project_id, "status": "approved"},
             {"_id": 0, "amount": 1}
@@ -23738,7 +23738,24 @@ async def list_projects_with_finance(request: Request, search: Optional[str] = N
         ).to_list(1000)
         recorded_expense_total = sum(e.get("amount", 0) for e in recorded_expenses)
         
-        actual_cost = purchase_invoice_total + approved_expense_total + recorded_expense_total
+        # 2d. CASHBOOK OUTFLOWS - Direct project expenses from cashbook
+        # These are expenses tagged to project via cashbook but NOT through expense_requests
+        # Exclude entries that came FROM expense_requests to avoid double counting
+        cashbook_expenses = await db.accounting_transactions.find({
+            "project_id": project_id,
+            "transaction_type": "outflow",
+            "source_module": "cashbook",
+            # Exclude expense request entries (already counted above)
+            "$or": [
+                {"expense_request_id": {"$exists": False}},
+                {"expense_request_id": None}
+            ],
+            # Exclude non-cashbook entries
+            "is_cashbook_entry": {"$ne": False}
+        }, {"_id": 0, "amount": 1}).to_list(1000)
+        cashbook_expense_total = sum(e.get("amount", 0) for e in cashbook_expenses)
+        
+        actual_cost = purchase_invoice_total + approved_expense_total + recorded_expense_total + cashbook_expense_total
         
         # 3. PLANNED COST: From finance_vendor_mappings
         vendor_mappings = await db.finance_vendor_mappings.find(

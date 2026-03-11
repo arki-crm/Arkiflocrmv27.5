@@ -23850,7 +23850,7 @@ async def get_project_finance_detail(project_id: str, request: Request):
     total_planned = sum(planned_by_category.values())
     
     # ============================================================
-    # STRICT SOURCE TABLES - NO accounting_transactions for summaries
+    # ACTUAL COST SOURCES - Complete project expense tracking
     # ============================================================
     
     # 1. TOTAL RECEIVED: From finance_receipts (status = active)
@@ -23860,7 +23860,7 @@ async def get_project_finance_detail(project_id: str, request: Request):
     ).to_list(1000)
     total_inflow = sum(r.get("amount", 0) for r in project_receipts)
     
-    # 2. ACTUAL COST: From execution_ledger (purchase invoices) + approved expense_requests
+    # 2. ACTUAL COST: Multiple sources for complete expense tracking
     # 2a. Purchase invoices from execution_ledger (grand_total = amount with GST)
     purchase_invoices = await db.execution_ledger.find(
         {"project_id": project_id},
@@ -23868,7 +23868,7 @@ async def get_project_finance_detail(project_id: str, request: Request):
     ).to_list(1000)
     purchase_invoice_total = sum(p.get("grand_total") or p.get("total_value", 0) for p in purchase_invoices)
     
-    # 2b. Approved expense requests
+    # 2b. Approved expense requests (not yet paid)
     approved_expenses = await db.finance_expense_requests.find(
         {"project_id": project_id, "status": "approved"},
         {"_id": 0, "amount": 1, "category": 1}
@@ -23882,7 +23882,24 @@ async def get_project_finance_detail(project_id: str, request: Request):
     ).to_list(1000)
     recorded_expense_total = sum(e.get("amount", 0) for e in recorded_expenses)
     
-    total_outflow = purchase_invoice_total + approved_expense_total + recorded_expense_total
+    # 2d. CASHBOOK OUTFLOWS - Direct project expenses from cashbook
+    # These are expenses tagged to project via cashbook but NOT through expense_requests
+    # Exclude entries that came FROM expense_requests to avoid double counting
+    cashbook_expenses = await db.accounting_transactions.find({
+        "project_id": project_id,
+        "transaction_type": "outflow",
+        "source_module": "cashbook",
+        # Exclude expense request entries (already counted above)
+        "$or": [
+            {"expense_request_id": {"$exists": False}},
+            {"expense_request_id": None}
+        ],
+        # Exclude non-cashbook entries
+        "is_cashbook_entry": {"$ne": False}
+    }, {"_id": 0, "amount": 1, "category_id": 1}).to_list(1000)
+    cashbook_expense_total = sum(e.get("amount", 0) for e in cashbook_expenses)
+    
+    total_outflow = purchase_invoice_total + approved_expense_total + recorded_expense_total + cashbook_expense_total
     
     # 3. Group actual costs by category (for comparison)
     actual_by_category = {}
@@ -23891,6 +23908,10 @@ async def get_project_finance_detail(project_id: str, request: Request):
         actual_by_category[cat] = actual_by_category.get(cat, 0) + (p.get("grand_total") or p.get("total_value", 0))
     for e in approved_expenses + recorded_expenses:
         cat = e.get("category", "Other")
+        actual_by_category[cat] = actual_by_category.get(cat, 0) + e.get("amount", 0)
+    # Add cashbook expenses to category breakdown
+    for e in cashbook_expenses:
+        cat = e.get("category_id", "Other")
         actual_by_category[cat] = actual_by_category.get(cat, 0) + e.get("amount", 0)
     
     # 4. REMAINING LIABILITY: planned_cost - actual_cost

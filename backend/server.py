@@ -23967,6 +23967,19 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "source": "finance_expense_requests"
         })
     
+    # Add cashbook expenses as transactions
+    for e in cashbook_expenses:
+        transactions.append({
+            "transaction_id": e.get("transaction_id", ""),
+            "transaction_type": "outflow",
+            "amount": e.get("amount", 0),
+            "description": f"Cashbook: {e.get('remarks', e.get('paid_to', 'N/A'))}",
+            "category_name": e.get("category_id", "Cashbook Expense"),
+            "account_name": e.get("paid_from_account", "Cash/Bank"),
+            "created_at": e.get("created_at", ""),
+            "source": "cashbook"
+        })
+    
     # Add receipts as inflow transactions
     for r in project_receipts:
         transactions.append({

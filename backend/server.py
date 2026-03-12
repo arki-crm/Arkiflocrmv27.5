@@ -23317,6 +23317,7 @@ async def get_daily_summary(date: str, request: Request):
     date_end_iso = f"{date}T23:59:59"
     
     # Get transactions for the selected day
+    # P1-FIX: Only include transactions involving cash/bank/digital accounts
     # Exclude credit purchase daybook entries and old purchase_invoice entries
     day_transactions = await db.accounting_transactions.find(
         {
@@ -23324,6 +23325,7 @@ async def get_daily_summary(date: str, request: Request):
                 {"transaction_date": {"$regex": f"^{date}"}},
                 {"created_at": {"$gte": date_start_iso, "$lte": date_end_iso}}
             ],
+            "account_id": {"$in": cashbook_account_ids},  # P1-FIX: Only cash/bank/digital accounts
             "$and": [
                 {"$or": [
                     {"is_cashbook_entry": {"$ne": False}},

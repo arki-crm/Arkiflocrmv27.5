@@ -24604,20 +24604,24 @@ async def get_daily_transactions(request: Request, date: str):
                 counterparty = vendor.get("name", "Unknown Vendor")
                 counterparty_type = "vendor"
         
-        # Calculate inflow/outflow
+        # Calculate inflow/outflow and determine transaction type label
         amount = txn.get("amount", 0)
         if txn.get("transaction_type") == "inflow":
             total_inflow += amount
             inflow = amount
             outflow = 0
+            type_label = "Receipt"  # Money coming in
         else:
             total_outflow += amount
             inflow = 0
             outflow = amount
+            type_label = "Expense"  # Money going out
         
         enriched.append({
             "transaction_id": txn.get("transaction_id"),
             "time": txn.get("created_at"),
+            "type": type_label,  # Human-readable type: Receipt or Expense
+            "amount": amount,    # Single amount field for clarity
             "account_id": txn.get("account_id"),
             "account_name": account.get("account_name", "Unknown"),
             "account_type": account.get("account_type"),
@@ -24641,6 +24645,10 @@ async def get_daily_transactions(request: Request, date: str):
         "transactions": enriched,
         "summary": {
             "count": len(enriched),
+            "money_in": total_inflow,      # Human-readable label
+            "money_out": total_outflow,    # Human-readable label
+            "net_cash_movement": total_inflow - total_outflow,
+            # Keep old names for backward compatibility
             "total_inflow": total_inflow,
             "total_outflow": total_outflow,
             "net": total_inflow - total_outflow

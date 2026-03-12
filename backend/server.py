@@ -23291,6 +23291,8 @@ async def get_daily_summary(date: str, request: Request):
     Closing Balance = Opening + day's net movement
     
     Historical accuracy: Does NOT derive from current_balance
+    
+    P1-FIX: Only show cash/bank/digital accounts in Cash Book summary
     """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
@@ -23298,7 +23300,16 @@ async def get_daily_summary(date: str, request: Request):
     if not has_permission(user_doc, "finance.view_cashbook"):
         raise HTTPException(status_code=403, detail="Access denied - no finance.view_cashbook permission")
     
-    accounts = await db.accounting_accounts.find({"is_active": True}, {"_id": 0}).to_list(100)
+    # P1-FIX: Only fetch cash/bank/digital accounts for Cash Book
+    # Expense, income, and liability accounts should NOT appear in Cash Book
+    cashbook_account_types = ["cash", "bank", "digital"]
+    accounts = await db.accounting_accounts.find(
+        {"is_active": True, "account_type": {"$in": cashbook_account_types}},
+        {"_id": 0}
+    ).to_list(100)
+    
+    # Also get list of cashbook account IDs for filtering transactions
+    cashbook_account_ids = [a["account_id"] for a in accounts]
     
     # Build ISO date string for comparison (transactions store created_at as ISO)
     # date format is YYYY-MM-DD

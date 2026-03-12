@@ -702,19 +702,19 @@ const DailyClosing = () => {
                 </div>
               </div>
 
-              {/* Transactions Table */}
+              {/* Transactions Table - One row per business transaction */}
               <div className="flex-1 overflow-auto border rounded-lg">
                 <table className="w-full min-w-[900px]">
                   <thead className="bg-slate-100 sticky top-0">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Time</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Type</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase">Amount</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Account</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Reference</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Category / Purpose</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Category</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Project / Vendor</th>
                       <th className="px-3 py-2 text-center text-xs font-medium text-slate-500 uppercase">Mode</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-green-600 uppercase">Inflow</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-red-600 uppercase">Outflow</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Narration</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -731,39 +731,46 @@ const DailyClosing = () => {
                             {new Date(txn.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                           </td>
                           <td className="px-3 py-2">
-                            <p className="text-sm font-medium text-slate-900">{txn.account_name}</p>
-                            <p className="text-xs text-slate-400 capitalize">{txn.account_type}</p>
+                            <Badge 
+                              variant={txn.transaction_type === 'inflow' ? 'default' : 'destructive'}
+                              className={cn(
+                                "text-xs",
+                                txn.transaction_type === 'inflow' 
+                                  ? "bg-green-100 text-green-700 hover:bg-green-100" 
+                                  : "bg-red-100 text-red-700 hover:bg-red-100"
+                              )}
+                            >
+                              {txn.type || (txn.transaction_type === 'inflow' ? 'Receipt' : 'Expense')}
+                            </Badge>
                           </td>
-                          <td className="px-3 py-2 text-sm text-slate-600 max-w-[150px] truncate" title={txn.reference}>
-                            {txn.reference}
+                          <td className={cn(
+                            "px-3 py-2 text-right text-sm font-semibold",
+                            txn.transaction_type === 'inflow' ? "text-green-600" : "text-red-600"
+                          )}>
+                            {txn.transaction_type === 'inflow' ? '+' : '-'}₹{(txn.amount || txn.inflow || txn.outflow || 0).toLocaleString('en-IN')}
+                          </td>
+                          <td className="px-3 py-2">
+                            <p className="text-sm font-medium text-slate-900">{txn.account_name}</p>
                           </td>
                           <td className="px-3 py-2">
                             <p className="text-sm text-slate-900">{txn.purpose || txn.category_name}</p>
                           </td>
                           <td className="px-3 py-2">
                             {txn.counterparty ? (
-                              <div className="flex items-center gap-1">
-                                <Badge variant="outline" className="text-xs capitalize">
-                                  {txn.counterparty_type}
-                                </Badge>
-                                <span className="text-sm text-slate-600 max-w-[150px] truncate" title={txn.counterparty}>
-                                  {txn.counterparty}
-                                </span>
-                              </div>
+                              <span className="text-sm text-slate-600 max-w-[150px] truncate block" title={txn.counterparty}>
+                                {txn.counterparty}
+                              </span>
                             ) : (
                               <span className="text-sm text-slate-400">-</span>
                             )}
                           </td>
                           <td className="px-3 py-2 text-center">
-                            <Badge variant="secondary" className="text-xs">
+                            <Badge variant="secondary" className="text-xs capitalize">
                               {txn.mode}
                             </Badge>
                           </td>
-                          <td className="px-3 py-2 text-right text-sm font-medium text-green-600">
-                            {txn.inflow > 0 ? formatCurrency(txn.inflow) : ''}
-                          </td>
-                          <td className="px-3 py-2 text-right text-sm font-medium text-red-600">
-                            {txn.outflow > 0 ? formatCurrency(txn.outflow) : ''}
+                          <td className="px-3 py-2 text-sm text-slate-600 max-w-[180px] truncate" title={txn.reference}>
+                            {txn.reference}
                           </td>
                         </tr>
                       ))
@@ -772,12 +779,22 @@ const DailyClosing = () => {
                   {getFilteredTransactions().length > 0 && (
                     <tfoot className="bg-slate-100 sticky bottom-0">
                       <tr>
-                        <td colSpan={6} className="px-3 py-2 text-sm font-semibold text-slate-700">
-                          Filtered Total ({getFilteredTransactions().length} transactions)
+                        <td colSpan={2} className="px-3 py-2 text-sm font-semibold text-slate-700">
+                          Total ({getFilteredTransactions().length} transactions)
                         </td>
-                        <td className="px-3 py-2 text-right text-sm font-bold text-green-600">
-                          {formatCurrency(getFilteredTransactions().reduce((s, t) => s + (t.inflow || 0), 0))}
+                        <td colSpan={6} className="px-3 py-2 text-right text-sm">
+                          <span className="text-green-600 font-semibold mr-4">
+                            In: {formatCurrency(getFilteredTransactions().reduce((s, t) => s + (t.inflow || 0), 0))}
+                          </span>
+                          <span className="text-red-600 font-semibold">
+                            Out: {formatCurrency(getFilteredTransactions().reduce((s, t) => s + (t.outflow || 0), 0))}
+                          </span>
                         </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
                         <td className="px-3 py-2 text-right text-sm font-bold text-red-600">
                           {formatCurrency(getFilteredTransactions().reduce((s, t) => s + (t.outflow || 0), 0))}
                         </td>

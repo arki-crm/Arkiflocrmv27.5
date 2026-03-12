@@ -24536,8 +24536,10 @@ async def get_daily_transactions(request: Request, date: str):
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     
     # Get all transactions for this date using transaction_date field
+    # P1-FIX: Handle both date formats - "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SS.sssZ"
+    # Some entries store full ISO timestamp, some store date only
     transactions = await db.accounting_transactions.find(
-        {"transaction_date": date},
+        {"transaction_date": {"$regex": f"^{date}"}},
         {"_id": 0}
     ).sort("created_at", 1).to_list(1000)
     

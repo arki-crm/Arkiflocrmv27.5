@@ -24522,7 +24522,19 @@ async def get_daily_closing_history(request: Request, limit: int = 30):
 
 @api_router.get("/finance/daily-closing/{date}/transactions")
 async def get_daily_transactions(request: Request, date: str):
-    """Get detailed transaction list for a specific date (Daybook view)"""
+    """Get detailed transaction list for a specific date (Daybook view)
+    
+    DAYBOOK DESIGN:
+    - Shows ONE row per business transaction (human-readable log)
+    - NOT double-entry accounting view
+    - Only shows the cash/bank movement side of each transaction
+    - Counter-entries (expense/income accounts) are filtered out
+    
+    Example: A ₹368 expense shows as:
+      Time: 05:04 PM | Type: Expense | Amount: ₹368 | Account: Bank | Category: Project Expense
+    
+    NOT as two rows (Bank outflow + Expense inflow)
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
@@ -24535,11 +24547,26 @@ async def get_daily_transactions(request: Request, date: str):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     
-    # Get all transactions for this date using transaction_date field
-    # P1-FIX: Handle both date formats - "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SS.sssZ"
-    # Some entries store full ISO timestamp, some store date only
+    # Get cash/bank/digital account IDs - these are the "real money" accounts
+    cashbook_account_types = ["cash", "bank", "digital"]
+    cashbook_accounts = await db.accounting_accounts.find(
+        {"account_type": {"$in": cashbook_account_types}},
+        {"_id": 0, "account_id": 1}
+    ).to_list(500)
+    cashbook_account_ids = [a["account_id"] for a in cashbook_accounts]
+    
+    # DAYBOOK QUERY: Show only cash/bank/digital account transactions
+    # This gives us ONE row per business transaction (the money movement side)
+    # Filter out counter-entries (expense/income/liability accounts)
     transactions = await db.accounting_transactions.find(
-        {"transaction_date": {"$regex": f"^{date}"}},
+        {
+            "transaction_date": {"$regex": f"^{date}"},
+            "account_id": {"$in": cashbook_account_ids},  # Only cash/bank/digital accounts
+            "$or": [
+                {"is_cashbook_entry": {"$ne": False}},
+                {"is_cashbook_entry": {"$exists": False}}
+            ]
+        },
         {"_id": 0}
     ).sort("created_at", 1).to_list(1000)
     

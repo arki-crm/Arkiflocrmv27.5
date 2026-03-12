@@ -795,14 +795,6 @@ const DailyClosing = () => {
                   )}
                 </table>
               </div>
-                        <td className="px-3 py-2 text-right text-sm font-bold text-red-600">
-                          {formatCurrency(getFilteredTransactions().reduce((s, t) => s + (t.outflow || 0), 0))}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
             </>
           ) : null}
         </DialogContent>

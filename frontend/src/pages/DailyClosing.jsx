@@ -627,27 +627,27 @@ const DailyClosing = () => {
             </div>
           ) : detailedData ? (
             <>
-              {/* Summary Bar */}
+              {/* Summary Bar - Human readable cash movement */}
               <div className="flex-shrink-0 grid grid-cols-4 gap-4 p-3 bg-slate-50 rounded-lg mb-4">
                 <div className="text-center">
                   <p className="text-xs text-slate-500">Transactions</p>
                   <p className="text-lg font-bold text-slate-900">{detailedData.summary.count}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-xs text-green-600">Total Inflow</p>
-                  <p className="text-lg font-bold text-green-600">+{formatCurrency(detailedData.summary.total_inflow)}</p>
+                  <p className="text-xs text-green-600">Money In</p>
+                  <p className="text-lg font-bold text-green-600">+{formatCurrency(detailedData.summary.money_in || detailedData.summary.total_inflow)}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-xs text-red-600">Total Outflow</p>
-                  <p className="text-lg font-bold text-red-600">-{formatCurrency(detailedData.summary.total_outflow)}</p>
+                  <p className="text-xs text-red-600">Money Out</p>
+                  <p className="text-lg font-bold text-red-600">-{formatCurrency(detailedData.summary.money_out || detailedData.summary.total_outflow)}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-xs text-slate-500">Net</p>
+                  <p className="text-xs text-slate-500">Net Cash Movement</p>
                   <p className={cn(
                     "text-lg font-bold",
-                    detailedData.summary.net >= 0 ? "text-green-600" : "text-red-600"
+                    (detailedData.summary.net_cash_movement || detailedData.summary.net) >= 0 ? "text-green-600" : "text-red-600"
                   )}>
-                    {detailedData.summary.net >= 0 ? '+' : ''}{formatCurrency(detailedData.summary.net)}
+                    {(detailedData.summary.net_cash_movement || detailedData.summary.net) >= 0 ? '+' : ''}{formatCurrency(detailedData.summary.net_cash_movement || detailedData.summary.net)}
                   </p>
                 </div>
               </div>

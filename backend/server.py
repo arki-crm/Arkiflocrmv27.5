@@ -22575,16 +22575,27 @@ async def list_transactions(
     if not has_permission(user_doc, "finance.view_cashbook") and not has_permission(user_doc, "finance.view_bankbook"):
         raise HTTPException(status_code=403, detail="Access denied - no finance view permission")
     
+    # P1-FIX: Get list of cash/bank/digital account IDs
+    # Cashbook should ONLY show transactions involving cash/bank/digital accounts
+    # NOT expense accounts, income accounts, or liability accounts
+    cashbook_account_types = ["cash", "bank", "digital"]
+    cashbook_accounts = await db.accounting_accounts.find(
+        {"account_type": {"$in": cashbook_account_types}},
+        {"_id": 0, "account_id": 1}
+    ).to_list(500)
+    cashbook_account_ids = [a["account_id"] for a in cashbook_accounts]
+    
     query = {}
     
     # P0-FIX: Exclude non-cashbook entries (like unpaid credit purchases) from cashbook view
     # Cashbook should only show entries with actual cash movement (has account_id)
     # Credit purchases create daybook entries without account_id until payment is made
     if not include_non_cashbook:
-        # Filter out entries that are explicitly marked as non-cashbook
-        # OR entries that have no account_id (meaning no actual cash movement)
+        # P1-FIX: Filter to ONLY cash/bank/digital account transactions
+        # This excludes the expense-side of double-entry transactions
         query["$and"] = [
             {"is_cashbook_entry": {"$ne": False}},  # Not explicitly marked as non-cashbook
+            {"account_id": {"$in": cashbook_account_ids}},  # ONLY cash/bank/digital accounts
             {"$or": [
                 {"account_id": {"$ne": None}},  # Has account = real transaction
                 {"entry_type": {"$nin": ["purchase_invoice_credit", "purchase_invoice"]}}  # Not a credit purchase

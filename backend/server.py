@@ -19425,6 +19425,353 @@ async def get_ceo_dashboard(request: Request):
         }
     }
 
+# ============ FOUNDER DASHBOARD ============
+
+@api_router.get("/founder/dashboard")
+async def get_founder_dashboard(request: Request):
+    """
+    Comprehensive Founder Dashboard showing real-time business health.
+    
+    Sections:
+    1. Cash Position - Total cash available, breakdown by accounts
+    2. Receivable Pipeline - Pending payments, upcoming installments
+    3. Upcoming Payments - Vendor payables, salaries, liabilities
+    4. Today's Financial Activity - Receipts, expenses, net movement
+    5. Ongoing Projects - Active projects with financial status
+    6. Project Profitability - Profit/loss per project
+    7. Pending Approvals - Expense requests, vendor payments
+    8. Sales Pipeline - Leads, deals, recent closes
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Permission check - Founder, Admin, or founder_dashboard permission
+    if not has_permission(user_doc, "finance.founder_dashboard") and user_doc.get("role") not in ["Admin", "Founder", "CEO"]:
+        raise HTTPException(status_code=403, detail="You don't have permission to view Founder Dashboard")
+    
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    
+    # ============================================================
+    # 1. CASH POSITION - Total cash available, breakdown by accounts
+    # ============================================================
+    cash_accounts = await db.accounting_accounts.find(
+        {"account_type": {"$in": ["cash", "bank", "digital"]}, "is_active": True},
+        {"_id": 0}
+    ).to_list(100)
+    
+    cash_position = {
+        "total": sum(a.get("current_balance", 0) for a in cash_accounts),
+        "accounts": []
+    }
+    
+    for acc in cash_accounts:
+        cash_position["accounts"].append({
+            "account_id": acc.get("account_id"),
+            "account_name": acc.get("account_name"),
+            "account_type": acc.get("account_type"),
+            "holder": acc.get("holder", "Company"),
+            "balance": acc.get("current_balance", 0)
+        })
+    
+    # Group by type
+    cash_by_type = {"cash": 0, "bank": 0, "digital": 0}
+    for acc in cash_accounts:
+        acc_type = acc.get("account_type", "cash")
+        cash_by_type[acc_type] = cash_by_type.get(acc_type, 0) + acc.get("current_balance", 0)
+    
+    cash_position["by_type"] = cash_by_type
+    
+    # ============================================================
+    # 2. RECEIVABLE PIPELINE - Pending customer payments
+    # ============================================================
+    # Get active projects with pending receivables
+    active_projects = await db.projects.find(
+        {"status": {"$in": ["Active", "In Progress", "active", "in_progress"]}, "signoff_value": {"$gt": 0}},
+        {"_id": 0, "project_id": 1, "pid": 1, "project_name": 1, "client_name": 1, "signoff_value": 1}
+    ).to_list(500)
+    
+    receivables = []
+    total_receivable = 0
+    
+    for proj in active_projects:
+        project_id = proj.get("project_id")
+        signoff_value = proj.get("signoff_value", 0)
+        
+        # Get total received
+        receipts = await db.finance_receipts.find(
+            {"project_id": project_id, "status": {"$ne": "cancelled"}},
+            {"_id": 0, "amount": 1}
+        ).to_list(100)
+        total_received = sum(r.get("amount", 0) for r in receipts)
+        
+        balance_due = signoff_value - total_received
+        if balance_due > 0:
+            receivables.append({
+                "project_id": project_id,
+                "pid": proj.get("pid"),
+                "project_name": proj.get("project_name"),
+                "client_name": proj.get("client_name"),
+                "contract_value": signoff_value,
+                "received": total_received,
+                "balance_due": balance_due
+            })
+            total_receivable += balance_due
+    
+    receivable_pipeline = {
+        "total_receivable": total_receivable,
+        "projects_with_dues": len(receivables),
+        "details": sorted(receivables, key=lambda x: x["balance_due"], reverse=True)[:10]  # Top 10
+    }
+    
+    # ============================================================
+    # 3. UPCOMING PAYMENTS - Vendor payables, salaries, liabilities
+    # ============================================================
+    # Pending expense requests
+    pending_expenses = await db.finance_expense_requests.find(
+        {"status": {"$in": ["pending", "approved"]}},
+        {"_id": 0, "amount": 1, "description": 1, "category": 1, "status": 1, "created_at": 1}
+    ).to_list(500)
+    pending_expense_total = sum(e.get("amount", 0) for e in pending_expenses)
+    
+    # Vendor payables from execution ledger (unpaid invoices)
+    unpaid_invoices = await db.execution_ledger.find(
+        {"payment_status": {"$in": ["pending", "partial"]}},
+        {"_id": 0, "grand_total": 1, "total_value": 1, "vendor_name": 1, "paid_amount": 1}
+    ).to_list(500)
+    vendor_payable = sum((inv.get("grand_total") or inv.get("total_value", 0)) - inv.get("paid_amount", 0) for inv in unpaid_invoices)
+    
+    upcoming_payments = {
+        "total_payable": pending_expense_total + vendor_payable,
+        "expense_requests": {
+            "count": len(pending_expenses),
+            "total": pending_expense_total
+        },
+        "vendor_payables": {
+            "count": len(unpaid_invoices),
+            "total": vendor_payable
+        },
+        "salary_payable": 0,  # Would need salary module
+        "other_liabilities": 0
+    }
+    
+    # ============================================================
+    # 4. TODAY'S FINANCIAL ACTIVITY
+    # ============================================================
+    today_transactions = await db.accounting_transactions.find(
+        {"transaction_date": {"$regex": f"^{today}"}},
+        {"_id": 0, "transaction_type": 1, "amount": 1, "account_id": 1}
+    ).to_list(1000)
+    
+    # Filter to only cash/bank accounts
+    cash_account_ids = [a.get("account_id") for a in cash_accounts]
+    today_cash_txns = [t for t in today_transactions if t.get("account_id") in cash_account_ids]
+    
+    today_receipts = sum(t.get("amount", 0) for t in today_cash_txns if t.get("transaction_type") == "inflow")
+    today_expenses = sum(t.get("amount", 0) for t in today_cash_txns if t.get("transaction_type") == "outflow")
+    
+    todays_activity = {
+        "receipts": today_receipts,
+        "expenses": today_expenses,
+        "net_movement": today_receipts - today_expenses,
+        "transaction_count": len(today_cash_txns)
+    }
+    
+    # ============================================================
+    # 5. ONGOING PROJECTS WITH FINANCIAL STATUS
+    # ============================================================
+    ongoing_projects = []
+    
+    all_active_projects = await db.projects.find(
+        {"status": {"$in": ["Active", "In Progress", "active", "in_progress", "Design", "Execution"]}},
+        {"_id": 0}
+    ).to_list(500)
+    
+    for proj in all_active_projects:
+        project_id = proj.get("project_id")
+        signoff_value = proj.get("signoff_value") or 0
+        
+        # Skip projects without signoff value
+        if signoff_value <= 0:
+            continue
+        
+        # Get total received
+        receipts = await db.finance_receipts.find(
+            {"project_id": project_id, "status": {"$ne": "cancelled"}},
+            {"_id": 0, "amount": 1}
+        ).to_list(100)
+        total_received = sum(r.get("amount", 0) for r in receipts)
+        
+        # Get actual cost from multiple sources
+        # 1. Execution ledger
+        exec_invoices = await db.execution_ledger.find(
+            {"project_id": project_id},
+            {"_id": 0, "grand_total": 1, "total_value": 1}
+        ).to_list(100)
+        exec_cost = sum(inv.get("grand_total") or inv.get("total_value", 0) for inv in exec_invoices)
+        
+        # 2. Expense requests
+        expense_reqs = await db.finance_expense_requests.find(
+            {"project_id": project_id, "status": {"$in": ["approved", "recorded"]}},
+            {"_id": 0, "amount": 1}
+        ).to_list(100)
+        expense_cost = sum(e.get("amount", 0) for e in expense_reqs)
+        
+        # 3. Cashbook expenses
+        cashbook_expenses = await db.accounting_transactions.find({
+            "project_id": project_id,
+            "transaction_type": "outflow",
+            "source_module": "cashbook",
+            "$or": [{"expense_request_id": {"$exists": False}}, {"expense_request_id": None}]
+        }, {"_id": 0, "amount": 1}).to_list(100)
+        cashbook_cost = sum(e.get("amount", 0) for e in cashbook_expenses)
+        
+        actual_cost = exec_cost + expense_cost + cashbook_cost
+        profit_loss = total_received - actual_cost
+        
+        # Calculate progress (simplified - based on milestones or design stage)
+        progress = proj.get("progress", 0)
+        if not progress:
+            # Estimate based on received vs contract
+            if signoff_value > 0:
+                progress = min(100, int((total_received / signoff_value) * 100))
+        
+        ongoing_projects.append({
+            "project_id": project_id,
+            "pid": proj.get("pid"),
+            "project_name": proj.get("project_name"),
+            "client_name": proj.get("client_name"),
+            "status": proj.get("status"),
+            "progress": progress,
+            "contract_value": signoff_value,
+            "total_received": total_received,
+            "actual_cost": actual_cost,
+            "profit_loss": profit_loss,
+            "profit_margin": round((profit_loss / signoff_value) * 100, 1) if signoff_value > 0 else 0
+        })
+    
+    # Sort by contract value descending
+    ongoing_projects.sort(key=lambda x: x["contract_value"], reverse=True)
+    
+    # ============================================================
+    # 6. PROJECT PROFITABILITY OVERVIEW
+    # ============================================================
+    profitable_count = len([p for p in ongoing_projects if p["profit_loss"] >= 0])
+    loss_making_count = len([p for p in ongoing_projects if p["profit_loss"] < 0])
+    total_profit = sum(p["profit_loss"] for p in ongoing_projects if p["profit_loss"] >= 0)
+    total_loss = sum(abs(p["profit_loss"]) for p in ongoing_projects if p["profit_loss"] < 0)
+    
+    profitability = {
+        "total_projects": len(ongoing_projects),
+        "profitable_projects": profitable_count,
+        "loss_making_projects": loss_making_count,
+        "total_profit": total_profit,
+        "total_loss": total_loss,
+        "net_profit": total_profit - total_loss,
+        "top_profitable": sorted([p for p in ongoing_projects if p["profit_loss"] > 0], 
+                                 key=lambda x: x["profit_loss"], reverse=True)[:5],
+        "top_loss_making": sorted([p for p in ongoing_projects if p["profit_loss"] < 0],
+                                  key=lambda x: x["profit_loss"])[:5]
+    }
+    
+    # ============================================================
+    # 7. PENDING APPROVALS
+    # ============================================================
+    # Expense requests pending approval
+    pending_expense_approvals = await db.finance_expense_requests.find(
+        {"status": "pending"},
+        {"_id": 0, "request_id": 1, "amount": 1, "description": 1, "requested_by_name": 1, "created_at": 1, "category": 1}
+    ).to_list(50)
+    
+    # Vendor payments pending
+    pending_vendor_payments = await db.execution_ledger.find(
+        {"payment_status": "pending", "approval_status": {"$in": ["pending", None]}},
+        {"_id": 0, "execution_id": 1, "vendor_name": 1, "grand_total": 1, "total_value": 1, "invoice_no": 1}
+    ).to_list(50)
+    
+    pending_approvals = {
+        "total_count": len(pending_expense_approvals) + len(pending_vendor_payments),
+        "expense_requests": {
+            "count": len(pending_expense_approvals),
+            "total_amount": sum(e.get("amount", 0) for e in pending_expense_approvals),
+            "items": pending_expense_approvals[:10]
+        },
+        "vendor_payments": {
+            "count": len(pending_vendor_payments),
+            "total_amount": sum(v.get("grand_total") or v.get("total_value", 0) for v in pending_vendor_payments),
+            "items": [{
+                "execution_id": v.get("execution_id"),
+                "vendor_name": v.get("vendor_name"),
+                "amount": v.get("grand_total") or v.get("total_value", 0),
+                "invoice_no": v.get("invoice_no")
+            } for v in pending_vendor_payments[:10]]
+        }
+    }
+    
+    # ============================================================
+    # 8. SALES PIPELINE
+    # ============================================================
+    # New leads (last 30 days)
+    thirty_days_ago = (now - timedelta(days=30)).isoformat()
+    
+    new_leads = await db.leads.count_documents({
+        "created_at": {"$gte": thirty_days_ago}
+    })
+    
+    # Leads by status
+    lead_pipeline = await db.leads.aggregate([
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+    ]).to_list(20)
+    
+    lead_by_status = {item["_id"]: item["count"] for item in lead_pipeline if item["_id"]}
+    
+    # Recently converted (projects created in last 30 days)
+    recent_conversions = await db.projects.count_documents({
+        "created_at": {"$gte": thirty_days_ago}
+    })
+    
+    # Total leads
+    total_leads = await db.leads.count_documents({})
+    
+    # Hot leads (qualified or follow-up)
+    hot_leads = await db.leads.count_documents({
+        "status": {"$in": ["Qualified", "Follow Up", "Hot", "Proposal Sent"]}
+    })
+    
+    sales_pipeline = {
+        "total_leads": total_leads,
+        "new_leads_30d": new_leads,
+        "hot_leads": hot_leads,
+        "recent_conversions": recent_conversions,
+        "by_status": lead_by_status
+    }
+    
+    # ============================================================
+    # SUMMARY METRICS
+    # ============================================================
+    summary = {
+        "cash_available": cash_position["total"],
+        "receivables": total_receivable,
+        "payables": upcoming_payments["total_payable"],
+        "net_position": cash_position["total"] + total_receivable - upcoming_payments["total_payable"],
+        "today_net": todays_activity["net_movement"],
+        "active_projects": len(ongoing_projects),
+        "pending_approvals": pending_approvals["total_count"]
+    }
+    
+    return {
+        "summary": summary,
+        "cash_position": cash_position,
+        "receivable_pipeline": receivable_pipeline,
+        "upcoming_payments": upcoming_payments,
+        "todays_activity": todays_activity,
+        "ongoing_projects": ongoing_projects[:20],  # Limit to 20
+        "profitability": profitability,
+        "pending_approvals": pending_approvals,
+        "sales_pipeline": sales_pipeline,
+        "generated_at": now.isoformat()
+    }
+
 # ============ OPERATIONS LEAD DASHBOARD ============
 
 @api_router.get("/operations/dashboard")

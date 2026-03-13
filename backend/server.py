@@ -24000,15 +24000,29 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "source": "finance_expense_requests"
         })
     
-    # Add cashbook expenses as transactions
+    # Add cashbook expenses as transactions (for Recent Transactions display)
     for e in cashbook_expenses:
+        # Get category name
+        cat_id = e.get("category_id")
+        cat_name = "Uncategorized"
+        if cat_id:
+            cat_doc = await db.accounting_categories.find_one({"category_id": cat_id}, {"_id": 0, "name": 1})
+            if cat_doc:
+                cat_name = cat_doc.get("name", cat_id)
+        
         transactions.append({
             "transaction_id": e.get("transaction_id", ""),
             "transaction_type": "outflow",
             "amount": e.get("amount", 0),
             "description": f"Cashbook: {e.get('remarks', e.get('paid_to', 'N/A'))}",
-            "category_name": e.get("category_id", "Cashbook Expense"),
-            "account_name": e.get("paid_from_account", "Cash/Bank"),
+            "category_name": cat_name,
+            "category_id": cat_id,
+            "account_name": e.get("account_name", e.get("paid_from_account", "Cash/Bank")),
+            "account_id": e.get("account_id"),
+            "paid_to": e.get("paid_to", ""),
+            "remarks": e.get("remarks", ""),
+            "mode": e.get("mode", "cash"),
+            "attachment_url": e.get("attachment_url"),
             "created_at": e.get("created_at", ""),
             "source": "cashbook"
         })

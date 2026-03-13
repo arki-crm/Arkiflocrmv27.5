@@ -43,7 +43,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 ### Verification:
 ```bash
-$ curl -I https://cash-holder-report.preview.emergentagent.com/api/health
+$ curl -I https://ceo-command-3.preview.emergentagent.com/api/health
 
 x-content-type-options: nosniff
 x-frame-options: DENY

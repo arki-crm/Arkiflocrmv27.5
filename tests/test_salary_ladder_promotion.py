@@ -12,7 +12,7 @@ import requests
 import os
 from datetime import datetime
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://cash-holder-report.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://ceo-command-3.preview.emergentagent.com')
 
 
 class TestSalaryLadderConfiguration:

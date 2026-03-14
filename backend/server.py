@@ -38489,54 +38489,54 @@ async def run_scheduled_backup():
 @app.on_event("startup")
 async def ensure_system_admin():
     """
-    Ensure System Admin exists on every startup.
-    This admin is auto-created if database is wiped.
+    Ensure System Admin and Founder users have full permissions on every startup.
+    These users are auto-fixed if permissions are missing.
     """
     import bcrypt
     
     SYSTEM_ADMIN_EMAIL = "system.admin@arkiflo.com"
     SYSTEM_ADMIN_PASSWORD = "Arkiflo@2024!"  # Strong default password
     
+    # Complete list of ALL permissions
+    ALL_PERMISSIONS = [
+        # User management
+        "users.view", "users.create", "users.edit", "users.delete", "users.manage_permissions",
+        "admin.manage_users",  # Required for creating new users
+        # Projects
+        "projects.view_all", "projects.create", "projects.update", "projects.delete", "projects.assign",
+        # Leads
+        "leads.view_all", "leads.create", "leads.update", "leads.convert",
+        # Calendar & Meetings
+        "calendar.view", "calendar.create", "calendar.update",
+        "meetings.view_all", "meetings.create", "meetings.update",
+        # Finance - Full access
+        "finance.view_project_finance", "finance.edit_project_finance", "finance.edit_vendor_mapping",
+        "finance.cashbook.view", "finance.cashbook.create", "finance.cashbook.edit",
+        "finance.receipts.view", "finance.receipts.create", "finance.receipts.edit",
+        "finance.expense_requests.view", "finance.expense_requests.create",
+        "finance.expense_requests.approve", "finance.expense_requests.record",
+        "finance.liabilities.view", "finance.liabilities.create", "finance.liabilities.settle",
+        "finance.trial_balance.view", "finance.pnl.view", "finance.founder_dashboard",
+        "finance.salary.view", "finance.salary.process",
+        "finance.daily_closing.view", "finance.daily_closing.close",
+        "finance.general_ledger.view",
+        # Admin
+        "admin.audit_trail", "admin.settings", "admin.roles",
+        "admin.view_settings", "admin.edit_settings",
+        # Reports
+        "reports.view", "reports.export",
+        # Design
+        "design.view_queue", "design.review", "design.approve",
+        # Production
+        "production.view", "production.update", "production.manage",
+        # Inventory
+        "inventory.view", "inventory.manage",
+        # Vendors
+        "vendors.view", "vendors.create", "vendors.edit"
+    ]
+    
     try:
-        # All permissions including admin.manage_users
-        all_permissions = [
-            # User management
-            "users.view", "users.create", "users.edit", "users.delete", "users.manage_permissions",
-            "admin.manage_users",  # Required for creating new users
-            # Projects
-            "projects.view_all", "projects.create", "projects.update", "projects.delete", "projects.assign",
-            # Leads
-            "leads.view_all", "leads.create", "leads.update", "leads.convert",
-            # Calendar & Meetings
-            "calendar.view", "calendar.create", "calendar.update",
-            "meetings.view_all", "meetings.create", "meetings.update",
-            # Finance - Full access
-            "finance.view_project_finance", "finance.edit_project_finance", "finance.edit_vendor_mapping",
-            "finance.cashbook.view", "finance.cashbook.create", "finance.cashbook.edit",
-            "finance.receipts.view", "finance.receipts.create", "finance.receipts.edit",
-            "finance.expense_requests.view", "finance.expense_requests.create",
-            "finance.expense_requests.approve", "finance.expense_requests.record",
-            "finance.liabilities.view", "finance.liabilities.create", "finance.liabilities.settle",
-            "finance.trial_balance.view", "finance.pnl.view", "finance.founder_dashboard",
-            "finance.salary.view", "finance.salary.process",
-            "finance.daily_closing.view", "finance.daily_closing.close",
-            "finance.general_ledger.view",
-            # Admin
-            "admin.audit_trail", "admin.settings", "admin.roles",
-            "admin.view_settings", "admin.edit_settings",
-            # Reports
-            "reports.view", "reports.export",
-            # Design
-            "design.view_queue", "design.review", "design.approve",
-            # Production
-            "production.view", "production.update", "production.manage",
-            # Inventory
-            "inventory.view", "inventory.manage",
-            # Vendors
-            "vendors.view", "vendors.create", "vendors.edit"
-        ]
-        
-        # Check if system admin exists
+        # ============ ENSURE SYSTEM ADMIN ============
         existing = await db.users.find_one({"email": SYSTEM_ADMIN_EMAIL})
         
         if not existing:
@@ -38550,7 +38550,7 @@ async def ensure_system_admin():
                 "local_password": password_hash,
                 "password_hash": password_hash,
                 "status": "Active",
-                "permissions": all_permissions,
+                "permissions": ALL_PERMISSIONS,
                 "is_system_admin": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -38560,24 +38560,44 @@ async def ensure_system_admin():
             await db.users.insert_one(system_admin)
             logger.info(f"✓ System Admin created: {SYSTEM_ADMIN_EMAIL}")
         else:
-            # Always update permissions and ensure local_password exists
-            update_fields = {"permissions": all_permissions}
-            
+            # Always update permissions
+            update_fields = {"permissions": ALL_PERMISSIONS, "status": "Active"}
             if not existing.get("local_password"):
                 password_hash = bcrypt.hashpw(SYSTEM_ADMIN_PASSWORD.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                 update_fields["local_password"] = password_hash
-            
-            if existing.get("status") != "Active":
-                update_fields["status"] = "Active"
             
             await db.users.update_one(
                 {"email": SYSTEM_ADMIN_EMAIL},
                 {"$set": update_fields}
             )
-            logger.info(f"✓ System Admin updated with full permissions: {SYSTEM_ADMIN_EMAIL}")
+            logger.info(f"✓ System Admin updated: {SYSTEM_ADMIN_EMAIL}")
+        
+        # ============ ENSURE ALL FOUNDER USERS HAVE FULL PERMISSIONS ============
+        founders = await db.users.find({"role": "Founder"}).to_list(100)
+        for founder in founders:
+            await db.users.update_one(
+                {"user_id": founder.get("user_id")},
+                {"$set": {
+                    "permissions": ALL_PERMISSIONS,
+                    "status": "Active"
+                }}
+            )
+            logger.info(f"✓ Founder permissions updated: {founder.get('email')}")
+        
+        # ============ ENSURE ALL ADMIN USERS HAVE FULL PERMISSIONS ============
+        admins = await db.users.find({"role": "Admin"}).to_list(100)
+        for admin in admins:
+            await db.users.update_one(
+                {"user_id": admin.get("user_id")},
+                {"$set": {
+                    "permissions": ALL_PERMISSIONS,
+                    "status": "Active"
+                }}
+            )
+            logger.info(f"✓ Admin permissions updated: {admin.get('email')}")
     
     except Exception as e:
-        logger.error(f"Failed to ensure system admin: {e}")
+        logger.error(f"Failed to ensure system admin/founder permissions: {e}")
 
 
 @app.on_event("startup")

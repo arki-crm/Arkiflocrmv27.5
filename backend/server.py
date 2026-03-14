@@ -38498,33 +38498,48 @@ async def ensure_system_admin():
     SYSTEM_ADMIN_PASSWORD = "Arkiflo@2024!"  # Strong default password
     
     try:
+        # All permissions including admin.manage_users
+        all_permissions = [
+            # User management
+            "users.view", "users.create", "users.edit", "users.delete", "users.manage_permissions",
+            "admin.manage_users",  # Required for creating new users
+            # Projects
+            "projects.view_all", "projects.create", "projects.update", "projects.delete", "projects.assign",
+            # Leads
+            "leads.view_all", "leads.create", "leads.update", "leads.convert",
+            # Calendar & Meetings
+            "calendar.view", "calendar.create", "calendar.update",
+            "meetings.view_all", "meetings.create", "meetings.update",
+            # Finance - Full access
+            "finance.view_project_finance", "finance.edit_project_finance", "finance.edit_vendor_mapping",
+            "finance.cashbook.view", "finance.cashbook.create", "finance.cashbook.edit",
+            "finance.receipts.view", "finance.receipts.create", "finance.receipts.edit",
+            "finance.expense_requests.view", "finance.expense_requests.create",
+            "finance.expense_requests.approve", "finance.expense_requests.record",
+            "finance.liabilities.view", "finance.liabilities.create", "finance.liabilities.settle",
+            "finance.trial_balance.view", "finance.pnl.view", "finance.founder_dashboard",
+            "finance.salary.view", "finance.salary.process",
+            "finance.daily_closing.view", "finance.daily_closing.close",
+            "finance.general_ledger.view",
+            # Admin
+            "admin.audit_trail", "admin.settings", "admin.roles",
+            "admin.view_settings", "admin.edit_settings",
+            # Reports
+            "reports.view", "reports.export",
+            # Design
+            "design.view_queue", "design.review", "design.approve",
+            # Production
+            "production.view", "production.update", "production.manage",
+            # Inventory
+            "inventory.view", "inventory.manage",
+            # Vendors
+            "vendors.view", "vendors.create", "vendors.edit"
+        ]
+        
         # Check if system admin exists
         existing = await db.users.find_one({"email": SYSTEM_ADMIN_EMAIL})
         
         if not existing:
-            # Create system admin with all permissions
-            all_permissions = [
-                "users.view", "users.create", "users.edit", "users.delete", "users.manage_permissions",
-                "projects.view_all", "projects.create", "projects.update", "projects.delete", "projects.assign",
-                "leads.view_all", "leads.create", "leads.update", "leads.convert",
-                "calendar.view", "calendar.create", "calendar.update",
-                "meetings.view_all", "meetings.create", "meetings.update",
-                "finance.view_project_finance", "finance.edit_project_finance", "finance.edit_vendor_mapping",
-                "finance.cashbook.view", "finance.cashbook.create", "finance.cashbook.edit",
-                "finance.receipts.view", "finance.receipts.create", "finance.receipts.edit",
-                "finance.expense_requests.view", "finance.expense_requests.create",
-                "finance.expense_requests.approve", "finance.expense_requests.record",
-                "finance.liabilities.view", "finance.liabilities.create", "finance.liabilities.settle",
-                "finance.trial_balance.view", "finance.pnl.view", "finance.founder_dashboard",
-                "finance.salary.view", "finance.salary.process",
-                "admin.audit_trail", "admin.settings", "admin.roles",
-                "reports.view", "reports.export",
-                "design.view_queue", "design.review", "design.approve",
-                "production.view", "production.update", "production.manage",
-                "inventory.view", "inventory.manage",
-                "vendors.view", "vendors.create", "vendors.edit"
-            ]
-            
             password_hash = bcrypt.hashpw(SYSTEM_ADMIN_PASSWORD.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             
             system_admin = {
@@ -38532,11 +38547,11 @@ async def ensure_system_admin():
                 "email": SYSTEM_ADMIN_EMAIL,
                 "name": "System Administrator",
                 "role": "Admin",
-                "local_password": password_hash,  # Used by local login
-                "password_hash": password_hash,   # Backup field
-                "status": "Active",  # Must be "Active" not "active"
+                "local_password": password_hash,
+                "password_hash": password_hash,
+                "status": "Active",
                 "permissions": all_permissions,
-                "is_system_admin": True,  # Flag to identify system admin
+                "is_system_admin": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "auth_provider": "local"
@@ -38545,22 +38560,21 @@ async def ensure_system_admin():
             await db.users.insert_one(system_admin)
             logger.info(f"✓ System Admin created: {SYSTEM_ADMIN_EMAIL}")
         else:
-            # Ensure existing system admin has local_password and Active status
-            update_fields = {}
+            # Always update permissions and ensure local_password exists
+            update_fields = {"permissions": all_permissions}
+            
             if not existing.get("local_password"):
                 password_hash = bcrypt.hashpw(SYSTEM_ADMIN_PASSWORD.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                 update_fields["local_password"] = password_hash
+            
             if existing.get("status") != "Active":
                 update_fields["status"] = "Active"
             
-            if update_fields:
-                await db.users.update_one(
-                    {"email": SYSTEM_ADMIN_EMAIL},
-                    {"$set": update_fields}
-                )
-                logger.info(f"✓ System Admin updated: {SYSTEM_ADMIN_EMAIL}")
-            else:
-                logger.info(f"✓ System Admin exists: {SYSTEM_ADMIN_EMAIL}")
+            await db.users.update_one(
+                {"email": SYSTEM_ADMIN_EMAIL},
+                {"$set": update_fields}
+            )
+            logger.info(f"✓ System Admin updated with full permissions: {SYSTEM_ADMIN_EMAIL}")
     
     except Exception as e:
         logger.error(f"Failed to ensure system admin: {e}")

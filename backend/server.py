@@ -4749,11 +4749,142 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
     except Exception as e:
         print(f"Error sending notifications: {e}")
     
+    # ============ REVENUE RECOGNITION ============
+    # When project reaches "Handover" stage, recognize revenue
+    if new_stage == "Handover":
+        try:
+            await recognize_project_revenue(project_id, user)
+        except Exception as e:
+            print(f"Error recognizing revenue for project {project_id}: {e}")
+    
     return {
         "message": "Stage updated successfully",
         "stage": new_stage,
         "system_comment": system_comment
     }
+
+
+# ============ REVENUE RECOGNITION ============
+
+async def recognize_project_revenue(project_id: str, user):
+    """
+    Recognize revenue when a project is completed (reaches Handover stage).
+    
+    Accounting entries:
+    - Dr Customer Advance (Liability decreases)
+    - Cr Project Revenue (Income increases)
+    
+    Amount = project signoff_value
+    """
+    # Get project details
+    project = await db.projects.find_one(
+        {"project_id": project_id},
+        {"_id": 0, "project_id": 1, "pid": 1, "project_name": 1, "client_name": 1,
+         "signoff_value": 1, "signoff_locked": 1}
+    )
+    
+    if not project:
+        print(f"Revenue recognition: Project {project_id} not found")
+        return
+    
+    signoff_value = project.get("signoff_value") or 0
+    if signoff_value <= 0:
+        print(f"Revenue recognition: Project {project_id} has no signoff_value")
+        return
+    
+    # Check if revenue already recognized for this project
+    existing = await db.finance_revenue_recognitions.find_one({"project_id": project_id})
+    if existing:
+        print(f"Revenue recognition: Already recognized for project {project_id}")
+        return
+    
+    now = datetime.now(timezone.utc)
+    transaction_date = now.strftime("%Y-%m-%d")
+    
+    # Ensure accounts exist
+    customer_advance_account = {"account_id": "acc_customer_advance", "account_name": "Customer Advance", "account_type": "liability"}
+    project_revenue_account = {"account_id": "acc_project_revenue", "account_name": "Project Revenue", "account_type": "revenue"}
+    
+    await ensure_counter_account_exists(customer_advance_account)
+    await ensure_counter_account_exists(project_revenue_account)
+    
+    # Generate transaction IDs
+    primary_txn_id = f"txn_rev_{uuid.uuid4().hex[:12]}"
+    counter_txn_id = f"txn_rev_{uuid.uuid4().hex[:12]}"
+    recognition_id = f"rev_rec_{uuid.uuid4().hex[:8]}"
+    
+    # Create accounting entries
+    # Entry 1: Dr Customer Advance (Liability Debit = reduces liability)
+    # For liability accounts: Debit = inflow (reduces balance)
+    primary_entry = {
+        "transaction_id": primary_txn_id,
+        "transaction_date": transaction_date,
+        "transaction_type": "inflow",  # Debit for liability = inflow
+        "amount": signoff_value,
+        "account_id": "acc_customer_advance",
+        "account_name": "Customer Advance",
+        "account_type": "liability",
+        "project_id": project_id,
+        "project_name": project.get("project_name"),
+        "source_module": "revenue_recognition",
+        "recognition_id": recognition_id,
+        "description": f"Revenue recognition - {project.get('pid', project_id)}",
+        "remarks": f"Revenue recognized for completed project: {project.get('project_name')}",
+        "entry_role": "primary",
+        "counter_entry_id": counter_txn_id,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name
+    }
+    
+    # Entry 2: Cr Project Revenue (Revenue Credit = increases revenue)
+    # For revenue accounts: Credit = inflow (increases balance)
+    counter_entry = {
+        "transaction_id": counter_txn_id,
+        "transaction_date": transaction_date,
+        "transaction_type": "inflow",  # Credit for revenue = inflow
+        "amount": signoff_value,
+        "account_id": "acc_project_revenue",
+        "account_name": "Project Revenue",
+        "account_type": "revenue",
+        "project_id": project_id,
+        "project_name": project.get("project_name"),
+        "source_module": "revenue_recognition",
+        "recognition_id": recognition_id,
+        "description": f"Revenue recognition - {project.get('pid', project_id)}",
+        "remarks": f"Revenue recognized for completed project: {project.get('project_name')}",
+        "entry_role": "counter",
+        "counter_entry_id": primary_txn_id,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name
+    }
+    
+    # Insert accounting entries
+    await db.accounting_transactions.insert_many([primary_entry, counter_entry])
+    
+    # Record revenue recognition
+    recognition_record = {
+        "recognition_id": recognition_id,
+        "project_id": project_id,
+        "project_pid": project.get("pid"),
+        "project_name": project.get("project_name"),
+        "client_name": project.get("client_name"),
+        "amount": signoff_value,
+        "recognition_date": transaction_date,
+        "primary_transaction_id": primary_txn_id,
+        "counter_transaction_id": counter_txn_id,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "status": "recognized"
+    }
+    
+    await db.finance_revenue_recognitions.insert_one(recognition_record)
+    
+    print(f"Revenue recognition: Recognized ₹{signoff_value} for project {project.get('pid', project_id)}")
+    
+    return recognition_record
 
 
 # ============ TIMELINE REGENERATION ============

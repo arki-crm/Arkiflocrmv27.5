@@ -9,6 +9,31 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
+## Current Status: Daybook Bug Fix COMPLETE ✅
+**As of March 14, 2026**
+
+### Daybook Transaction Count Fix ✅ (LATEST)
+
+**Issue:** Cashbook entries were not showing in the Daybook "Account-wise Summary". The TXNS column showed 0 for accounts that had transactions.
+
+**Root Cause:** The `/api/finance/daily-closing` endpoint (line ~24769 in server.py) used exact string match on `transaction_date`:
+```python
+"transaction_date": date  # Only matched "2026-03-12" exactly
+```
+
+But transactions are stored with inconsistent date formats:
+- Some: `"2026-03-12"` (date only)
+- Others: `"2026-03-12T08:28:16.123456"` (ISO timestamp)
+
+**Fix:** Changed to regex match to handle both formats:
+```python
+"transaction_date": {"$regex": f"^{date}"}  # Matches any format starting with date
+```
+
+**Result:** Daybook now correctly shows all 10+ transactions for dates with activity.
+
+---
+
 ## Current Status: Founder Dashboard COMPLETE ✅
 **As of March 13, 2026**
 

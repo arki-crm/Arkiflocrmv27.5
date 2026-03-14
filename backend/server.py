@@ -29480,31 +29480,46 @@ async def get_pnl_snapshot(
     start_iso = start.isoformat()
     end_iso = end.isoformat()
     
-    # ===== REVENUE =====
-    # Cash received from projects (inflows linked to projects)
-    project_inflows = await db.accounting_transactions.find({
-        "transaction_type": "inflow",
-        "project_id": {"$ne": None},
+    # ===== RECOGNIZED REVENUE =====
+    # Revenue is only recognized when projects are completed (reach Handover)
+    # Customer receipts are advances (liability) until project completion
+    
+    # Get recognized revenue from finance_revenue_recognitions
+    recognized_revenues = await db.finance_revenue_recognitions.find({
+        "recognition_date": {"$gte": start_iso[:10], "$lte": end_iso[:10]}
+    }, {"_id": 0, "amount": 1, "project_id": 1, "project_name": 1}).to_list(10000)
+    
+    revenue_from_completed_projects = sum(r.get("amount", 0) for r in recognized_revenues)
+    
+    # Get total recognized revenue from Project Revenue account transactions
+    revenue_account_txns = await db.accounting_transactions.find({
+        "account_id": "acc_project_revenue",
+        "entry_role": "counter",
         "created_at": {"$gte": start_iso, "$lte": end_iso}
     }, {"_id": 0, "amount": 1}).to_list(10000)
     
-    # Also check finance_receipts - EXCLUDE CANCELLED RECEIPTS
-    receipts = await db.finance_receipts.find({
-        "created_at": {"$gte": start_iso, "$lte": end_iso},
-        "status": {"$ne": "cancelled"}
-    }, {"_id": 0, "amount": 1}).to_list(10000)
+    # Use max of both sources (in case some were done via journal entries)
+    revenue_from_account = sum(t.get("amount", 0) for t in revenue_account_txns)
+    total_recognized_revenue = max(revenue_from_completed_projects, revenue_from_account)
     
-    revenue_from_projects = sum(t.get("amount", 0) for t in project_inflows) + sum(r.get("amount", 0) for r in receipts)
-    
-    # Other income (inflows not linked to projects)
+    # Other income (non-project inflows that are NOT customer advances)
     other_inflows = await db.accounting_transactions.find({
         "transaction_type": "inflow",
         "project_id": None,
+        "source_module": {"$nin": ["finance_receipts", "receipt"]},  # Exclude customer receipts
         "created_at": {"$gte": start_iso, "$lte": end_iso}
     }, {"_id": 0, "amount": 1}).to_list(10000)
     other_income = sum(t.get("amount", 0) for t in other_inflows)
     
-    total_revenue = revenue_from_projects + other_income
+    total_revenue = total_recognized_revenue + other_income
+    
+    # ===== CUSTOMER ADVANCES (Liability - NOT Revenue) =====
+    # Track customer advances separately for transparency
+    customer_receipts = await db.finance_receipts.find({
+        "created_at": {"$gte": start_iso, "$lte": end_iso},
+        "status": {"$ne": "cancelled"}
+    }, {"_id": 0, "amount": 1}).to_list(10000)
+    customer_advances_received = sum(r.get("amount", 0) for r in customer_receipts)
     
     # ===== EXECUTION COSTS (PAID) =====
     # Cashbook outflows linked to projects

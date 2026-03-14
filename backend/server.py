@@ -183,6 +183,7 @@ DOUBLE_ENTRY_COUNTER_ACCOUNTS = {
     "accounts_payable": {"account_id": "acc_vendor_payable", "account_name": "Accounts Payable", "account_type": "liability"},
     "sales_return": {"account_id": "acc_sales_returns", "account_name": "Sales Returns", "account_type": "contra_revenue"},
     "customer_refund": {"account_id": "acc_customer_advance", "account_name": "Customer Advance", "account_type": "liability"},
+    "project_revenue": {"account_id": "acc_project_revenue", "account_name": "Project Revenue", "account_type": "revenue"},
     "recurring_expense": {"account_id": "acc_recurring_expense", "account_name": "Recurring Expense", "account_type": "expense"},
     "expense": {"account_id": "acc_general_expense", "account_name": "General Expense", "account_type": "expense"},
     "internal_transfer": None,  # Already double-entry

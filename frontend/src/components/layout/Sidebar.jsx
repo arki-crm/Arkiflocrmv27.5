@@ -284,7 +284,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermissio
         caFinanceParentItem
       ];
 
-    // 13. FOUNDER - Full visibility, final override
+    // 13. FOUNDER - Full visibility, final override (ALL ITEMS)
     case 'Founder':
       return [
         { path: '/finance/founder-dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -292,16 +292,33 @@ const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermissio
         // CRM Items
         { path: '/presales', label: 'Pre-Sales', icon: UserPlus },
         { path: '/leads', label: 'Leads', icon: Users },
-        { path: '/sales-manager', label: 'Sales Manager', icon: Target },
         { path: '/projects', label: 'Projects', icon: FolderKanban },
+        // Service & Warranty
+        { path: '/warranty', label: 'Warranty', icon: Shield },
+        { path: '/service-requests', label: 'Service Requests', icon: Wrench },
+        { path: '/technicians', label: 'Technicians', icon: HardHat },
+        // Academy
+        { path: '/academy', label: 'Academy', icon: GraduationCap },
         // Finance
         financeParentItem,
-        // Admin & Reports
-        { path: '/design-review-queue', label: 'Review Queue', icon: ClipboardCheck },
+        // Sales & Design
+        { path: '/sales-manager', label: 'Sales Manager', icon: Target },
+        { path: '/design-board', label: 'Design Board', icon: Palette },
+        { path: '/design-manager', label: 'Design Manager', icon: ClipboardCheck },
+        { path: '/design-review-queue', label: 'Review Queue', icon: FileCheck },
+        // Production & Operations
+        { path: '/production-ops', label: 'Production/Ops', icon: Truck },
+        // Executive Views
         { path: '/ceo-dashboard', label: 'CEO View', icon: Crown },
         { path: '/reports', label: 'Reports', icon: BarChart3 },
-        { path: '/users', label: 'Team', icon: Users },
-        { path: '/admin/audit-trail', label: 'Audit Trail', icon: History }
+        // Admin Tools
+        { path: '/admin/import-export', label: 'Import / Export', icon: FileUp },
+        { path: '/admin/audit-trail', label: 'Audit Trail', icon: History },
+        { path: '/admin/backup', label: 'Backup', icon: Database },
+        // User & Settings
+        { path: '/users', label: 'Users', icon: UserCog },
+        { path: '/settings', label: 'Settings', icon: Settings },
+        { path: '/settings/company-profile', label: 'Company Profile', icon: Building2 }
       ];
 
     default:

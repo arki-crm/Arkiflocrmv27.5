@@ -233,11 +233,11 @@ const AppRouter = () => {
         <Route path="/admin/backup" element={<BackupManagement />} />
       </Route>
 
-      {/* Redirect root to dashboard */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      {/* Redirect root to appropriate dashboard based on role */}
+      <Route path="/" element={<RoleBasedHomeRedirect />} />
       
-      {/* Catch all - redirect to dashboard */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* Catch all - redirect to home (role-based) */}
+      <Route path="*" element={<RoleBasedHomeRedirect />} />
     </Routes>
   );
 };

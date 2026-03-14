@@ -38532,8 +38532,9 @@ async def ensure_system_admin():
                 "email": SYSTEM_ADMIN_EMAIL,
                 "name": "System Administrator",
                 "role": "Admin",
-                "password_hash": password_hash,
-                "status": "active",
+                "local_password": password_hash,  # Used by local login
+                "password_hash": password_hash,   # Backup field
+                "status": "Active",  # Must be "Active" not "active"
                 "permissions": all_permissions,
                 "is_system_admin": True,  # Flag to identify system admin
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -38544,7 +38545,22 @@ async def ensure_system_admin():
             await db.users.insert_one(system_admin)
             logger.info(f"✓ System Admin created: {SYSTEM_ADMIN_EMAIL}")
         else:
-            logger.info(f"✓ System Admin exists: {SYSTEM_ADMIN_EMAIL}")
+            # Ensure existing system admin has local_password and Active status
+            update_fields = {}
+            if not existing.get("local_password"):
+                password_hash = bcrypt.hashpw(SYSTEM_ADMIN_PASSWORD.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                update_fields["local_password"] = password_hash
+            if existing.get("status") != "Active":
+                update_fields["status"] = "Active"
+            
+            if update_fields:
+                await db.users.update_one(
+                    {"email": SYSTEM_ADMIN_EMAIL},
+                    {"$set": update_fields}
+                )
+                logger.info(f"✓ System Admin updated: {SYSTEM_ADMIN_EMAIL}")
+            else:
+                logger.info(f"✓ System Admin exists: {SYSTEM_ADMIN_EMAIL}")
     
     except Exception as e:
         logger.error(f"Failed to ensure system admin: {e}")

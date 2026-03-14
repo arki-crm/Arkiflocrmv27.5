@@ -813,10 +813,22 @@ const ProjectFinanceDetail = () => {
       {/* Financial Summary Card - THE MOST IMPORTANT SCREEN */}
       <Card className="border-slate-200 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
         <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <DollarSign className="w-5 h-5" />
-            Financial Summary
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <DollarSign className="w-5 h-5" />
+              Financial Summary
+            </CardTitle>
+            {/* Revenue Recognition Status */}
+            {summary.revenue_recognized ? (
+              <Badge className="bg-emerald-600 text-white">
+                ✓ Revenue Recognized
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="border-amber-400 text-amber-400">
+                Revenue Not Yet Recognized
+              </Badge>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -824,6 +836,14 @@ const ProjectFinanceDetail = () => {
               <p className="text-xs text-slate-400 mb-1">Sign-off Value</p>
               <p className="text-xl font-bold">{formatCurrency(summary.signoff_value || summary.contract_value)}</p>
             </div>
+            {/* Show Recognized Revenue if recognized */}
+            {summary.revenue_recognized && (
+              <div>
+                <p className="text-xs text-emerald-400 mb-1">Recognized Revenue</p>
+                <p className="text-xl font-bold text-emerald-400">{formatCurrency(summary.recognized_revenue)}</p>
+                <p className="text-xs text-slate-500">{summary.recognition_date}</p>
+              </div>
+            )}
             <div>
               <p className="text-xs text-green-400 mb-1 flex items-center gap-1">
                 <TrendingUp className="w-3 h-3" /> Total Received
@@ -831,34 +851,45 @@ const ProjectFinanceDetail = () => {
               <p className="text-xl font-bold text-green-400">{formatCurrency(summary.total_received)}</p>
             </div>
             <div>
-              <p className="text-xs text-blue-400 mb-1">Planned Cost</p>
-              <p className="text-xl font-bold text-blue-400">{formatCurrency(summary.planned_cost)}</p>
-            </div>
-            <div>
               <p className="text-xs text-red-400 mb-1 flex items-center gap-1">
                 <TrendingDown className="w-3 h-3" /> Actual Cost
               </p>
               <p className="text-xl font-bold text-red-400">{formatCurrency(summary.actual_cost)}</p>
             </div>
-            <div>
-              <p className="text-xs text-slate-400 mb-1">Remaining Liability</p>
-              <p className="text-xl font-bold">{formatCurrency(summary.remaining_liability)}</p>
-            </div>
-            <div className={cn(
-              "rounded-lg p-3 -m-2",
-              summary.safe_surplus >= 0 ? "bg-green-600/20" : "bg-red-600/20"
-            )}>
-              <p className="text-xs text-slate-300 mb-1">Safe Surplus</p>
-              <p className={cn(
-                "text-2xl font-bold",
-                summary.safe_surplus >= 0 ? "text-green-400" : "text-red-400"
+            {/* Profit - only show if revenue is recognized */}
+            {summary.revenue_recognized ? (
+              <div className={cn(
+                "rounded-lg p-3 -m-2",
+                summary.gross_profit >= 0 ? "bg-emerald-600/20" : "bg-red-600/20"
               )}>
-                {formatCurrency(summary.safe_surplus)}
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                {summary.safe_surplus >= 0 ? 'Available to use' : 'Deficit'}
-              </p>
-            </div>
+                <p className="text-xs text-slate-300 mb-1">Profit</p>
+                <p className={cn(
+                  "text-2xl font-bold",
+                  summary.gross_profit >= 0 ? "text-emerald-400" : "text-red-400"
+                )}>
+                  {formatCurrency(summary.gross_profit)}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {summary.profit_margin}% margin
+                </p>
+              </div>
+            ) : (
+              <div className={cn(
+                "rounded-lg p-3 -m-2",
+                summary.safe_surplus >= 0 ? "bg-green-600/20" : "bg-red-600/20"
+              )}>
+                <p className="text-xs text-slate-300 mb-1">Safe Surplus</p>
+                <p className={cn(
+                  "text-2xl font-bold",
+                  summary.safe_surplus >= 0 ? "text-green-400" : "text-red-400"
+                )}>
+                  {formatCurrency(summary.safe_surplus)}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {summary.safe_surplus >= 0 ? 'Available to use' : 'Deficit'}
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

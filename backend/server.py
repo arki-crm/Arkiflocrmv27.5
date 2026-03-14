@@ -24670,7 +24670,7 @@ async def manual_revenue_recognition(project_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Project not found")
     
     # Verify project is at Handover stage
-    current_stage = project.get("current_stage") or project.get("stages", {}).get("current")
+    current_stage = project.get("stage") or project.get("current_stage") or project.get("stages", {}).get("current")
     if current_stage != "Handover":
         raise HTTPException(
             status_code=400, 

@@ -13,7 +13,7 @@ import packageJson from '../../package.json';
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const Login = () => {
-  const { isAuthenticated, loading, checkAuth } = useAuth();
+  const { isAuthenticated, loading, checkAuth, user } = useAuth();
   const navigate = useNavigate();
   
   // Local login state

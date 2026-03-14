@@ -24261,9 +24261,11 @@ async def get_project_finance_detail(project_id: str, request: Request):
         "transaction_type": "outflow",
         "source_module": "cashbook",
         # Exclude expense request entries (already counted above)
+        # Handle all empty cases: field doesn't exist, is null, or is empty string
         "$or": [
             {"expense_request_id": {"$exists": False}},
-            {"expense_request_id": None}
+            {"expense_request_id": None},
+            {"expense_request_id": ""}
         ],
         # Exclude non-cashbook entries
         "is_cashbook_entry": {"$ne": False}

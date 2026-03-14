@@ -3851,12 +3851,18 @@ async def update_user_permissions(user_id: str, perm_data: PermissionsUpdate, re
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # FOUNDER PROTECTION: Cannot modify Founder's permissions (they always have all)
-    if is_founder_email(target_user.get("email", "")):
-        raise HTTPException(
-            status_code=403, 
-            detail="Cannot modify System Owner's permissions. They always have full access."
-        )
+    # FOUNDER PROTECTION: Can ADD permissions but cannot REMOVE any existing ones
+    if target_user.get("role") == "Founder" or is_founder_email(target_user.get("email", "")):
+        current_permissions = set(target_user.get("permissions", []))
+        new_permissions = set(perm_data.permissions)
+        removed_permissions = current_permissions - new_permissions
+        
+        if removed_permissions:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Cannot remove permissions from Founder. You can only add new permissions. Attempted to remove: {list(removed_permissions)[:5]}..."
+            )
+        # Allow the update if only adding permissions (new_permissions >= current_permissions)
     
     # Cannot modify another Admin's permissions (unless you're Founder)
     if target_user.get("role") == "Admin" and user.user_id != user_id:

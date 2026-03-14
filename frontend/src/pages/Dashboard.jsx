@@ -281,6 +281,11 @@ const Dashboard = () => {
   
   // V1 Role-based dashboard redirect - 6 core roles
   useEffect(() => {
+    // Founder -> Founder Dashboard (comprehensive financial overview)
+    if (user?.role === 'Founder') {
+      navigate('/finance/founder-dashboard', { replace: true });
+      return;
+    }
     // SalesManager -> Sales Dashboard
     if (user?.role === 'SalesManager') {
       navigate('/sales-manager', { replace: true });
@@ -301,7 +306,7 @@ const Dashboard = () => {
   
   useEffect(() => {
     // Don't fetch if redirecting to role-specific dashboard
-    if (['SalesManager', 'DesignManager', 'ProductionOpsManager'].includes(user?.role)) return;
+    if (['Founder', 'SalesManager', 'DesignManager', 'ProductionOpsManager'].includes(user?.role)) return;
     fetchDashboardData();
   }, [user]);
   

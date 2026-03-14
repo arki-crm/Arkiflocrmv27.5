@@ -52,7 +52,9 @@ import {
   PackageCheck,
   Scale,
   Landmark,
-  BookOpen
+  BookOpen,
+  Search,
+  X
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 

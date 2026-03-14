@@ -29616,11 +29616,18 @@ async def get_pnl_snapshot(
         "start_date": start_iso[:10],
         "end_date": end_iso[:10],
         
-        # Revenue
+        # Revenue (only recognized revenue counts)
         "revenue": {
-            "from_projects": revenue_from_projects,
+            "from_completed_projects": total_recognized_revenue,
+            "completed_project_count": len(recognized_revenues),
             "other_income": other_income,
             "total": total_revenue
+        },
+        
+        # Customer Advances (separate from revenue - liability until project completion)
+        "customer_advances": {
+            "received_this_period": customer_advances_received,
+            "note": "Customer receipts are recorded as advances (liability) until project completion"
         },
         
         # Execution Costs
@@ -29648,7 +29655,8 @@ async def get_pnl_snapshot(
             "advances_locked_pct": lock_pct,
             "open_liabilities": total_open_liabilities,
             "committed_not_paid": execution_costs_committed,
-            "explanation": f"Cash profit differs from accounting profit due to: {lock_pct}% of advances locked, ₹{total_open_liabilities:,.0f} in open liabilities, ₹{execution_costs_committed:,.0f} in committed but unpaid costs."
+            "unrecognized_advances": customer_advances_received,
+            "explanation": f"Cash profit differs from accounting profit due to: {lock_pct}% of advances locked, ₹{total_open_liabilities:,.0f} in open liabilities, ₹{execution_costs_committed:,.0f} in committed costs, ₹{customer_advances_received:,.0f} in customer advances not yet recognized as revenue."
         }
     }
 

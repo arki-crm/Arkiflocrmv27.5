@@ -289,10 +289,18 @@ const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermissio
       return [
         { path: '/finance/founder-dashboard', label: 'Dashboard', icon: LayoutDashboard },
         ...commonItems,
+        // CRM Items
+        { path: '/presales', label: 'Pre-Sales', icon: UserPlus },
+        { path: '/leads', label: 'Leads', icon: Users },
+        { path: '/sales-manager', label: 'Sales Manager', icon: Target },
+        { path: '/projects', label: 'Projects', icon: FolderKanban },
+        // Finance
         financeParentItem,
+        // Admin & Reports
         { path: '/design-review-queue', label: 'Review Queue', icon: ClipboardCheck },
         { path: '/ceo-dashboard', label: 'CEO View', icon: Crown },
         { path: '/reports', label: 'Reports', icon: BarChart3 },
+        { path: '/users', label: 'Team', icon: Users },
         { path: '/admin/audit-trail', label: 'Audit Trail', icon: History }
       ];
 

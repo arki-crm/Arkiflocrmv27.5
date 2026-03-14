@@ -23,11 +23,19 @@ const Login = () => {
   const [localLoading, setLocalLoading] = useState(false);
   const [setupLoading, setSetupLoading] = useState(false);
 
-  useEffect(() => {
-    if (!loading && isAuthenticated) {
-      navigate('/dashboard', { replace: true });
+  // Helper function to get role-based default route
+  const getRoleBasedRoute = (userRole) => {
+    if (userRole === 'Founder') {
+      return '/finance/founder-dashboard';
     }
-  }, [isAuthenticated, loading, navigate]);
+    return '/dashboard';
+  };
+
+  useEffect(() => {
+    if (!loading && isAuthenticated && user) {
+      navigate(getRoleBasedRoute(user.role), { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate, user]);
 
   const handleGoogleLogin = () => {
     // Direct Google OAuth via our backend - NO Emergent middleman

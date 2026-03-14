@@ -24332,6 +24332,14 @@ async def get_project_finance_detail(project_id: str, request: Request):
     signoff_value = project.get("signoff_value") or 0
     signoff_locked = project.get("signoff_locked", False)
     
+    # Check if revenue has been recognized (project completed)
+    revenue_recognition = await db.finance_revenue_recognitions.find_one(
+        {"project_id": project_id},
+        {"_id": 0, "amount": 1, "recognition_date": 1, "status": 1}
+    )
+    recognized_revenue = revenue_recognition.get("amount", 0) if revenue_recognition else 0
+    revenue_recognized = recognized_revenue > 0
+    
     # Check if production has started (check stages)
     stages = project.get("stages", {})
     production_started = any(

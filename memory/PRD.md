@@ -9,6 +9,32 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
+## Current Status: Project Finance Cashbook Fix COMPLETE ✅
+**As of March 14, 2026**
+
+### Project Finance Recent Transactions Fix ✅ (LATEST)
+
+**Issue:** Cashbook transactions were not showing in the "Recent Transactions (From Cash Book)" section of Project Finance detail view.
+
+**Root Cause:** The query at line ~24264 in `server.py` filtered for transactions where `expense_request_id` was:
+- `{"$exists": False}` - field doesn't exist
+- `None` - field is null
+
+But some transactions had `expense_request_id: ""` (empty string), which didn't match either condition.
+
+**Fix:** Added empty string to the $or query:
+```python
+"$or": [
+    {"expense_request_id": {"$exists": False}},
+    {"expense_request_id": None},
+    {"expense_request_id": ""}  # Added to handle empty strings
+]
+```
+
+**Result:** Cashbook transactions now correctly appear in Project Finance → Recent Transactions.
+
+---
+
 ## Current Status: Daybook Bug Fix COMPLETE ✅
 **As of March 14, 2026**
 

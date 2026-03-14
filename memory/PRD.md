@@ -9,7 +9,48 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Project Finance Cashbook Fix COMPLETE ✅
+## Current Status: Revenue Recognition COMPLETE ✅
+**As of March 14, 2026**
+
+### Revenue Recognition Implementation ✅ (LATEST)
+
+Implemented proper revenue recognition following accounting standards:
+
+**Accounting Flow:**
+1. **Customer Receipts** continue to be recorded as:
+   - Dr Bank/Cash
+   - Cr Customer Advance (Liability)
+
+2. **When project reaches Handover stage**, system automatically recognizes revenue:
+   - Dr Customer Advance (reduces liability)
+   - Cr Project Revenue (recognizes income)
+   - Amount = Project Sign-off Value
+
+**Backend Changes:**
+- Added `recognize_project_revenue()` function in `server.py`
+- Revenue recognition triggers automatically when stage changes to "Handover"
+- Created `finance_revenue_recognitions` collection to track recognized revenues
+- Added `/api/finance/revenue-recognitions` endpoint (GET all, POST manual trigger)
+- Updated Trial Balance to show revenue accounts
+- Updated P&L to separate recognized revenue from customer advances
+- Updated Project Finance to show profit = Revenue - Actual Cost
+
+**Frontend Changes:**
+- Added "Revenue Recognized" badge to Financial Summary
+- Shows Recognized Revenue amount and date
+- Displays Profit and Profit Margin for completed projects
+- Shows Safe Surplus for in-progress projects
+
+**New Accounts:**
+- `acc_project_revenue` (type: revenue) - Project Revenue account
+
+**API Endpoints:**
+- `GET /api/finance/revenue-recognitions` - List all revenue recognitions
+- `POST /api/finance/revenue-recognitions/{project_id}` - Manually recognize revenue for completed projects
+
+---
+
+## Previous Status: Project Finance Cashbook Fix COMPLETE ✅
 **As of March 14, 2026**
 
 ### Project Finance Recent Transactions Fix ✅ (LATEST)

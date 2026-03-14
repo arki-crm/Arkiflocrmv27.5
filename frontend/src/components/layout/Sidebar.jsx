@@ -285,7 +285,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermissio
     // 13. FOUNDER - Full visibility, final override
     case 'Founder':
       return [
-        { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { path: '/finance/founder-dashboard', label: 'Dashboard', icon: LayoutDashboard },
         ...commonItems,
         financeParentItem,
         { path: '/design-review-queue', label: 'Review Queue', icon: ClipboardCheck },

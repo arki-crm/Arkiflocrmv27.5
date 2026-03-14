@@ -686,15 +686,49 @@ const Sidebar = () => {
           )}
         </div>
 
+        {/* Search Bar - only show when sidebar is expanded */}
+        {!isCollapsed && (
+          <div className="px-3 py-2 border-b border-slate-200">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search menu..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-8 py-1.5 text-sm bg-slate-100 border border-slate-200 rounded-lg 
+                         placeholder:text-slate-400 text-slate-700
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                data-testid="sidebar-search"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-slate-200 transition-colors"
+                  data-testid="sidebar-search-clear"
+                >
+                  <X className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Navigation */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map((item) => (
-            item.isParent ? (
-              <ParentNavItem key={item.path} item={item} />
-            ) : (
-              <NavItem key={item.path} item={item} />
-            )
-          ))}
+          {filteredNavItems.length === 0 && searchQuery ? (
+            <div className="px-3 py-4 text-center text-sm text-slate-400">
+              No menu items found
+            </div>
+          ) : (
+            filteredNavItems.map((item) => (
+              item.isParent ? (
+                <ParentNavItem key={item.path} item={item} />
+              ) : (
+                <NavItem key={item.path} item={item} />
+              )
+            ))
+          )}
         </nav>
 
         {/* Collapse Button */}

@@ -29980,7 +29980,7 @@ async def get_trial_balance(
         
         if acc_type == "liability":
             trial_balance["liabilities"].append(bal)
-        elif acc_type == "income":
+        elif acc_type in ["income", "revenue"]:
             trial_balance["income"].append(bal)
         elif acc_type == "expense":
             trial_balance["expenses"].append(bal)

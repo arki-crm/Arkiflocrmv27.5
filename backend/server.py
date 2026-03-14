@@ -24572,6 +24572,16 @@ async def get_project_finance_detail(project_id: str, request: Request):
         }
     
     # Full financial summary with signoff_value
+    # Calculate profit based on recognized revenue (if project completed)
+    # If revenue recognized: Profit = Recognized Revenue - Actual Cost
+    # If not yet recognized: Show projected profit using signoff_value
+    if revenue_recognized:
+        profit = recognized_revenue - total_outflow
+        profit_margin = round((profit / recognized_revenue) * 100, 1) if recognized_revenue > 0 else 0
+    else:
+        profit = signoff_value - total_outflow
+        profit_margin = round((profit / signoff_value) * 100, 1) if signoff_value > 0 else 0
+    
     return {
         "project": {
             "project_id": project.get("project_id"),
@@ -24587,6 +24597,10 @@ async def get_project_finance_detail(project_id: str, request: Request):
             # Governance-safe revenue baseline (signoff_value ONLY)
             "signoff_value": signoff_value,
             "signoff_locked": signoff_locked,
+            # Revenue recognition status
+            "revenue_recognized": revenue_recognized,
+            "recognized_revenue": recognized_revenue,
+            "recognition_date": revenue_recognition.get("recognition_date") if revenue_recognition else None,
             # Financial metrics - from strict source tables
             "total_received": total_inflow,
             "planned_cost": total_planned,
@@ -24594,9 +24608,9 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "remaining_liability": remaining_liability,
             "safe_surplus": safe_surplus,
             "has_overspend": total_outflow > total_planned if total_planned > 0 else False,
-            # Profitability (based on signoff_value as revenue baseline)
-            "gross_profit": signoff_value - total_outflow,
-            "profit_margin": round(((signoff_value - total_outflow) / signoff_value) * 100, 1) if signoff_value > 0 else 0,
+            # Profitability (based on recognized revenue if completed, else signoff_value)
+            "gross_profit": profit,
+            "profit_margin": profit_margin,
             # Source breakdowns
             "purchase_invoice_total": purchase_invoice_total,
             "expense_total": approved_expense_total + recorded_expense_total

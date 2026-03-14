@@ -318,6 +318,9 @@ const Sidebar = () => {
     return saved ? JSON.parse(saved) : false;
   });
   
+  // Search state for filtering menu items
+  const [searchQuery, setSearchQuery] = useState('');
+  
   // Track expanded parent menus
   const [expandedMenus, setExpandedMenus] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_EXPANDED_KEY);

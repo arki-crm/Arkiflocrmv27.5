@@ -1,10 +1,23 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import AuthCallback from './components/auth/AuthCallback';
 import AppLayout from './components/layout/AppLayout';
+
+// Role-based home redirect component
+const RoleBasedHomeRedirect = () => {
+  const { user } = useAuth();
+  
+  // Founder gets redirected to founder dashboard
+  if (user?.role === 'Founder') {
+    return <Navigate to="/finance/founder-dashboard" replace />;
+  }
+  
+  // Default to regular dashboard
+  return <Navigate to="/dashboard" replace />;
+};
 
 // Pages
 import Login from './pages/Login';

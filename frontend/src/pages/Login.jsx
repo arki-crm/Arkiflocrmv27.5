@@ -61,9 +61,12 @@ const Login = () => {
         toast.success('Login successful!');
         // Refresh user context and navigate
         await checkAuth();
+        // Get the user role from response and redirect appropriately
+        const userRole = response.data.user?.role;
+        const targetRoute = userRole === 'Founder' ? '/finance/founder-dashboard' : '/dashboard';
         // Force navigation after a short delay to ensure state is updated
         setTimeout(() => {
-          navigate('/dashboard', { replace: true });
+          navigate(targetRoute, { replace: true });
         }, 100);
       }
     } catch (err) {

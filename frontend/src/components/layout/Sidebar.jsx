@@ -399,6 +399,55 @@ const Sidebar = () => {
   // Combine role-based and permission-based items
   const navItems = [...roleBasedItems, ...permissionBasedItems];
 
+  // Filter nav items based on search query
+  const filterNavItems = (items, query) => {
+    if (!query.trim()) return items;
+    
+    const lowerQuery = query.toLowerCase().trim();
+    
+    return items.reduce((filtered, item) => {
+      // Check if the item label matches
+      const labelMatches = item.label.toLowerCase().includes(lowerQuery);
+      
+      // For parent items with children, check if any child matches
+      if (item.isParent && item.children) {
+        const matchingChildren = item.children.filter(child => 
+          child.label.toLowerCase().includes(lowerQuery)
+        );
+        
+        if (labelMatches || matchingChildren.length > 0) {
+          // Include parent with all children if parent matches, or only matching children
+          filtered.push({
+            ...item,
+            children: labelMatches ? item.children : matchingChildren,
+            _forceExpand: matchingChildren.length > 0 && !labelMatches // Auto-expand if child matches
+          });
+        }
+      } else if (labelMatches) {
+        filtered.push(item);
+      }
+      
+      return filtered;
+    }, []);
+  };
+
+  const filteredNavItems = filterNavItems(navItems, searchQuery);
+
+  // Auto-expand parent menus when search matches children
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      const menusToExpand = {};
+      filteredNavItems.forEach(item => {
+        if (item._forceExpand) {
+          menusToExpand[item.path] = true;
+        }
+      });
+      if (Object.keys(menusToExpand).length > 0) {
+        setExpandedMenus(prev => ({ ...prev, ...menusToExpand }));
+      }
+    }
+  }, [searchQuery, filteredNavItems.length]);
+
   const toggleMenu = (path) => {
     setExpandedMenus(prev => ({
       ...prev,

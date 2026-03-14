@@ -38487,6 +38487,70 @@ async def run_scheduled_backup():
 
 
 @app.on_event("startup")
+async def ensure_system_admin():
+    """
+    Ensure System Admin exists on every startup.
+    This admin is auto-created if database is wiped.
+    """
+    import bcrypt
+    
+    SYSTEM_ADMIN_EMAIL = "system.admin@arkiflo.com"
+    SYSTEM_ADMIN_PASSWORD = "Arkiflo@2024!"  # Strong default password
+    
+    try:
+        # Check if system admin exists
+        existing = await db.users.find_one({"email": SYSTEM_ADMIN_EMAIL})
+        
+        if not existing:
+            # Create system admin with all permissions
+            all_permissions = [
+                "users.view", "users.create", "users.edit", "users.delete", "users.manage_permissions",
+                "projects.view_all", "projects.create", "projects.update", "projects.delete", "projects.assign",
+                "leads.view_all", "leads.create", "leads.update", "leads.convert",
+                "calendar.view", "calendar.create", "calendar.update",
+                "meetings.view_all", "meetings.create", "meetings.update",
+                "finance.view_project_finance", "finance.edit_project_finance", "finance.edit_vendor_mapping",
+                "finance.cashbook.view", "finance.cashbook.create", "finance.cashbook.edit",
+                "finance.receipts.view", "finance.receipts.create", "finance.receipts.edit",
+                "finance.expense_requests.view", "finance.expense_requests.create",
+                "finance.expense_requests.approve", "finance.expense_requests.record",
+                "finance.liabilities.view", "finance.liabilities.create", "finance.liabilities.settle",
+                "finance.trial_balance.view", "finance.pnl.view", "finance.founder_dashboard",
+                "finance.salary.view", "finance.salary.process",
+                "admin.audit_trail", "admin.settings", "admin.roles",
+                "reports.view", "reports.export",
+                "design.view_queue", "design.review", "design.approve",
+                "production.view", "production.update", "production.manage",
+                "inventory.view", "inventory.manage",
+                "vendors.view", "vendors.create", "vendors.edit"
+            ]
+            
+            password_hash = bcrypt.hashpw(SYSTEM_ADMIN_PASSWORD.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            
+            system_admin = {
+                "user_id": "user_system_admin_001",
+                "email": SYSTEM_ADMIN_EMAIL,
+                "name": "System Administrator",
+                "role": "Admin",
+                "password_hash": password_hash,
+                "status": "active",
+                "permissions": all_permissions,
+                "is_system_admin": True,  # Flag to identify system admin
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "auth_provider": "local"
+            }
+            
+            await db.users.insert_one(system_admin)
+            logger.info(f"✓ System Admin created: {SYSTEM_ADMIN_EMAIL}")
+        else:
+            logger.info(f"✓ System Admin exists: {SYSTEM_ADMIN_EMAIL}")
+    
+    except Exception as e:
+        logger.error(f"Failed to ensure system admin: {e}")
+
+
+@app.on_event("startup")
 async def start_backup_scheduler():
     """Start the backup scheduler on application startup"""
     # Schedule daily backup at midnight (00:00 server time)

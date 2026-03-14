@@ -24624,6 +24624,82 @@ async def get_project_finance_detail(project_id: str, request: Request):
     }
 
 
+# ============ REVENUE RECOGNITION ENDPOINTS ============
+
+@api_router.get("/finance/revenue-recognitions")
+async def get_all_revenue_recognitions(request: Request):
+    """Get all revenue recognitions"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_project_finance"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    recognitions = await db.finance_revenue_recognitions.find(
+        {},
+        {"_id": 0}
+    ).sort("recognition_date", -1).to_list(500)
+    
+    return {
+        "total": len(recognitions),
+        "total_revenue": sum(r.get("amount", 0) for r in recognitions),
+        "recognitions": recognitions
+    }
+
+
+@api_router.post("/finance/revenue-recognitions/{project_id}")
+async def manual_revenue_recognition(project_id: str, request: Request):
+    """Manually trigger revenue recognition for a completed project.
+    
+    Use this for projects that reached Handover before revenue recognition was implemented.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.edit_project_finance") and user_doc.get("role") not in ["Admin", "Founder"]:
+        raise HTTPException(status_code=403, detail="Access denied - requires finance.edit_project_finance permission")
+    
+    # Check project exists and is at Handover stage
+    project = await db.projects.find_one(
+        {"project_id": project_id},
+        {"_id": 0, "project_id": 1, "pid": 1, "project_name": 1, "signoff_value": 1,
+         "stages": 1, "current_stage": 1}
+    )
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Verify project is at Handover stage
+    current_stage = project.get("current_stage") or project.get("stages", {}).get("current")
+    if current_stage != "Handover":
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Revenue can only be recognized for completed projects (at Handover stage). Current stage: {current_stage}"
+        )
+    
+    signoff_value = project.get("signoff_value") or 0
+    if signoff_value <= 0:
+        raise HTTPException(status_code=400, detail="Project has no sign-off value. Cannot recognize revenue.")
+    
+    # Check if already recognized
+    existing = await db.finance_revenue_recognitions.find_one({"project_id": project_id})
+    if existing:
+        raise HTTPException(status_code=400, detail="Revenue already recognized for this project")
+    
+    # Perform recognition
+    result = await recognize_project_revenue(project_id, user)
+    
+    return {
+        "message": "Revenue recognized successfully",
+        "recognition": {
+            "project_id": project_id,
+            "project_name": project.get("project_name"),
+            "amount": signoff_value,
+            "recognition_id": result.get("recognition_id") if result else None
+        }
+    }
+
+
 @api_router.get("/finance/vendor-mappings/{project_id}")
 async def get_vendor_mappings(project_id: str, request: Request):
     """Get vendor mappings for a project"""

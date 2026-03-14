@@ -24663,7 +24663,7 @@ async def manual_revenue_recognition(project_id: str, request: Request):
     project = await db.projects.find_one(
         {"project_id": project_id},
         {"_id": 0, "project_id": 1, "pid": 1, "project_name": 1, "signoff_value": 1,
-         "stages": 1, "current_stage": 1}
+         "stage": 1, "stages": 1, "current_stage": 1}
     )
     
     if not project:

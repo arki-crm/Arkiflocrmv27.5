@@ -29957,8 +29957,8 @@ async def get_trial_balance(
         #   - inflow (counter to bank outflow) = Debit (increases)
         #   - outflow (counter to bank inflow) = Credit (decreases)
         
-        if acc_type in ["liability", "income"]:
-            # For liabilities/income: outflow = Credit increase, inflow = Debit decrease
+        if acc_type in ["liability", "income", "revenue"]:
+            # For liabilities/income/revenue: outflow = Credit increase, inflow = Debit decrease
             if txn_type == "outflow":
                 system_account_balances[acc_id]["credit"] += amount
             else:

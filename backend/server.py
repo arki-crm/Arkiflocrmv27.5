@@ -24762,11 +24762,12 @@ async def get_daily_closing(request: Request, date: Optional[str] = None):
         calc_opening = opening_balance + prev_inflow - prev_outflow
         
         # Calculate today's transactions
-        # FIX: Use transaction_date (string) for consistent date filtering
+        # FIX: Use transaction_date with regex for consistent date filtering
+        # Some transactions store "2026-03-12" while others store "2026-03-12T10:30:00Z"
         today_txn_pipeline = [
             {"$match": {
                 "account_id": account_id,
-                "transaction_date": date  # Exact string match for today's date
+                "transaction_date": {"$regex": f"^{date}"}  # Match any format starting with date
             }},
             {"$group": {
                 "_id": None,

@@ -4954,6 +4954,7 @@ async def recognize_project_revenue(project_id: str, user):
         "description": f"Revenue recognition - {project.get('pid', project_id)}",
         "remarks": f"Revenue recognized for completed project: {project.get('project_name')}",
         "entry_role": "counter",
+        "is_double_entry": True,
         "counter_entry_id": primary_txn_id,
         "created_at": now.isoformat(),
         "created_by": user.user_id,

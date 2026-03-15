@@ -4938,11 +4938,11 @@ async def recognize_project_revenue(project_id: str, user):
     }
     
     # Entry 2: Cr Project Revenue (Revenue Credit = increases revenue)
-    # For revenue accounts: Credit = inflow (increases balance)
+    # For revenue accounts: Credit = outflow (increases balance)
     counter_entry = {
         "transaction_id": counter_txn_id,
         "transaction_date": transaction_date,
-        "transaction_type": "inflow",  # Credit for revenue = inflow
+        "transaction_type": "outflow",  # Credit for revenue = outflow
         "amount": signoff_value,
         "account_id": "acc_project_revenue",
         "account_name": "Project Revenue",

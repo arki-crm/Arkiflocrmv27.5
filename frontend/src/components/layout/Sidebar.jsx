@@ -279,7 +279,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermissio
         subItems: caFinanceSubItems
       };
       return [
-        { path: '/finance/founder-dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { path: '/finance/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         ...commonItems.filter(item => item.path === '/profile'), // Only profile, no calendar/meetings
         caFinanceParentItem
       ];

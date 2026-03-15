@@ -232,20 +232,30 @@ class TestFounderPermissionUpdates:
         """Founder CAN modify Admin permissions"""
         session = get_founder_session()
         
-        # Get Admin user permissions
-        response = session.get(f"{BASE_URL}/api/users/{ADMIN_USER_ID}/permissions")
-        if response.status_code == 200:
-            current_perms = response.json().get("permissions", [])
+        # Get available permissions first
+        avail_response = session.get(f"{BASE_URL}/api/permissions/available")
+        if avail_response.status_code == 200:
+            avail_data = avail_response.json()
+            valid_perms = []
+            for group in avail_data.get("permission_groups", {}).values():
+                for perm in group.get("permissions", []):
+                    valid_perms.append(perm["id"])
             
-            # Try to update Admin permissions (add a permission)
-            new_perms = list(set(current_perms + ["finance.founder_dashboard"]))
-            
-            update_response = session.put(
-                f"{BASE_URL}/api/users/{ADMIN_USER_ID}/permissions",
-                json={"permissions": new_perms, "custom_permissions": True}
-            )
-            assert update_response.status_code == 200, \
-                f"Founder should be able to modify Admin permissions: {update_response.text}"
+            # Get Admin user permissions
+            response = session.get(f"{BASE_URL}/api/users/{ADMIN_USER_ID}/permissions")
+            if response.status_code == 200:
+                current_perms = response.json().get("permissions", [])
+                
+                # Filter to only valid permissions and add one more
+                filtered_perms = [p for p in current_perms if p in valid_perms]
+                new_perms = list(set(filtered_perms + ["finance.founder_dashboard"]))
+                
+                update_response = session.put(
+                    f"{BASE_URL}/api/users/{ADMIN_USER_ID}/permissions",
+                    json={"permissions": new_perms, "custom_permissions": True}
+                )
+                assert update_response.status_code == 200, \
+                    f"Founder should be able to modify Admin permissions: {update_response.text}"
                 
     def test_founder_can_reset_admin_permissions(self):
         """Founder CAN reset Admin permissions"""

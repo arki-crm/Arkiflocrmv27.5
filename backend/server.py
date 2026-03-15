@@ -4397,10 +4397,10 @@ async def list_projects(
         result.append({
             "project_id": p["project_id"],
             "pid": p.get("pid"),  # CRITICAL: Include PID in list
-            "project_name": p["project_name"],
+            "project_name": p.get("project_name", "Unknown Project"),
             "client_name": p.get("client_name", ""),
             "client_phone": p.get("client_phone", ""),
-            "stage": p["stage"],
+            "stage": p.get("stage", "Pre-Sales"),
             "hold_status": p.get("hold_status", "Active"),
             "project_value": p.get("project_value", 0),
             "collaborators": collaborator_details,

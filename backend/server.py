@@ -32874,6 +32874,63 @@ async def get_receipt(receipt_id: str, request: Request):
     return receipt
 
 
+
+@api_router.get("/finance/receipts/diagnose")
+async def diagnose_receipt_entries(request: Request):
+    """Diagnostic endpoint to check receipt double-entry integrity"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_receipts"):
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Get all receipt transactions
+    receipt_txns = await db.accounting_transactions.find({
+        "source_module": "receipts"
+    }, {"_id": 0}).to_list(10000)
+    
+    # Group by source_id
+    by_receipt = {}
+    for t in receipt_txns:
+        rid = t.get("source_id")
+        if rid not in by_receipt:
+            by_receipt[rid] = {"primary": None, "counter": None}
+        
+        if t.get("entry_role") == "primary":
+            by_receipt[rid]["primary"] = t
+        elif t.get("entry_role") == "counter":
+            by_receipt[rid]["counter"] = t
+    
+    # Find issues
+    missing_primary = []
+    missing_counter = []
+    complete = []
+    
+    for rid, entries in by_receipt.items():
+        if entries["primary"] is None and entries["counter"] is not None:
+            missing_primary.append({
+                "receipt_id": rid,
+                "counter_account": entries["counter"].get("account_id"),
+                "amount": entries["counter"].get("amount")
+            })
+        elif entries["counter"] is None and entries["primary"] is not None:
+            missing_counter.append({
+                "receipt_id": rid,
+                "primary_account": entries["primary"].get("account_id"),
+                "amount": entries["primary"].get("amount")
+            })
+        else:
+            complete.append(rid)
+    
+    return {
+        "total_receipts": len(by_receipt),
+        "complete": len(complete),
+        "missing_primary_entry": missing_primary,
+        "missing_counter_entry": missing_counter,
+        "is_healthy": len(missing_primary) == 0 and len(missing_counter) == 0
+    }
+
+
 @api_router.post("/finance/receipts")
 async def create_receipt(receipt: ReceiptCreate, request: Request):
     """Create a payment receipt - permission controlled with idempotency protection"""

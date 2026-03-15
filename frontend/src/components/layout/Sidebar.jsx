@@ -117,13 +117,26 @@ const caFinanceSubItems = [
 // Each role sees ONLY their relevant items - minimal, clean navigation
 // Finance access is also controlled by permissions for flexibility
 
-const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermission = false) => {
+const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermission = false, userPermissions = []) => {
   // Common items for all roles
   const commonItems = [
     { path: '/calendar', label: 'Calendar', icon: Calendar },
     { path: '/meetings', label: 'Meetings', icon: CalendarDays },
     { path: '/profile', label: 'My Profile', icon: User }
   ];
+
+  // Check if user has CRM/Projects permissions
+  const hasProjectsView = userPermissions.includes('projects.view') || userPermissions.includes('projects.view_all');
+  const hasLeadsView = userPermissions.includes('leads.view') || userPermissions.includes('leads.view_all');
+  
+  // CRM items for users with project/lead permissions (added dynamically)
+  const crmItems = [];
+  if (hasProjectsView) {
+    crmItems.push({ path: '/projects', label: 'Projects', icon: FolderKanban });
+  }
+  if (hasLeadsView) {
+    crmItems.push({ path: '/leads', label: 'Leads', icon: Target });
+  }
 
   // Senior Manager View - adds read-only access to all dashboards
   const seniorManagerItems = hasSeniorManagerView ? [

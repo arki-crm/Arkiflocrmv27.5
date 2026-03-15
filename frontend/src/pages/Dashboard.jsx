@@ -301,6 +301,11 @@ const Dashboard = () => {
       navigate('/production-ops', { replace: true });
       return;
     }
+    // Finance Roles -> Finance Dashboard (appropriate for finance staff)
+    if (['FinanceManager', 'SeniorAccountant', 'JuniorAccountant', 'Accountant'].includes(user?.role)) {
+      navigate('/finance/dashboard', { replace: true });
+      return;
+    }
     // Admin, PreSales, Designer -> General Dashboard (no redirect)
   }, [user, navigate]);
   

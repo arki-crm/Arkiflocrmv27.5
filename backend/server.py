@@ -32984,8 +32984,8 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
         "source_id": receipt_doc["receipt_id"],
         "created_by": user.user_id,
         "created_by_name": user.name,
-        "created_at": now,
-        "updated_at": now
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
     }
     
     await db.finance_receipts.insert_one(receipt_doc)

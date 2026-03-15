@@ -409,7 +409,7 @@ class TestPermissionBypassLogic:
         """Founder can access finance endpoints"""
         session = get_founder_session()
         
-        response = session.get(f"{BASE_URL}/api/finance/accounts")
+        response = session.get(f"{BASE_URL}/api/finance/project-finance")
         assert response.status_code == 200, \
             f"Founder should have access to finance endpoints: {response.text}"
             
@@ -437,7 +437,7 @@ class TestAdminBypassLogic:
         """Admin can access finance endpoints"""
         session = get_admin_session()
         
-        response = session.get(f"{BASE_URL}/api/finance/accounts")
+        response = session.get(f"{BASE_URL}/api/finance/project-finance")
         assert response.status_code == 200, \
             f"Admin should have access to finance endpoints: {response.text}"
             

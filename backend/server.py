@@ -351,6 +351,68 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 #   - Serves as the recovery mechanism if other admins lose access
 FOUNDER_EMAIL = "sidheeq.arkidots@gmail.com"
 
+# ============ COMPLETE PERMISSIONS LIST (187 permissions) ============
+# This is the authoritative list of ALL permissions in the system.
+# Founder and Admin roles always get ALL these permissions.
+ALL_SYSTEM_PERMISSIONS = [
+    "academy.manage", "academy.view",
+    "admin.audit_trail", "admin.edit_settings", "admin.manage_users", "admin.roles", "admin.settings", "admin.view_reports", "admin.view_settings", "admin.assign_permissions",
+    "admin.stage_rollback", "admin.milestone_rollback", "admin.delete_files", "admin.email_templates", "admin.view_logs", "admin.seed_data",
+    "calendar.create", "calendar.update", "calendar.view",
+    "design.approve", "design.queue.view", "design.reject", "design.review", "design.submissions.view", "design.view_queue",
+    "finance.accounts.create", "finance.accounts.edit", "finance.accounts.opening_balance", "finance.accounts.view",
+    "finance.add_receipt", "finance.add_transaction", "finance.allow_over_budget", "finance.approve_expense",
+    "finance.audit_log.view", "finance.budget.edit", "finance.budget.view", "finance.budget.create", "finance.budget.close",
+    "finance.cancellation.mark",
+    "finance.cashbook.create", "finance.cashbook.delete", "finance.cashbook.edit", "finance.cashbook.verify", "finance.cashbook.view",
+    "finance.categories.manage", "finance.categories.view", "finance.close_day",
+    "finance.confirm_booking_payment", "finance.confirm_milestone_payment",
+    "finance.create_expense_request", "finance.create_invoice",
+    "finance.daily_closing", "finance.daily_closing.close", "finance.daily_closing.create", "finance.daily_closing.lock", "finance.daily_closing.view",
+    "finance.delete_transaction", "finance.edit_payment_schedule", "finance.edit_project_finance", "finance.edit_transaction", "finance.edit_vendor_mapping",
+    "finance.exception.mark",
+    "finance.expense_requests.approve", "finance.expense_requests.create", "finance.expense_requests.record", "finance.expense_requests.view",
+    "finance.expenses.approve", "finance.expenses.approve_high", "finance.expenses.approve_petty", "finance.expenses.approve_standard",
+    "finance.expenses.create", "finance.expenses.mark_exception", "finance.expenses.record", "finance.expenses.track_refunds", "finance.expenses.view",
+    "finance.export_data", "finance.forecast.view", "finance.forecast.edit_assumptions", "finance.founder_dashboard",
+    "finance.general_ledger.view", "finance.general_ledger.export",
+    "finance.import_data",
+    "finance.invoices.cancel", "finance.invoices.create", "finance.invoices.view",
+    "finance.issue_refund",
+    "finance.journal_entry.view", "finance.journal_entry.create", "finance.journal_entry.edit", "finance.journal_entry.reverse",
+    "finance.liabilities.create", "finance.liabilities.settle", "finance.liabilities.view",
+    "finance.lock_config", "finance.lock_override",
+    "finance.manage_accounts", "finance.manage_categories", "finance.manage_vendors", "finance.mark_cancellation", "finance.monthly_snapshot",
+    "finance.party_subledger.view", "finance.party_subledger.manage",
+    "finance.payment_schedule.edit", "finance.payment_schedule.override", "finance.payment_schedule.view",
+    "finance.pnl.view",
+    "finance.project.allocate_funds", "finance.project.cost_edit", "finance.project.override_budget", "finance.project.vendor_mapping", "finance.project.view",
+    "finance.receipts.create", "finance.receipts.download", "finance.receipts.edit", "finance.receipts.view",
+    "finance.record_expense",
+    "finance.refunds.approve", "finance.refunds.create", "finance.refunds.view",
+    "finance.reports.export", "finance.reports.margin", "finance.reports.profit", "finance.reports.view",
+    "finance.salaries.close_month", "finance.salaries.edit_structure", "finance.salaries.manage_exit", "finance.salaries.manage_ladder", "finance.salaries.pay", "finance.salaries.promote", "finance.salaries.view", "finance.salaries.view_all",
+    "finance.salary.process", "finance.salary.view",
+    "finance.set_opening_balance", "finance.track_refunds", "finance.transaction.reverse", "finance.trial_balance.view",
+    "finance.vendors.manage", "finance.vendors.view", "finance.verify_transaction",
+    "finance.view_audit_log", "finance.view_bankbook", "finance.view_cashbook", "finance.view_dashboard", "finance.view_expense_requests", "finance.view_lock_status", "finance.view_project_finance", "finance.view_receipts", "finance.view_reports", "finance.view_vendors",
+    "finance.writeoff.approve",
+    "hr.promotion.view", "hr.promotion.view_all", "hr.promotion.manage",
+    "inventory.manage", "inventory.view",
+    "leads.activate", "leads.convert", "leads.create", "leads.deactivate", "leads.hold", "leads.reassign", "leads.update", "leads.view", "leads.view_all",
+    "meetings.create", "meetings.update", "meetings.view_all",
+    "milestones.update.delivery", "milestones.update.design", "milestones.update.handover", "milestones.update.installation", "milestones.update.production",
+    "presales.convert", "presales.create", "presales.update", "presales.view", "presales.view_all",
+    "production.manage", "production.update", "production.view",
+    "projects.activate", "projects.assign", "projects.create", "projects.deactivate", "projects.delete", "projects.hold", "projects.manage_collaborators", "projects.update", "projects.view", "projects.view_all",
+    "reports.export", "reports.view",
+    "service.assign_technician", "service.create", "service.update", "service.view", "service.view_all",
+    "timeline.adjust",
+    "users.create", "users.delete", "users.edit", "users.manage_permissions", "users.view",
+    "vendors.create", "vendors.edit", "vendors.view",
+    "warranty.update", "warranty.view",
+]
+
 # Google OAuth URLs
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"

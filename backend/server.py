@@ -2898,8 +2898,8 @@ def has_permission(user_doc: dict, permission: str) -> bool:
 
 
 def is_founder(user_doc: dict) -> bool:
-    """Check if user is the system owner/founder"""
-    return user_doc.get("email") == FOUNDER_EMAIL
+    """Check if user is the system owner/founder (by role OR specific email)"""
+    return user_doc.get("role") == "Founder" or user_doc.get("email") == FOUNDER_EMAIL
 
 
 def is_founder_email(email: str) -> bool:

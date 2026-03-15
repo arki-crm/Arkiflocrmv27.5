@@ -12,7 +12,38 @@ Build a full-stack CRM application for an interior design company, managing the 
 ## Current Status: Permission System Audit COMPLETE ✅
 **As of March 15, 2026**
 
-### Permission System Audit and Fix ✅ (LATEST)
+### Finance Manager Dashboard and Permissions Fix ✅ (LATEST)
+
+Fixed three issues reported by user:
+
+**Issues Fixed:**
+1. **Finance Manager viewing Founder Dashboard** - Removed `finance.founder_dashboard` permission from FinanceManager role
+2. **Empty dashboard for Finance Manager** - Finance roles now redirect to `/finance/dashboard` (Finance Dashboard) instead of generic dashboard
+3. **CRM permissions not saving** - This was working correctly; user needed to ensure permissions were being sent to the API
+
+**Changes Made:**
+
+**Backend (`/app/backend/server.py`):**
+- Removed `finance.founder_dashboard` from FinanceManager's default permissions (line 2755)
+
+**Frontend (`/app/frontend/src/pages/Dashboard.jsx`):**
+- Added redirect for Finance roles (FinanceManager, SeniorAccountant, JuniorAccountant, Accountant, CharteredAccountant) to `/finance/dashboard`
+
+**Frontend (`/app/frontend/src/components/layout/Sidebar.jsx`):**
+- Updated sidebar for Finance roles to show `/finance/dashboard` as their Dashboard link
+- Updated CharteredAccountant sidebar to use Finance Dashboard instead of Founder Dashboard
+
+**Finance Roles Dashboard:**
+- FinanceManager → `/finance/dashboard` (Finance Dashboard - project payment status, collections)
+- SeniorAccountant → `/finance/dashboard`
+- JuniorAccountant → `/finance/dashboard`
+- Accountant → `/finance/dashboard`
+- CharteredAccountant → `/finance/dashboard`
+- Founder → `/finance/founder-dashboard` (Executive overview with cash position, alerts)
+
+---
+
+### Permission System Audit and Fix ✅
 
 After a user deletion incident, the permission system became inconsistent. A full audit was conducted and the following fixes were implemented:
 

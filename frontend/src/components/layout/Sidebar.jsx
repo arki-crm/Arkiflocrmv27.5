@@ -394,8 +394,8 @@ const Sidebar = () => {
     hasPermission('finance.receipts.view') ||
     hasPermission('finance.liabilities.view');
 
-  // Get role-specific navigation items with senior manager view permission and finance permission
-  const roleBasedItems = getRoleNavItems(user?.role, user?.senior_manager_view, hasAnyFinancePermission);
+  // Get role-specific navigation items with senior manager view permission, finance permission, and user permissions
+  const roleBasedItems = getRoleNavItems(user?.role, user?.senior_manager_view, hasAnyFinancePermission, user?.permissions || []);
   
   // Permission-based navigation additions
   // These items are added based on permissions, regardless of role

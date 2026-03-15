@@ -38596,13 +38596,10 @@ async def ensure_system_admin():
     SYSTEM_ADMIN_EMAIL = "system.admin@arkiflo.com"
     SYSTEM_ADMIN_PASSWORD = "Arkiflo@2024!"  # Strong default password
     
-    # Complete list of ALL 187 permissions
-    ALL_PERMISSIONS = [
-        "academy.manage",
-        "academy.view",
-        "admin.audit_trail",
-        "admin.edit_settings",
-        "admin.manage_users",
+    # Use the global ALL_SYSTEM_PERMISSIONS constant
+    ALL_PERMISSIONS = ALL_SYSTEM_PERMISSIONS
+    
+    try:
         "admin.roles",
         "admin.settings",
         "admin.view_reports",

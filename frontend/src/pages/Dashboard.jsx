@@ -311,7 +311,7 @@ const Dashboard = () => {
   
   useEffect(() => {
     // Don't fetch if redirecting to role-specific dashboard
-    if (['Founder', 'SalesManager', 'DesignManager', 'ProductionOpsManager'].includes(user?.role)) return;
+    if (['Founder', 'SalesManager', 'DesignManager', 'ProductionOpsManager', 'FinanceManager', 'SeniorAccountant', 'JuniorAccountant', 'Accountant'].includes(user?.role)) return;
     fetchDashboardData();
   }, [user]);
   

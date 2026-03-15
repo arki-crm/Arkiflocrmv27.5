@@ -7,7 +7,7 @@ import pytest
 import requests
 from datetime import datetime
 
-BASE_URL = "https://role-guardian-9.preview.emergentagent.com/api"
+BASE_URL = "https://double-entry-system-2.preview.emergentagent.com/api"
 
 # Test credentials
 FOUNDER_EMAIL = "sidheeq.arkidots@gmail.com"

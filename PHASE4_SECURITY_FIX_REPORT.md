@@ -43,7 +43,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 ### Verification:
 ```bash
-$ curl -I https://role-guardian-9.preview.emergentagent.com/api/health
+$ curl -I https://double-entry-system-2.preview.emergentagent.com/api/health
 
 x-content-type-options: nosniff
 x-frame-options: DENY

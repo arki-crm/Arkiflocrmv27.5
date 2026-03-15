@@ -5,11 +5,60 @@ Build a full-stack CRM application for an interior design company, managing the 
 
 ## Architecture
 - **Frontend**: React 19 + TailwindCSS + Shadcn UI
-- **Backend**: FastAPI (Python) - Currently monolithic server.py (~43,600+ lines)
+- **Backend**: FastAPI (Python) - Currently monolithic server.py (~44,600+ lines)
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Revenue Recognition COMPLETE ✅
+## Current Status: Permission System Audit COMPLETE ✅
+**As of March 15, 2026**
+
+### Permission System Audit and Fix ✅ (LATEST)
+
+After a user deletion incident, the permission system became inconsistent. A full audit was conducted and the following fixes were implemented:
+
+**Issues Fixed:**
+1. Founder getting "invalid permissions" errors
+2. Admin unable to edit users
+3. Some permission updates being rejected
+4. Permission key mismatches between frontend and backend
+
+**Key Changes:**
+
+1. **Founder Bypass Implementation** (`has_permission` function):
+   - Now checks `role == "Founder"` OR `email == FOUNDER_EMAIL` for full access bypass
+   - Admins also bypass permission checks (role == "Admin")
+   
+2. **`is_founder` Function Updated**:
+   - Now returns True for users with `role == "Founder"` OR `email == FOUNDER_EMAIL`
+   
+3. **Auto-Repair on Login** (`ensure_user_permissions` function):
+   - Admins and Founders automatically get ALL 209 permissions on login
+   - If they have fewer than 209 permissions, they're auto-repaired
+   
+4. **Global Permission Constant**:
+   - Created `ALL_SYSTEM_PERMISSIONS` (209 permissions) at the module level
+   - Used consistently across startup, login, and repair functions
+   
+5. **Permission Update Protections**:
+   - Admin CANNOT remove Founder's permissions (can only add)
+   - Admin CANNOT modify another Admin's permissions
+   - Admin CANNOT reset Founder or Admin permissions
+   - Founder CAN do everything
+
+**Test Results:** 25/25 tests passed
+- All permission restrictions working correctly
+- Auto-repair confirmed working
+- All users can now manage permissions appropriately
+
+**Files Modified:**
+- `/app/backend/server.py` - Added `ALL_SYSTEM_PERMISSIONS`, updated `has_permission`, `is_founder`, `ensure_user_permissions`, `update_user_permissions`, `reset_user_permissions_to_role`, `update_user` functions
+
+**Test File Created:**
+- `/app/backend/tests/test_permission_system_audit.py`
+
+---
+
+## Previous Status: Revenue Recognition COMPLETE ✅
 **As of March 14, 2026**
 
 ### Revenue Recognition Implementation ✅ (LATEST)

@@ -2925,21 +2925,17 @@ async def ensure_user_permissions(user_id: str, user_doc: dict) -> dict:
     
     # FOUNDER/ADMIN SPECIAL HANDLING: Always ensure they have ALL permissions
     if role in ["Founder", "Admin"] or user_doc.get("email") == FOUNDER_EMAIL:
-        # These roles should always have all 187 permissions
-        # If they don't, repair them
-        if not stored_perms or len(stored_perms) < 187:
-            all_perms = DEFAULT_ROLE_PERMISSIONS.get("Founder", [])
-            if len(all_perms) < 187:
-                # Fall back to Admin if Founder doesn't have all perms defined
-                all_perms = DEFAULT_ROLE_PERMISSIONS.get("Admin", [])
-            
+        # These roles should always have ALL system permissions
+        # Use the global ALL_SYSTEM_PERMISSIONS constant for consistency
+        required_count = len(ALL_SYSTEM_PERMISSIONS)
+        if not stored_perms or len(stored_perms) < required_count:
             await db.users.update_one(
                 {"user_id": user_id},
-                {"$set": {"permissions": all_perms}}
+                {"$set": {"permissions": ALL_SYSTEM_PERMISSIONS}}
             )
-            logger.warning(f"PERMISSION REPAIR: {role} user {user_doc.get('email')} had incomplete permissions. "
-                          f"Assigned all {len(all_perms)} permissions.")
-            user_doc["permissions"] = all_perms
+            logger.warning(f"PERMISSION REPAIR: {role} user {user_doc.get('email')} had incomplete permissions ({len(stored_perms or [])}). "
+                          f"Assigned all {required_count} permissions.")
+            user_doc["permissions"] = ALL_SYSTEM_PERMISSIONS
         return user_doc
     
     # Check if permissions are missing OR empty (treat both the same)

@@ -262,7 +262,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermissio
     case 'SeniorAccountant':
     case 'FinanceManager':
       return [
-        { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { path: '/finance/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         ...commonItems,
         financeParentItem,
         { path: '/reports', label: 'Reports', icon: BarChart3 }

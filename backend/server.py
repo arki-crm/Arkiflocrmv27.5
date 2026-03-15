@@ -32875,7 +32875,7 @@ async def get_receipt(receipt_id: str, request: Request):
 
 
 
-@api_router.get("/finance/receipts/diagnose")
+@api_router.get("/finance/receipt-integrity-check")
 async def diagnose_receipt_entries(request: Request):
     """Diagnostic endpoint to check receipt double-entry integrity"""
     user = await get_current_user(request)

@@ -3932,6 +3932,20 @@ async def reset_user_permissions_to_role(user_id: str, request: Request):
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # FOUNDER PROTECTION: Cannot reset Founder permissions
+    if is_founder(target_user):
+        raise HTTPException(
+            status_code=403, 
+            detail="Cannot reset Founder permissions. Founder always retains full access."
+        )
+    
+    # ADMIN PROTECTION: Non-Founders cannot reset Admin permissions
+    if target_user.get("role") == "Admin" and not is_founder(user_doc):
+        raise HTTPException(
+            status_code=403, 
+            detail="Only Founders can reset Admin permissions."
+        )
+    
     role = target_user.get("role")
     default_perms = DEFAULT_ROLE_PERMISSIONS.get(role, [])
     

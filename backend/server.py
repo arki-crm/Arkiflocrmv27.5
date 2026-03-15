@@ -3873,7 +3873,7 @@ async def update_user_permissions(user_id: str, perm_data: PermissionsUpdate, re
         raise HTTPException(status_code=404, detail="User not found")
     
     # FOUNDER PROTECTION: Can ADD permissions but cannot REMOVE any existing ones
-    if target_user.get("role") == "Founder" or is_founder_email(target_user.get("email", "")):
+    if is_founder(target_user):
         current_permissions = set(target_user.get("permissions", []))
         new_permissions = set(perm_data.permissions)
         removed_permissions = current_permissions - new_permissions

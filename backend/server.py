@@ -30039,17 +30039,19 @@ async def get_trial_balance(
             total_debit += bal["debit"]
             total_credit += bal["credit"]
     
-    # ===== SYSTEM ACCOUNTS (Double-Entry Counter Accounts) =====
-    # Get all counter entries for system accounts in period
-    counter_entries = await db.accounting_transactions.find({
+    # ===== SYSTEM ACCOUNTS (Double-Entry Accounts) =====
+    # Get ALL double-entry transactions for system accounts in period
+    # This includes BOTH primary and counter entries to capture all movements
+    system_entries = await db.accounting_transactions.find({
         "created_at": {"$gte": start_iso, "$lte": end_iso},
-        "entry_role": "counter",
-        "is_double_entry": True
+        "is_double_entry": True,
+        # Only include system accounts (not bank/cash which are handled above)
+        "account_id": {"$nin": [a["account_id"] for a in accounts if a.get("account_type") in ["bank", "cash", "upi", "wallet"]]}
     }, {"_id": 0}).to_list(50000)
     
-    # Group counter entries by account_id
+    # Group entries by account_id
     system_account_balances = {}
-    for entry in counter_entries:
+    for entry in system_entries:
         acc_id = entry.get("account_id")
         if acc_id not in system_account_balances:
             # Lookup account type from accounting_accounts
@@ -30069,15 +30071,14 @@ async def get_trial_balance(
         txn_type = entry.get("transaction_type")
         
         # Interpret transaction_type based on account type
-        # Counter entry with opposite txn_type should INCREASE the counter account
         # 
         # For Liabilities/Income (normal credit balance):
-        #   - outflow (counter to bank inflow) = Credit (increases)
-        #   - inflow (counter to bank outflow) = Debit (decreases)
+        #   - outflow = Credit (increases liability/income)
+        #   - inflow = Debit (decreases liability/income)
         # 
         # For Expenses/Assets (normal debit balance):
-        #   - inflow (counter to bank outflow) = Debit (increases)
-        #   - outflow (counter to bank inflow) = Credit (decreases)
+        #   - inflow = Debit (increases expense/asset)
+        #   - outflow = Credit (decreases expense/asset)
         
         if acc_type in ["liability", "income", "revenue"]:
             # For liabilities/income/revenue: outflow = Credit increase, inflow = Debit decrease

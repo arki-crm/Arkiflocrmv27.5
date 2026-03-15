@@ -302,7 +302,7 @@ const Dashboard = () => {
       return;
     }
     // Finance Roles -> Finance Dashboard (appropriate for finance staff)
-    if (['FinanceManager', 'SeniorAccountant', 'JuniorAccountant', 'Accountant'].includes(user?.role)) {
+    if (['FinanceManager', 'SeniorAccountant', 'JuniorAccountant', 'Accountant', 'CharteredAccountant'].includes(user?.role)) {
       navigate('/finance/dashboard', { replace: true });
       return;
     }

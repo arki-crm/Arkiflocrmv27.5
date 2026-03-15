@@ -17,6 +17,7 @@ Tests for the permission system fixes:
 import pytest
 import requests
 import os
+import time
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
@@ -38,59 +39,101 @@ SYSTEM_ADMIN_USER_ID = "user_system_admin_001"
 EXPECTED_PERMISSION_COUNT = 209
 
 
+# Global session storage to avoid rate limits
+_founder_session = None
+_admin_session = None
+_system_admin_session = None
+
+
+def get_founder_session():
+    """Get or create Founder session (singleton to avoid rate limits)"""
+    global _founder_session
+    if _founder_session is None:
+        _founder_session = requests.Session()
+        response = _founder_session.post(
+            f"{BASE_URL}/api/auth/local-login",
+            json={"email": FOUNDER_EMAIL, "password": FOUNDER_PASSWORD}
+        )
+        if response.status_code != 200:
+            raise Exception(f"Founder login failed: {response.text}")
+    return _founder_session
+
+
+def get_admin_session():
+    """Get or create Admin session (singleton to avoid rate limits)"""
+    global _admin_session
+    if _admin_session is None:
+        time.sleep(1)  # Small delay to avoid rate limits
+        _admin_session = requests.Session()
+        response = _admin_session.post(
+            f"{BASE_URL}/api/auth/local-login",
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
+        )
+        if response.status_code != 200:
+            raise Exception(f"Admin login failed: {response.text}")
+    return _admin_session
+
+
+def get_system_admin_session():
+    """Get or create System Admin session (singleton to avoid rate limits)"""
+    global _system_admin_session
+    if _system_admin_session is None:
+        time.sleep(1)  # Small delay to avoid rate limits
+        _system_admin_session = requests.Session()
+        response = _system_admin_session.post(
+            f"{BASE_URL}/api/auth/local-login",
+            json={"email": SYSTEM_ADMIN_EMAIL, "password": SYSTEM_ADMIN_PASSWORD}
+        )
+        if response.status_code != 200:
+            raise Exception(f"System Admin login failed: {response.text}")
+    return _system_admin_session
+
+
 class TestFounderLogin:
     """Test Founder login returns correct permissions"""
     
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Setup - create session"""
-        self.session = requests.Session()
-        
     def test_founder_login_returns_200(self):
         """Founder login should return 200"""
-        response = self.session.post(
+        session = requests.Session()
+        response = session.post(
             f"{BASE_URL}/api/auth/local-login",
             json={"email": FOUNDER_EMAIL, "password": FOUNDER_PASSWORD}
         )
         assert response.status_code == 200, f"Founder login failed: {response.text}"
         
+        # Store for later tests
+        global _founder_session
+        _founder_session = session
+        
     def test_founder_login_returns_correct_permission_count(self):
         """Founder login should return 209 permissions"""
-        response = self.session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={"email": FOUNDER_EMAIL, "password": FOUNDER_PASSWORD}
-        )
-        assert response.status_code == 200
-        data = response.json()
+        session = get_founder_session()
         
-        # Check permissions_count in login response
-        permissions_count = data["user"].get("permissions_count", 0)
+        # Check via /api/auth/me
+        me_response = session.get(f"{BASE_URL}/api/auth/me")
+        assert me_response.status_code == 200
+        data = me_response.json()
+        
+        permissions_count = len(data.get("permissions", []))
         print(f"Founder permissions_count: {permissions_count}")
         assert permissions_count >= EXPECTED_PERMISSION_COUNT, \
             f"Founder should have at least {EXPECTED_PERMISSION_COUNT} permissions, got {permissions_count}"
             
     def test_founder_login_returns_founder_role(self):
         """Founder login should return role=Founder"""
-        response = self.session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={"email": FOUNDER_EMAIL, "password": FOUNDER_PASSWORD}
-        )
-        assert response.status_code == 200
-        data = response.json()
+        session = get_founder_session()
         
-        assert data["user"]["role"] == "Founder", f"Expected role=Founder, got {data['user']['role']}"
+        me_response = session.get(f"{BASE_URL}/api/auth/me")
+        assert me_response.status_code == 200
+        data = me_response.json()
+        
+        assert data["role"] == "Founder", f"Expected role=Founder, got {data['role']}"
         
     def test_founder_auth_me_returns_is_founder_true(self):
         """GET /api/auth/me should return is_founder=True for Founder"""
-        # Login first
-        login_response = self.session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={"email": FOUNDER_EMAIL, "password": FOUNDER_PASSWORD}
-        )
-        assert login_response.status_code == 200
+        session = get_founder_session()
         
-        # Check /api/auth/me
-        me_response = self.session.get(f"{BASE_URL}/api/auth/me")
+        me_response = session.get(f"{BASE_URL}/api/auth/me")
         assert me_response.status_code == 200
         data = me_response.json()
         
@@ -103,77 +146,69 @@ class TestFounderLogin:
 class TestAdminLogin:
     """Test Admin login returns correct permissions after auto-repair"""
     
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Setup - create session"""
-        self.session = requests.Session()
-        
     def test_admin_login_returns_200(self):
         """Admin login should return 200"""
-        response = self.session.post(
+        session = requests.Session()
+        time.sleep(1)  # Avoid rate limit
+        response = session.post(
             f"{BASE_URL}/api/auth/local-login",
             json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
         )
         assert response.status_code == 200, f"Admin login failed: {response.text}"
         
+        # Store for later tests
+        global _admin_session
+        _admin_session = session
+        
     def test_admin_login_returns_correct_permission_count(self):
         """Admin login should return 209 permissions after auto-repair"""
-        response = self.session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
-        )
-        assert response.status_code == 200
-        data = response.json()
+        session = get_admin_session()
         
-        # Check permissions_count in login response
-        permissions_count = data["user"].get("permissions_count", 0)
+        # Check via /api/auth/me
+        me_response = session.get(f"{BASE_URL}/api/auth/me")
+        assert me_response.status_code == 200
+        data = me_response.json()
+        
+        permissions_count = len(data.get("permissions", []))
         print(f"Admin permissions_count: {permissions_count}")
         assert permissions_count >= EXPECTED_PERMISSION_COUNT, \
             f"Admin should have at least {EXPECTED_PERMISSION_COUNT} permissions, got {permissions_count}"
             
     def test_admin_login_returns_admin_role(self):
         """Admin login should return role=Admin"""
-        response = self.session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
-        )
-        assert response.status_code == 200
-        data = response.json()
+        session = get_admin_session()
         
-        assert data["user"]["role"] == "Admin", f"Expected role=Admin, got {data['user']['role']}"
+        me_response = session.get(f"{BASE_URL}/api/auth/me")
+        assert me_response.status_code == 200
+        data = me_response.json()
+        
+        assert data["role"] == "Admin", f"Expected role=Admin, got {data['role']}"
 
 
 class TestFounderPermissionUpdates:
     """Test Founder can update any user's permissions"""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Setup - login as Founder"""
-        self.session = requests.Session()
-        login_response = self.session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={"email": FOUNDER_EMAIL, "password": FOUNDER_PASSWORD}
-        )
-        assert login_response.status_code == 200, f"Founder login failed: {login_response.text}"
-        self.founder_user = login_response.json()["user"]
         
     def test_founder_can_view_any_user_permissions(self):
         """Founder can view any user's permissions"""
+        session = get_founder_session()
+        
         # Get users list
-        users_response = self.session.get(f"{BASE_URL}/api/users")
+        users_response = session.get(f"{BASE_URL}/api/users")
         assert users_response.status_code == 200
         users = users_response.json()
         
         # Find a Designer user
         designer = next((u for u in users if u["role"] == "Designer"), None)
         if designer:
-            response = self.session.get(f"{BASE_URL}/api/users/{designer['user_id']}/permissions")
+            response = session.get(f"{BASE_URL}/api/users/{designer['user_id']}/permissions")
             assert response.status_code == 200, f"Founder should be able to view Designer permissions"
             
     def test_founder_can_update_designer_permissions(self):
         """Founder can update Designer's permissions"""
+        session = get_founder_session()
+        
         # Get users list
-        users_response = self.session.get(f"{BASE_URL}/api/users")
+        users_response = session.get(f"{BASE_URL}/api/users")
         assert users_response.status_code == 200
         users = users_response.json()
         
@@ -181,13 +216,13 @@ class TestFounderPermissionUpdates:
         designer = next((u for u in users if u["role"] == "Designer"), None)
         if designer:
             # Get current permissions
-            current_perms_response = self.session.get(f"{BASE_URL}/api/users/{designer['user_id']}/permissions")
+            current_perms_response = session.get(f"{BASE_URL}/api/users/{designer['user_id']}/permissions")
             current_perms = current_perms_response.json().get("permissions", [])
             
             # Add a new permission
             new_perms = list(set(current_perms + ["finance.cashbook.view"]))
             
-            response = self.session.put(
+            response = session.put(
                 f"{BASE_URL}/api/users/{designer['user_id']}/permissions",
                 json={"permissions": new_perms, "custom_permissions": True}
             )
@@ -195,15 +230,17 @@ class TestFounderPermissionUpdates:
             
     def test_founder_can_modify_admin_permissions(self):
         """Founder CAN modify Admin permissions"""
+        session = get_founder_session()
+        
         # Get Admin user permissions
-        response = self.session.get(f"{BASE_URL}/api/users/{ADMIN_USER_ID}/permissions")
+        response = session.get(f"{BASE_URL}/api/users/{ADMIN_USER_ID}/permissions")
         if response.status_code == 200:
             current_perms = response.json().get("permissions", [])
             
             # Try to update Admin permissions (add a permission)
             new_perms = list(set(current_perms + ["finance.founder_dashboard"]))
             
-            update_response = self.session.put(
+            update_response = session.put(
                 f"{BASE_URL}/api/users/{ADMIN_USER_ID}/permissions",
                 json={"permissions": new_perms, "custom_permissions": True}
             )
@@ -212,7 +249,9 @@ class TestFounderPermissionUpdates:
                 
     def test_founder_can_reset_admin_permissions(self):
         """Founder CAN reset Admin permissions"""
-        response = self.session.post(f"{BASE_URL}/api/users/{ADMIN_USER_ID}/permissions/reset-to-role")
+        session = get_founder_session()
+        
+        response = session.post(f"{BASE_URL}/api/users/{ADMIN_USER_ID}/permissions/reset-to-role")
         # Founder should be able to reset Admin permissions
         assert response.status_code == 200, \
             f"Founder should be able to reset Admin permissions: {response.text}"
@@ -220,22 +259,13 @@ class TestFounderPermissionUpdates:
 
 class TestAdminPermissionRestrictions:
     """Test Admin permission restrictions"""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Setup - login as Admin"""
-        self.session = requests.Session()
-        login_response = self.session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
-        )
-        assert login_response.status_code == 200, f"Admin login failed: {login_response.text}"
-        self.admin_user = login_response.json()["user"]
         
     def test_admin_can_update_non_admin_user_permissions(self):
         """Admin can update non-admin user permissions"""
+        session = get_admin_session()
+        
         # Get users list
-        users_response = self.session.get(f"{BASE_URL}/api/users")
+        users_response = session.get(f"{BASE_URL}/api/users")
         assert users_response.status_code == 200
         users = users_response.json()
         
@@ -243,13 +273,13 @@ class TestAdminPermissionRestrictions:
         designer = next((u for u in users if u["role"] == "Designer"), None)
         if designer:
             # Get current permissions
-            current_perms_response = self.session.get(f"{BASE_URL}/api/users/{designer['user_id']}/permissions")
+            current_perms_response = session.get(f"{BASE_URL}/api/users/{designer['user_id']}/permissions")
             current_perms = current_perms_response.json().get("permissions", [])
             
             # Add a new permission
             new_perms = list(set(current_perms + ["leads.view"]))
             
-            response = self.session.put(
+            response = session.put(
                 f"{BASE_URL}/api/users/{designer['user_id']}/permissions",
                 json={"permissions": new_perms, "custom_permissions": True}
             )
@@ -258,8 +288,10 @@ class TestAdminPermissionRestrictions:
                 
     def test_admin_cannot_remove_founder_permissions(self):
         """Admin CANNOT remove Founder's permissions"""
+        session = get_admin_session()
+        
         # Get Founder user permissions
-        response = self.session.get(f"{BASE_URL}/api/users/{FOUNDER_USER_ID}/permissions")
+        response = session.get(f"{BASE_URL}/api/users/{FOUNDER_USER_ID}/permissions")
         if response.status_code == 200:
             current_perms = response.json().get("permissions", [])
             
@@ -267,7 +299,7 @@ class TestAdminPermissionRestrictions:
             if len(current_perms) > 1:
                 reduced_perms = current_perms[:-1]  # Remove last permission
                 
-                update_response = self.session.put(
+                update_response = session.put(
                     f"{BASE_URL}/api/users/{FOUNDER_USER_ID}/permissions",
                     json={"permissions": reduced_perms, "custom_permissions": True}
                 )
@@ -277,15 +309,17 @@ class TestAdminPermissionRestrictions:
                     
     def test_admin_cannot_modify_another_admin_permissions(self):
         """Admin CANNOT modify another Admin's permissions"""
+        session = get_admin_session()
+        
         # Get System Admin user permissions (another Admin)
-        response = self.session.get(f"{BASE_URL}/api/users/{SYSTEM_ADMIN_USER_ID}/permissions")
+        response = session.get(f"{BASE_URL}/api/users/{SYSTEM_ADMIN_USER_ID}/permissions")
         if response.status_code == 200:
             current_perms = response.json().get("permissions", [])
             
             # Try to update another Admin's permissions
             new_perms = list(set(current_perms + ["finance.founder_dashboard"]))
             
-            update_response = self.session.put(
+            update_response = session.put(
                 f"{BASE_URL}/api/users/{SYSTEM_ADMIN_USER_ID}/permissions",
                 json={"permissions": new_perms, "custom_permissions": True}
             )
@@ -295,14 +329,18 @@ class TestAdminPermissionRestrictions:
                 
     def test_admin_cannot_reset_founder_permissions(self):
         """Admin CANNOT reset Founder permissions"""
-        response = self.session.post(f"{BASE_URL}/api/users/{FOUNDER_USER_ID}/permissions/reset-to-role")
+        session = get_admin_session()
+        
+        response = session.post(f"{BASE_URL}/api/users/{FOUNDER_USER_ID}/permissions/reset-to-role")
         # Should be rejected with 403
         assert response.status_code == 403, \
             f"Admin should NOT be able to reset Founder permissions. Got status {response.status_code}: {response.text}"
             
     def test_admin_cannot_reset_another_admin_permissions(self):
         """Admin CANNOT reset another Admin's permissions"""
-        response = self.session.post(f"{BASE_URL}/api/users/{SYSTEM_ADMIN_USER_ID}/permissions/reset-to-role")
+        session = get_admin_session()
+        
+        response = session.post(f"{BASE_URL}/api/users/{SYSTEM_ADMIN_USER_ID}/permissions/reset-to-role")
         # Should be rejected with 403
         assert response.status_code == 403, \
             f"Admin should NOT be able to reset another Admin's permissions. Got status {response.status_code}: {response.text}"
@@ -313,19 +351,7 @@ class TestPermissionAutoRepair:
     
     def test_admin_with_reduced_permissions_gets_full_on_login(self):
         """Admin with reduced permissions gets full permissions on login"""
-        session = requests.Session()
-        
-        # Login as Admin
-        login_response = session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
-        )
-        assert login_response.status_code == 200
-        data = login_response.json()
-        
-        # After login, Admin should have full permissions (auto-repair)
-        permissions_count = data["user"].get("permissions_count", 0)
-        print(f"Admin permissions after login: {permissions_count}")
+        session = get_admin_session()
         
         # Verify via /api/auth/me
         me_response = session.get(f"{BASE_URL}/api/auth/me")
@@ -342,92 +368,84 @@ class TestPermissionAutoRepair:
 class TestSystemAdminLogin:
     """Test System Admin login"""
     
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Setup - create session"""
-        self.session = requests.Session()
-        
     def test_system_admin_login_returns_200(self):
         """System Admin login should return 200"""
-        response = self.session.post(
+        session = requests.Session()
+        time.sleep(2)  # Avoid rate limit
+        response = session.post(
             f"{BASE_URL}/api/auth/local-login",
             json={"email": SYSTEM_ADMIN_EMAIL, "password": SYSTEM_ADMIN_PASSWORD}
         )
         assert response.status_code == 200, f"System Admin login failed: {response.text}"
         
+        # Store for later tests
+        global _system_admin_session
+        _system_admin_session = session
+        
     def test_system_admin_has_admin_role(self):
         """System Admin should have Admin role"""
-        response = self.session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={"email": SYSTEM_ADMIN_EMAIL, "password": SYSTEM_ADMIN_PASSWORD}
-        )
-        assert response.status_code == 200
-        data = response.json()
+        session = get_system_admin_session()
         
-        assert data["user"]["role"] == "Admin", f"Expected role=Admin, got {data['user']['role']}"
+        me_response = session.get(f"{BASE_URL}/api/auth/me")
+        assert me_response.status_code == 200
+        data = me_response.json()
+        
+        assert data["role"] == "Admin", f"Expected role=Admin, got {data['role']}"
 
 
 class TestPermissionBypassLogic:
     """Test has_permission bypass logic for Founder and Admin"""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Setup - login as Founder"""
-        self.session = requests.Session()
-        login_response = self.session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={"email": FOUNDER_EMAIL, "password": FOUNDER_PASSWORD}
-        )
-        assert login_response.status_code == 200
         
     def test_founder_can_access_admin_only_endpoints(self):
         """Founder can access admin-only endpoints"""
+        session = get_founder_session()
+        
         # Try to access admin endpoints
-        response = self.session.get(f"{BASE_URL}/api/permissions/available")
+        response = session.get(f"{BASE_URL}/api/permissions/available")
         assert response.status_code == 200, \
             f"Founder should have access to admin endpoints: {response.text}"
             
     def test_founder_can_access_finance_endpoints(self):
         """Founder can access finance endpoints"""
-        response = self.session.get(f"{BASE_URL}/api/finance/accounts")
+        session = get_founder_session()
+        
+        response = session.get(f"{BASE_URL}/api/finance/accounts")
         assert response.status_code == 200, \
             f"Founder should have access to finance endpoints: {response.text}"
             
     def test_founder_can_access_founder_dashboard(self):
         """Founder can access founder dashboard"""
-        response = self.session.get(f"{BASE_URL}/api/founder/dashboard")
+        session = get_founder_session()
+        
+        response = session.get(f"{BASE_URL}/api/founder/dashboard")
         assert response.status_code == 200, \
             f"Founder should have access to founder dashboard: {response.text}"
 
 
 class TestAdminBypassLogic:
     """Test has_permission bypass logic for Admin"""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Setup - login as Admin"""
-        self.session = requests.Session()
-        login_response = self.session.post(
-            f"{BASE_URL}/api/auth/local-login",
-            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
-        )
-        assert login_response.status_code == 200
         
     def test_admin_can_access_admin_endpoints(self):
         """Admin can access admin endpoints"""
-        response = self.session.get(f"{BASE_URL}/api/permissions/available")
+        session = get_admin_session()
+        
+        response = session.get(f"{BASE_URL}/api/permissions/available")
         assert response.status_code == 200, \
             f"Admin should have access to admin endpoints: {response.text}"
             
     def test_admin_can_access_finance_endpoints(self):
         """Admin can access finance endpoints"""
-        response = self.session.get(f"{BASE_URL}/api/finance/accounts")
+        session = get_admin_session()
+        
+        response = session.get(f"{BASE_URL}/api/finance/accounts")
         assert response.status_code == 200, \
             f"Admin should have access to finance endpoints: {response.text}"
             
     def test_admin_can_manage_users(self):
         """Admin can manage users"""
-        response = self.session.get(f"{BASE_URL}/api/users")
+        session = get_admin_session()
+        
+        response = session.get(f"{BASE_URL}/api/users")
         assert response.status_code == 200, \
             f"Admin should have access to users endpoint: {response.text}"
 

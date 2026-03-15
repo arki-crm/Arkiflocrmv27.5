@@ -2752,7 +2752,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.expenses.record", "finance.expenses.track_refunds",
         # Reports - Full visibility including profit/margin
         "finance.reports.view", "finance.reports.export", "finance.reports.profit", "finance.reports.margin",
-        "finance.monthly_snapshot", "finance.founder_dashboard",
+        "finance.monthly_snapshot",
         # Salaries - Full control
         "finance.salaries.view", "finance.salaries.view_all", "finance.salaries.edit_structure",
         "finance.salaries.pay", "finance.salaries.close_month", "finance.salaries.manage_exit",

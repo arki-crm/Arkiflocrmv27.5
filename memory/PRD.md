@@ -4293,20 +4293,21 @@ draft → pending_approval → approved → paid
 
 ## Next Priority Tasks
 
-### P1 - Daybook Integration Tests (HIGH PRIORITY)
-- Create `pytest` tests for the Daybook integration to prevent future regressions
-- This is a recurring bug risk that needs automated testing
+### P0 - Finance Module Automated Tests (HIGH PRIORITY)
+- Create `pytest` tests for core finance logic (Revenue Recognition, Daybook, Project Finance)
+- Prevent regressions in complex financial calculations
 
 ### P1 - Quotation Builder Module
 - Lightweight, canvas-based tool for creating tentative quotations
 - PDF export capability
 
 ### P2 - Backend Refactoring
-- Decompose monolithic `/app/backend/server.py` (~42,000+ lines) into modular structure
+- Decompose monolithic `/app/backend/server.py` (~44,600+ lines) into modular structure
 - Separate routes, models, and services
 
 ### Future Tasks
 - Finance Overview Dashboard
 - Intern/Trainee Role
-- Authentication Rules Refinement
+- Security Fixes: L2 (Debug endpoint exposure), L3 (API Versioning)
+- Purchase Returns Logistics Status Lifecycle UI
 - 3D View Implementation for Composer (SCOPE FROZEN)

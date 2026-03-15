@@ -351,7 +351,7 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 #   - Serves as the recovery mechanism if other admins lose access
 FOUNDER_EMAIL = "sidheeq.arkidots@gmail.com"
 
-# ============ COMPLETE PERMISSIONS LIST (187 permissions) ============
+# ============ COMPLETE PERMISSIONS LIST (209 permissions) ============
 # This is the authoritative list of ALL permissions in the system.
 # Founder and Admin roles always get ALL these permissions.
 ALL_SYSTEM_PERMISSIONS = [

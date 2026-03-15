@@ -270,6 +270,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermissio
       ];
 
     // 8. ACCOUNTANT - Finance access (all accountant roles)
+    // CRM items are added dynamically if user has projects.view or leads.view permissions
     case 'Accountant':
     case 'JuniorAccountant':
     case 'SeniorAccountant':
@@ -277,6 +278,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false, hasFinancePermissio
       return [
         { path: '/finance/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         ...commonItems,
+        ...crmItems,  // Add CRM items if user has permissions
         financeParentItem,
         { path: '/reports', label: 'Reports', icon: BarChart3 }
       ];

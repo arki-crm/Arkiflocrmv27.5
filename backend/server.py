@@ -29919,36 +29919,10 @@ async def get_trial_balance(
             total_debit += debit
             total_credit += credit
     
-    # Accounts Receivable (from projects with pending payments)
-    projects_with_pending = await db.projects.find(
-        {"signoff_value": {"$gt": 0}},
-        {"_id": 0, "project_id": 1, "project_name": 1, "name": 1, "signoff_value": 1}
-    ).to_list(1000)
-    
-    receivables_total = 0
-    for proj in projects_with_pending:
-        proj_id = proj.get("project_id")
-        signoff = proj.get("signoff_value", 0)
-        
-        # Get total received for this project in period
-        received = sum(t.get("amount", 0) for t in transactions 
-                      if t.get("project_id") == proj_id and t.get("transaction_type") == "inflow")
-        
-        # Outstanding = signoff - received (simplified view)
-        # For trial balance, we track movement not balances
-        receivables_total += received
-    
-    if receivables_total > 0:
-        # Project receipts are recorded as debit to receivables (reducing AR) when cash comes in
-        # Here we show the cash received which reduces AR
-        trial_balance["assets"].append({
-            "account_name": "Accounts Receivable (Project Payments)",
-            "account_id": "receivables",
-            "debit": receivables_total,  # Cash received
-            "credit": 0,
-            "net": receivables_total
-        })
-        total_debit += receivables_total
+    # NOTE: Accounts Receivable is NOT included in Trial Balance
+    # Receipts are already recorded as bank/cash inflows (debit to bank, credit to customer advance)
+    # Adding AR here would cause double-counting. The Trial Balance only shows actual 
+    # accounting transactions, not calculated projections from project signoff values.
     
     # ===== LIABILITIES =====
     # Get open liabilities from the period

@@ -34228,8 +34228,21 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from io import BytesIO
 import base64
+
+# Register FreeSans fonts (supports Indian Rupee symbol ₹)
+try:
+    pdfmetrics.registerFont(TTFont('FreeSans', '/usr/share/fonts/truetype/freefont/FreeSans.ttf'))
+    pdfmetrics.registerFont(TTFont('FreeSans-Bold', '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf'))
+    PDF_FONT = 'FreeSans'
+    PDF_FONT_BOLD = 'FreeSans-Bold'
+except:
+    # Fallback to Helvetica if FreeSans not available
+    PDF_FONT = 'Helvetica'
+    PDF_FONT_BOLD = 'Helvetica-Bold'
 
 # Company Settings Collection for logo and branding
 COMPANY_SETTINGS_DEFAULT = {

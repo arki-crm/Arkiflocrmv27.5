@@ -34608,7 +34608,7 @@ async def generate_receipt_pdf(receipt_id: str, request: Request):
             ""
         ],
         [
-            Paragraph(format_inr(amount), ParagraphStyle('Amount', fontName='Helvetica-Bold', fontSize=18, textColor=amount_color)),
+            Paragraph(format_inr(amount), ParagraphStyle('Amount', fontName=PDF_FONT_BOLD, fontSize=18, textColor=amount_color)),
             ""
         ]
     ]

@@ -34430,10 +34430,9 @@ async def generate_receipt_pdf(receipt_id: str, request: Request):
     line_color = colors.HexColor('#e5e7eb')     # Very light grey - separators
     amount_color = colors.HexColor('#111827')   # Near black - amount emphasis
     
-    # Helper to format currency
-    # Note: Using "Rs." instead of "₹" because Helvetica font doesn't have the Rupee glyph
+    # Helper to format currency (FreeSans font supports ₹ symbol)
     def format_inr(amount):
-        return f"Rs.{amount:,.2f}"
+        return f"₹{amount:,.2f}"
     
     # Generate PDF
     buffer = BytesIO()

@@ -34633,11 +34633,11 @@ async def generate_receipt_pdf(receipt_id: str, request: Request):
     
     summary_table = Table(summary_rows, colWidths=[120*mm, 50*mm])
     summary_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTNAME', (0, 0), (-1, -1), PDF_FONT),
         ('FONTSIZE', (0, 0), (-1, -1), 9),
         ('TEXTCOLOR', (0, 0), (0, -1), text_light),
         ('TEXTCOLOR', (1, 0), (1, -1), text_medium),
-        ('FONTNAME', (1, -1), (1, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (1, -1), (1, -1), PDF_FONT_BOLD),
         ('TEXTCOLOR', (1, -1), (1, -1), text_dark),
         ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),

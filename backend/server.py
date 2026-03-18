@@ -24626,7 +24626,7 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "description": f"Receipt from customer",
             "category_name": "Customer Receipt",
             "account_name": "Customer Payment",
-            "created_at": r.get("created_at", ""),
+            "created_at": r.get("payment_date") or r.get("created_at", ""),
             "source": "finance_receipts"
         })
     

@@ -12555,15 +12555,15 @@ async def get_project_financials(project_id: str, request: Request):
     custom_schedule = project.get("custom_payment_schedule", [])
     default_schedule = project.get("payment_schedule", DEFAULT_PAYMENT_SCHEDULE)
     
-    # ============ SINGLE SOURCE OF TRUTH: Fetch payments from CashBook ============
-    # Payments are now derived from accounting_transactions (inflow) linked to this project
-    cashbook_payments = await db.accounting_transactions.find(
-        {"project_id": project_id, "transaction_type": "inflow"},
+    # ============ SINGLE SOURCE OF TRUTH: Fetch payments from finance_receipts ============
+    # Use finance_receipts instead of accounting_transactions to respect cancelled status
+    active_receipts = await db.finance_receipts.find(
+        {"project_id": project_id, "status": {"$ne": "cancelled"}},
         {"_id": 0}
-    ).sort("date", -1).to_list(500)
+    ).sort("payment_date", -1).to_list(500)
     
     # Get user details for payments
-    user_ids = list(set([p.get("created_by") for p in cashbook_payments if p.get("created_by")]))
+    user_ids = list(set([p.get("created_by") for p in active_receipts if p.get("created_by")]))
     users_map = {}
     if user_ids:
         users_list = await db.users.find(
@@ -12572,19 +12572,19 @@ async def get_project_financials(project_id: str, request: Request):
         ).to_list(100)
         users_map = {u["user_id"]: u.get("name", "Unknown") for u in users_list}
     
-    # Transform CashBook transactions to payment format for frontend compatibility
+    # Transform receipts to payment format for frontend compatibility
     enriched_payments = []
-    for txn in cashbook_payments:
+    for receipt in active_receipts:
         enriched = {
-            "id": txn.get("transaction_id"),
-            "date": txn.get("date"),
-            "amount": txn.get("amount", 0),
-            "mode": txn.get("mode", "Bank"),
-            "reference": txn.get("remarks", ""),
-            "added_by": txn.get("created_by"),
-            "added_by_name": users_map.get(txn.get("created_by"), "Unknown"),
-            "created_at": txn.get("created_at"),
-            "source": "cashbook"  # Indicates this came from CashBook
+            "id": receipt.get("receipt_id"),
+            "date": receipt.get("payment_date"),
+            "amount": receipt.get("amount", 0),
+            "mode": receipt.get("payment_mode", "Bank"),
+            "reference": f"Payment receipt {receipt.get('receipt_number', '')} - {receipt.get('stage_name', '')}",
+            "added_by": receipt.get("created_by"),
+            "added_by_name": users_map.get(receipt.get("created_by"), "Unknown"),
+            "created_at": receipt.get("created_at"),
+            "source": "finance_receipts"  # Indicates this came from Receipts
         }
         enriched_payments.append(enriched)
     

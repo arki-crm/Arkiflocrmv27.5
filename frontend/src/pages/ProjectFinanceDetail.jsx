@@ -959,12 +959,12 @@ const ProjectFinanceDetail = () => {
                 "rounded-lg p-4 border",
                 projectProfit.execution_margin_remaining >= 0 
                   ? "bg-amber-50 border-amber-200" 
-                  : "bg-red-50 border-red-200"
+                  : "bg-green-50 border-green-200"
               )}>
                 <p className="text-sm text-slate-500 mb-2">Execution Margin Remaining</p>
                 <p className={cn(
                   "text-2xl font-bold",
-                  projectProfit.execution_margin_remaining >= 0 ? "text-amber-600" : "text-red-600"
+                  projectProfit.execution_margin_remaining >= 0 ? "text-amber-600" : "text-green-600"
                 )}>
                   {formatCurrency(projectProfit.execution_margin_remaining)}
                 </p>

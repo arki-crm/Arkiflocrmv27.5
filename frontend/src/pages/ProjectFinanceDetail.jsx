@@ -308,6 +308,10 @@ const ProjectFinanceDetail = () => {
       toast.error('Category is required');
       return;
     }
+    if (!newMapping.work_type) {
+      toast.error('Work type is required');
+      return;
+    }
     if (!newMapping.planned_amount || parseFloat(newMapping.planned_amount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
@@ -319,13 +323,15 @@ const ProjectFinanceDetail = () => {
         project_id: projectId,
         vendor_name: newMapping.vendor_name,
         category: newMapping.category,
+        work_type: newMapping.work_type,
+        sub_category: newMapping.sub_category || null,
         planned_amount: parseFloat(newMapping.planned_amount),
         notes: newMapping.notes || null
       }, { withCredentials: true });
       
       toast.success('Vendor mapping added');
       setIsAddDialogOpen(false);
-      setNewMapping({ vendor_name: '', category: '', planned_amount: '', notes: '' });
+      setNewMapping({ vendor_name: '', category: '', work_type: 'general', sub_category: '', planned_amount: '', notes: '' });
       fetchData();
     } catch (error) {
       console.error('Failed to add mapping:', error);

@@ -32427,10 +32427,12 @@ async def get_project_profit(project_id: str, request: Request):
         ).to_list(1000)
     planned_cost = sum(vm.get("planned_cost") or vm.get("planned_amount", 0) for vm in vendor_mappings)
     
-    # Get actual cost (ONLY cashbook entries - exclude credit purchase daybook entries)
+    # Get actual cost (ONLY cashbook entries - exclude credit purchase daybook entries and reversals)
     actual_outflows = await db.accounting_transactions.find({
         "project_id": project_id,
         "transaction_type": "outflow",
+        # Exclude reversal entries (from cancelled receipts)
+        "is_reversal": {"$ne": True},
         # Exclude non-cashbook entries (credit purchases that haven't been paid)
         "$or": [
             {"is_cashbook_entry": {"$ne": False}},

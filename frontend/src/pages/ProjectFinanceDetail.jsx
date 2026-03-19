@@ -1626,6 +1626,29 @@ const ProjectFinanceDetail = () => {
                 </Select>
               </div>
               <div>
+                <Label>Work Type *</Label>
+                <Select value={editingMapping.work_type || 'general'} onValueChange={(v) => setEditingMapping(prev => ({ ...prev, work_type: v }))}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WORK_TYPES.map(wt => (
+                      <SelectItem key={wt.value} value={wt.value}>{wt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit_sub_category">Sub-category (Optional)</Label>
+                <Input
+                  id="edit_sub_category"
+                  value={editingMapping.sub_category || ''}
+                  onChange={(e) => setEditingMapping(prev => ({ ...prev, sub_category: e.target.value }))}
+                  placeholder="e.g., Plywood, Laminate, Sofa"
+                  className="mt-1"
+                />
+              </div>
+              <div>
                 <Label htmlFor="edit_planned_amount">Planned Amount (₹) *</Label>
                 <Input
                   id="edit_planned_amount"

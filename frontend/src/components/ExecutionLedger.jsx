@@ -389,11 +389,11 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
     
     // Validate line items
     const validItems = form.items.filter(item => 
-      item.category && item.material_name && item.quantity && item.rate
+      item.category && item.work_type && item.material_name && item.quantity && item.rate
     );
     
     if (validItems.length === 0) {
-      toast.error('Please add at least one complete line item (category, material, quantity, rate)');
+      toast.error('Please add at least one complete line item (category, work type, material, quantity, rate)');
       return;
     }
 
@@ -410,6 +410,8 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
         purchase_type: form.purchase_type,
         items: validItems.map(item => ({
           category: item.category,
+          work_type: item.work_type || 'general',
+          sub_category: item.sub_category || null,
           material_name: item.material_name,
           specification: item.specification || null,
           brand: item.brand || null,

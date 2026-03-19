@@ -210,6 +210,7 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
       const res = await fetch(`${API}/api/finance/execution-ledger/categories`, { credentials: 'include' });
       const data = await res.json();
       setCategories(data.categories || []);
+      setWorkTypes(data.work_types || []);
     } catch (error) {
       console.error('Failed to fetch categories:', error);
     }

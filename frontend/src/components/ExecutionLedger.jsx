@@ -176,6 +176,7 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
   const [totalValue, setTotalValue] = useState(0);
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState([]);
+  const [workTypes, setWorkTypes] = useState([]);
   
   // Modal states
   const [showModal, setShowModal] = useState(false);

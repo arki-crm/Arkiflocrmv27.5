@@ -24488,11 +24488,14 @@ async def get_project_finance_detail(project_id: str, request: Request):
         {"_id": 0}
     ).sort("created_at", -1).to_list(100)
     
-    # Calculate planned cost by category
+    # Calculate planned cost by category + work_type (composite key for accurate matching)
     planned_by_category = {}
     for vm in vendor_mappings:
         cat = vm.get("category", "Other")
-        planned_by_category[cat] = planned_by_category.get(cat, 0) + vm.get("planned_amount", 0)
+        work_type = vm.get("work_type", "general")
+        # Create composite key for category + work_type matching
+        composite_key = f"{cat}|{work_type}"
+        planned_by_category[composite_key] = planned_by_category.get(composite_key, 0) + vm.get("planned_amount", 0)
     total_planned = sum(planned_by_category.values())
     
     # ============================================================

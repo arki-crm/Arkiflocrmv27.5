@@ -24602,14 +24602,23 @@ async def get_project_finance_detail(project_id: str, request: Request):
     # 5. SAFE SURPLUS: total_received - actual_cost
     safe_surplus = total_inflow - total_outflow
     
-    # Build planned vs actual comparison
-    all_categories = set(list(planned_by_category.keys()) + list(actual_by_category.keys()))
+    # Build planned vs actual comparison (using category + work_type)
+    all_keys = set(list(planned_by_category.keys()) + list(actual_by_category.keys()))
     comparison = []
-    for cat in sorted(all_categories):
-        planned = planned_by_category.get(cat, 0)
-        actual = actual_by_category.get(cat, 0)
+    for key in sorted(all_keys):
+        planned = planned_by_category.get(key, 0)
+        actual = actual_by_category.get(key, 0)
+        # Split composite key back to category and work_type
+        parts = key.split("|")
+        cat = parts[0] if len(parts) > 0 else "Other"
+        work_type = parts[1] if len(parts) > 1 else "general"
+        # Format display name
+        work_type_display = {"modular": "Modular", "non_modular": "Non-Modular", "civil": "Civil", "general": "General"}.get(work_type, work_type.title())
+        display_name = f"{cat} ({work_type_display})" if work_type != "general" else cat
         comparison.append({
             "category": cat,
+            "work_type": work_type,
+            "display_name": display_name,
             "planned": planned,
             "actual": actual,
             "difference": planned - actual,

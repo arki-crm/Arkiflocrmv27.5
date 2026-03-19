@@ -22795,6 +22795,23 @@ async def update_accounting_category(category_id: str, request: Request):
     return updated
 
 
+# ============ ACCOUNTING: WORK TYPES ============
+# Work types are fixed: Modular, Non-Modular, Civil, General
+
+WORK_TYPES = [
+    {"work_type_id": "modular", "name": "Modular", "description": "Modular furniture and fittings", "sort_order": 1},
+    {"work_type_id": "non_modular", "name": "Non-Modular", "description": "Non-modular/loose furniture", "sort_order": 2},
+    {"work_type_id": "civil", "name": "Civil", "description": "Civil and construction work", "sort_order": 3},
+    {"work_type_id": "general", "name": "General", "description": "General/office expenses", "sort_order": 4}
+]
+
+@api_router.get("/accounting/work-types")
+async def list_work_types(request: Request):
+    """List all work types (fixed list)"""
+    user = await get_current_user(request)
+    return WORK_TYPES
+
+
 # ============ ACCOUNTING: VENDOR MASTER ============
 
 @api_router.get("/accounting/vendors")

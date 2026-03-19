@@ -1015,7 +1015,7 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                   
                   return (
                     <div key={idx} className="border rounded-lg p-3 bg-gray-50">
-                      {/* Main Row - Category, Material, Qty, Rate */}
+                      {/* Main Row - Category, Work Type, Material, Qty, Rate */}
                       <div className="grid grid-cols-12 gap-2 items-center mb-2">
                         <div className="col-span-2">
                           <Label className="text-xs text-gray-500">Category *</Label>
@@ -1033,7 +1033,23 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="col-span-3">
+                        <div className="col-span-2">
+                          <Label className="text-xs text-gray-500">Work Type *</Label>
+                          <Select 
+                            value={item.work_type || 'general'} 
+                            onValueChange={(v) => updateLineItem(idx, 'work_type', v)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Work Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {workTypes.map(wt => (
+                                <SelectItem key={wt.value} value={wt.value}>{wt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-2">
                           <Label className="text-xs text-gray-500">Material *</Label>
                           <Input
                             value={item.material_name}

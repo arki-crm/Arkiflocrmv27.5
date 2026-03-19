@@ -1127,8 +1127,17 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                         </div>
                       </div>
                       
-                      {/* GST Row */}
+                      {/* GST Row + Sub-category */}
                       <div className="grid grid-cols-12 gap-2 items-center pt-2 border-t border-gray-200">
+                        <div className="col-span-2">
+                          <Label className="text-xs text-gray-500">Sub-category</Label>
+                          <Input
+                            value={item.sub_category || ''}
+                            onChange={(e) => updateLineItem(idx, 'sub_category', e.target.value)}
+                            placeholder="e.g., Plywood, Laminate"
+                            className="h-8 text-xs"
+                          />
+                        </div>
                         <div className="col-span-2">
                           <Label className="text-xs text-gray-500">HSN Code</Label>
                           <Input
@@ -1171,7 +1180,7 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                             step="0.01"
                           />
                         </div>
-                        <div className="col-span-4 text-right">
+                        <div className="col-span-2 text-right">
                           {(cgstAmt > 0 || sgstAmt > 0 || igstAmt > 0) && (
                             <div className="text-xs text-gray-500 space-y-0.5">
                               {cgstAmt > 0 && <p>CGST: {formatCurrency(cgstAmt)}</p>}

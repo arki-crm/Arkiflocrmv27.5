@@ -130,6 +130,8 @@ const ProjectFinanceDetail = () => {
   const [newMapping, setNewMapping] = useState({
     vendor_name: '',
     category: '',
+    work_type: 'general',
+    sub_category: '',
     planned_amount: '',
     notes: ''
   });

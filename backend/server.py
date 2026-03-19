@@ -24266,13 +24266,21 @@ async def get_projects_for_accounting(request: Request, search: Optional[str] = 
 # READ ONLY access to CRM Projects - only uses PID for linking
 
 # Vendor Mapping Categories
+# FINAL Primary Categories (from accounting_categories database)
 VENDOR_CATEGORIES = [
-    "Modular",
-    "Non-Modular", 
+    "Material",
+    "Furniture & Decor",
+    "Labour",
+    "Hardware & Accessories",
+    "Transport / Logistics",
     "Installation",
-    "Transport",
+    "Factory / Production",
+    "Site Expense",
     "Other"
 ]
+
+# Work Types (fixed list)
+WORK_TYPES = ["modular", "non_modular", "civil", "general"]
 
 class VendorMappingCreate(BaseModel):
     project_id: str  # Links to CRM project

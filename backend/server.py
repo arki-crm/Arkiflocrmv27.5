@@ -39811,6 +39811,8 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
         processed_items.append({
             "item_id": f"item_{idx + 1}",
             "category": item.category,
+            "work_type": item.work_type or "general",  # Default to general
+            "sub_category": item.sub_category,
             "material_name": item.material_name,
             "specification": item.specification,
             "brand": item.brand,

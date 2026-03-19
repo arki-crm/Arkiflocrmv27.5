@@ -1517,6 +1517,7 @@ const ProjectFinanceDetail = () => {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Vendor</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Category</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Work Type</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Planned Amount</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Notes</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Created By</th>
@@ -1530,6 +1531,12 @@ const ProjectFinanceDetail = () => {
                       <td className="px-4 py-3 text-sm font-medium text-slate-900">{vm.vendor_name}</td>
                       <td className="px-4 py-3">
                         <Badge variant="outline" className="text-xs">{vm.category}</Badge>
+                        {vm.sub_category && <span className="text-xs text-slate-500 ml-1">/ {vm.sub_category}</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant={vm.work_type === 'modular' ? 'default' : vm.work_type === 'non_modular' ? 'secondary' : 'outline'} className="text-xs">
+                          {vm.work_type === 'modular' ? 'Modular' : vm.work_type === 'non_modular' ? 'Non-Modular' : vm.work_type === 'civil' ? 'Civil' : 'General'}
+                        </Badge>
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900 text-right">
                         {formatCurrency(vm.planned_amount)}

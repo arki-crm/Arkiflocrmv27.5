@@ -39661,13 +39661,15 @@ async def cancel_recurring_payable(payable_id: str, request: Request):
 # Purely observational - does NOT affect accounting logic
 
 EXECUTION_CATEGORIES = [
-    "Modular Material",
-    "Hardware & Accessories", 
-    "Factory / Job Work",
+    "Material",
+    "Furniture & Decor",
+    "Labour",
+    "Hardware & Accessories",
+    "Transport / Logistics",
     "Installation",
-    "Transportation / Logistics",
-    "Non-Modular Furniture",
-    "Site Expense"
+    "Factory / Production",
+    "Site Expense",
+    "Other"
 ]
 
 

@@ -64,7 +64,9 @@ import {
   Clock,
   AlertCircle,
   Percent,
-  Tag
+  Tag,
+  User,
+  MoreHorizontal
 } from 'lucide-react';
 import VendorSelect from './VendorSelect';
 

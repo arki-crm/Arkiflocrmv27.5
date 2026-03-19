@@ -799,9 +799,14 @@ export default function ExecutionLedger({ projectId, userRole, accounts = [] }) 
                           return (
                             <TableRow key={idx}>
                               <TableCell>
-                                <Badge className={`${CATEGORY_COLORS[item.category] || 'bg-gray-100'} text-xs`}>
-                                  {item.category}
-                                </Badge>
+                                <div className="flex flex-col gap-1">
+                                  <Badge className={`${CATEGORY_COLORS[item.category] || 'bg-gray-100'} text-xs`}>
+                                    {item.category}
+                                  </Badge>
+                                  <Badge className={`${WORK_TYPE_COLORS[item.work_type] || 'bg-slate-500 text-white'} text-xs`}>
+                                    {WORK_TYPE_LABELS[item.work_type] || 'General'}
+                                  </Badge>
+                                </div>
                               </TableCell>
                               <TableCell className="font-medium">{item.material_name}</TableCell>
                               <TableCell className="text-gray-500">{item.specification || '-'}</TableCell>

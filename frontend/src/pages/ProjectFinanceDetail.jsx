@@ -1436,6 +1436,30 @@ const ProjectFinanceDetail = () => {
                       </Select>
                     </div>
                     <div>
+                      <Label>Work Type *</Label>
+                      <Select value={newMapping.work_type} onValueChange={(v) => setNewMapping(prev => ({ ...prev, work_type: v }))}>
+                        <SelectTrigger className="mt-1" data-testid="work-type-select">
+                          <SelectValue placeholder="Select work type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {WORK_TYPES.map(wt => (
+                            <SelectItem key={wt.value} value={wt.value}>{wt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="sub_category">Sub-category (Optional)</Label>
+                      <Input
+                        id="sub_category"
+                        value={newMapping.sub_category}
+                        onChange={(e) => setNewMapping(prev => ({ ...prev, sub_category: e.target.value }))}
+                        placeholder="e.g., Plywood, Laminate, Sofa"
+                        className="mt-1"
+                        data-testid="sub-category-input"
+                      />
+                    </div>
+                    <div>
                       <Label htmlFor="planned_amount">Planned Amount (₹) *</Label>
                       <Input
                         id="planned_amount"

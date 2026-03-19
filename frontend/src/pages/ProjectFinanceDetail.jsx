@@ -349,6 +349,8 @@ const ProjectFinanceDetail = () => {
       await axios.put(`${API}/finance/vendor-mappings/${editingMapping.mapping_id}`, {
         vendor_name: editingMapping.vendor_name,
         category: editingMapping.category,
+        work_type: editingMapping.work_type || 'general',
+        sub_category: editingMapping.sub_category || null,
         planned_amount: parseFloat(editingMapping.planned_amount),
         notes: editingMapping.notes || null
       }, { withCredentials: true });

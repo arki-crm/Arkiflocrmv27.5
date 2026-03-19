@@ -24902,6 +24902,10 @@ async def create_vendor_mapping(mapping: VendorMappingCreate, request: Request):
     if mapping.category not in VENDOR_CATEGORIES:
         raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {', '.join(VENDOR_CATEGORIES)}")
     
+    # Validate work_type
+    if mapping.work_type and mapping.work_type not in WORK_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid work_type. Must be one of: {', '.join(WORK_TYPES)}")
+    
     # Handle vendor - if vendor_id provided, use it; otherwise quick-create from vendor_name
     vendor_id = mapping.vendor_id
     vendor_name = mapping.vendor_name

@@ -1684,7 +1684,7 @@ const ProjectFinanceDetail = () => {
                 <tbody className="divide-y divide-slate-200">
                   {comparison.map((row, idx) => (
                     <tr key={idx} className={cn("hover:bg-slate-50", row.over_budget && "bg-red-50")}>
-                      <td className="px-4 py-3 text-sm font-medium text-slate-900">{row.category}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-slate-900">{row.display_name || row.category}</td>
                       <td className="px-4 py-3 text-sm text-blue-600 text-right">{formatCurrency(row.planned)}</td>
                       <td className="px-4 py-3 text-sm text-slate-900 text-right">{formatCurrency(row.actual)}</td>
                       <td className={cn(

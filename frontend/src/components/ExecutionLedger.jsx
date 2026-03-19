@@ -71,23 +71,41 @@ import VendorSelect from './VendorSelect';
 const API = process.env.REACT_APP_BACKEND_URL;
 
 const CATEGORY_ICONS = {
-  "Modular Material": Package,
+  "Material": Package,
+  "Furniture & Decor": Box,
+  "Labour": User,
   "Hardware & Accessories": Wrench,
-  "Factory / Job Work": Building,
+  "Transport / Logistics": Truck,
   "Installation": Hammer,
-  "Transportation / Logistics": Truck,
-  "Non-Modular Furniture": Box,
-  "Site Expense": ClipboardList
+  "Factory / Production": Building,
+  "Site Expense": ClipboardList,
+  "Other": MoreHorizontal
 };
 
 const CATEGORY_COLORS = {
-  "Modular Material": "bg-blue-100 text-blue-800",
+  "Material": "bg-blue-100 text-blue-800",
+  "Furniture & Decor": "bg-pink-100 text-pink-800",
+  "Labour": "bg-indigo-100 text-indigo-800",
   "Hardware & Accessories": "bg-purple-100 text-purple-800",
-  "Factory / Job Work": "bg-orange-100 text-orange-800",
+  "Transport / Logistics": "bg-yellow-100 text-yellow-800",
   "Installation": "bg-green-100 text-green-800",
-  "Transportation / Logistics": "bg-yellow-100 text-yellow-800",
-  "Non-Modular Furniture": "bg-pink-100 text-pink-800",
-  "Site Expense": "bg-slate-100 text-slate-800"
+  "Factory / Production": "bg-orange-100 text-orange-800",
+  "Site Expense": "bg-slate-100 text-slate-800",
+  "Other": "bg-gray-100 text-gray-800"
+};
+
+const WORK_TYPE_COLORS = {
+  "modular": "bg-blue-600 text-white",
+  "non_modular": "bg-purple-600 text-white",
+  "civil": "bg-amber-600 text-white",
+  "general": "bg-slate-500 text-white"
+};
+
+const WORK_TYPE_LABELS = {
+  "modular": "Modular",
+  "non_modular": "Non-Modular",
+  "civil": "Civil",
+  "general": "General"
 };
 
 const PAYMENT_STATUS_CONFIG = {

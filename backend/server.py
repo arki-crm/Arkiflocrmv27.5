@@ -24561,31 +24561,40 @@ async def get_project_finance_detail(project_id: str, request: Request):
     
     total_outflow = purchase_invoice_total + approved_expense_total + recorded_expense_total + cashbook_expense_total
     
-    # 3. Group actual costs by category (for comparison)
+    # 3. Group actual costs by category + work_type (for comparison)
     actual_by_category = {}
     
-    # For purchase invoices, category is stored at ITEM level, not invoice level
+    # For purchase invoices, category and work_type are stored at ITEM level
     for p in purchase_invoices:
         items = p.get("items", [])
         if items:
             # Distribute invoice total by item categories based on line totals
             for item in items:
                 cat = item.get("category", "Other") or "Other"
+                work_type = item.get("work_type", "general") or "general"
+                # Create composite key for category + work_type matching
+                composite_key = f"{cat}|{work_type}"
                 # Use line_total_with_gst if available, otherwise line_total
                 item_value = item.get("line_total_with_gst") or item.get("line_total", 0)
-                actual_by_category[cat] = actual_by_category.get(cat, 0) + item_value
+                actual_by_category[composite_key] = actual_by_category.get(composite_key, 0) + item_value
         else:
             # Fallback: no items, use invoice-level category if exists
             cat = p.get("category", "Other") or "Other"
-            actual_by_category[cat] = actual_by_category.get(cat, 0) + (p.get("grand_total") or p.get("total_value", 0))
+            work_type = p.get("work_type", "general") or "general"
+            composite_key = f"{cat}|{work_type}"
+            actual_by_category[composite_key] = actual_by_category.get(composite_key, 0) + (p.get("grand_total") or p.get("total_value", 0))
     
     for e in approved_expenses + recorded_expenses:
         cat = e.get("category", "Other") or "Other"
-        actual_by_category[cat] = actual_by_category.get(cat, 0) + e.get("amount", 0)
+        work_type = e.get("work_type", "general") or "general"
+        composite_key = f"{cat}|{work_type}"
+        actual_by_category[composite_key] = actual_by_category.get(composite_key, 0) + e.get("amount", 0)
     # Add cashbook expenses to category breakdown
     for e in cashbook_expenses:
         cat = e.get("category_id", "Other") or "Other"
-        actual_by_category[cat] = actual_by_category.get(cat, 0) + e.get("amount", 0)
+        work_type = e.get("work_type", "general") or "general"
+        composite_key = f"{cat}|{work_type}"
+        actual_by_category[composite_key] = actual_by_category.get(composite_key, 0) + e.get("amount", 0)
     
     # 4. REMAINING LIABILITY: planned_cost - actual_cost
     remaining_liability = max(0, total_planned - total_outflow) if total_planned > 0 else 0

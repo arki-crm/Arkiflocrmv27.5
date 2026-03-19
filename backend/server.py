@@ -39636,7 +39636,9 @@ EXECUTION_CATEGORIES = [
 
 class ExecutionLineItem(BaseModel):
     """Single line item within an execution entry (invoice)"""
-    category: str  # Plywood, Hardware, Laminate, Service, etc.
+    category: str  # Material, Furniture & Decor, Labour, etc. (from accounting_categories)
+    work_type: str = "general"  # modular, non_modular, civil, general (MANDATORY)
+    sub_category: Optional[str] = None  # Optional: Plywood, Laminate, Sofa, etc.
     material_name: str
     specification: Optional[str] = None
     brand: Optional[str] = None

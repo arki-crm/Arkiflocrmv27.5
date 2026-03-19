@@ -96,7 +96,24 @@ const formatTime = (dateStr) => {
   return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 };
 
-const VENDOR_CATEGORIES = ['Modular', 'Non-Modular', 'Installation', 'Transport', 'Other'];
+const VENDOR_CATEGORIES = [
+  'Material',
+  'Furniture & Decor',
+  'Labour',
+  'Hardware & Accessories',
+  'Transport / Logistics',
+  'Installation',
+  'Factory / Production',
+  'Site Expense',
+  'Other'
+];
+
+const WORK_TYPES = [
+  { value: 'modular', label: 'Modular' },
+  { value: 'non_modular', label: 'Non-Modular' },
+  { value: 'civil', label: 'Civil' },
+  { value: 'general', label: 'General' }
+];
 
 const ProjectFinanceDetail = () => {
   const { projectId } = useParams();

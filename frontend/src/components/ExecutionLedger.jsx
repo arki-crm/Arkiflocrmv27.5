@@ -133,6 +133,8 @@ const formatDate = (dateStr) => {
 // Empty line item template
 const emptyLineItem = {
   category: '',
+  work_type: 'general',
+  sub_category: '',
   material_name: '',
   specification: '',
   brand: '',

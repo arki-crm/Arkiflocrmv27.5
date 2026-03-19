@@ -39740,8 +39740,16 @@ class InvoicePaymentRecord(BaseModel):
 
 @api_router.get("/finance/execution-ledger/categories")
 async def get_execution_categories():
-    """Get available execution entry categories"""
-    return {"categories": EXECUTION_CATEGORIES}
+    """Get available execution entry categories and work types"""
+    return {
+        "categories": EXECUTION_CATEGORIES,
+        "work_types": [
+            {"value": "modular", "label": "Modular"},
+            {"value": "non_modular", "label": "Non-Modular"},
+            {"value": "civil", "label": "Civil"},
+            {"value": "general", "label": "General"}
+        ]
+    }
 
 
 @api_router.get("/finance/execution-ledger")

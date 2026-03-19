@@ -22709,29 +22709,34 @@ async def list_accounting_categories(request: Request):
     
     categories = await db.accounting_categories.find({}, {"_id": 0}).to_list(100)
     
-    # If no categories exist, create defaults
+    # If no categories exist, create the FINAL primary categories
     if not categories:
         default_categories = [
-            {"name": "Project Expenses", "description": "Expenses linked to specific projects"},
-            {"name": "Office Expenses", "description": "General office running costs"},
-            {"name": "Sales & Marketing", "description": "Marketing and promotional expenses"},
-            {"name": "Travel / TA", "description": "Travel and transportation allowances"},
-            {"name": "Site Expenses", "description": "On-site operational costs"},
-            {"name": "Miscellaneous", "description": "Other uncategorized expenses"}
+            {"name": "Material", "description": "Raw materials and supplies"},
+            {"name": "Furniture & Decor", "description": "Furniture, decor items, and furnishings"},
+            {"name": "Labour", "description": "Labour and workforce costs"},
+            {"name": "Hardware & Accessories", "description": "Hardware items and accessories"},
+            {"name": "Transport / Logistics", "description": "Transportation and logistics costs"},
+            {"name": "Installation", "description": "Installation and fitting charges"},
+            {"name": "Factory / Production", "description": "Factory and production related costs"},
+            {"name": "Site Expense", "description": "On-site operational costs"},
+            {"name": "Other", "description": "Other uncategorized expenses"}
         ]
         
         now = datetime.now(timezone.utc)
-        for cat in default_categories:
-            cat_id = f"cat_{uuid.uuid4().hex[:8]}"
+        for idx, cat in enumerate(default_categories):
+            cat_id = f"cat_{cat['name'].lower().replace(' ', '_').replace('/', '_').replace('&', 'and')}"
             await db.accounting_categories.insert_one({
                 "category_id": cat_id,
                 "name": cat["name"],
                 "description": cat["description"],
                 "is_active": True,
+                "is_system": True,  # System categories cannot be deleted
+                "sort_order": idx,
                 "created_at": now.isoformat()
             })
         
-        categories = await db.accounting_categories.find({}, {"_id": 0}).to_list(100)
+        categories = await db.accounting_categories.find({}, {"_id": 0}).sort("sort_order", 1).to_list(100)
     
     return categories
 

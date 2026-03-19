@@ -24916,6 +24916,8 @@ async def create_vendor_mapping(mapping: VendorMappingCreate, request: Request):
         "vendor_id": vendor_id,
         "vendor_name": vendor_name,
         "category": mapping.category,
+        "work_type": mapping.work_type or "general",  # Default to general
+        "sub_category": mapping.sub_category,
         "planned_amount": mapping.planned_amount,
         "notes": mapping.notes,
         "created_by": user.user_id,

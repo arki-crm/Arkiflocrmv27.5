@@ -24526,15 +24526,28 @@ async def get_project_finance_detail(project_id: str, request: Request):
     
     # 3. Group actual costs by category (for comparison)
     actual_by_category = {}
+    
+    # For purchase invoices, category is stored at ITEM level, not invoice level
     for p in purchase_invoices:
-        cat = p.get("category", "Other")
-        actual_by_category[cat] = actual_by_category.get(cat, 0) + (p.get("grand_total") or p.get("total_value", 0))
+        items = p.get("items", [])
+        if items:
+            # Distribute invoice total by item categories based on line totals
+            for item in items:
+                cat = item.get("category", "Other") or "Other"
+                # Use line_total_with_gst if available, otherwise line_total
+                item_value = item.get("line_total_with_gst") or item.get("line_total", 0)
+                actual_by_category[cat] = actual_by_category.get(cat, 0) + item_value
+        else:
+            # Fallback: no items, use invoice-level category if exists
+            cat = p.get("category", "Other") or "Other"
+            actual_by_category[cat] = actual_by_category.get(cat, 0) + (p.get("grand_total") or p.get("total_value", 0))
+    
     for e in approved_expenses + recorded_expenses:
-        cat = e.get("category", "Other")
+        cat = e.get("category", "Other") or "Other"
         actual_by_category[cat] = actual_by_category.get(cat, 0) + e.get("amount", 0)
     # Add cashbook expenses to category breakdown
     for e in cashbook_expenses:
-        cat = e.get("category_id", "Other")
+        cat = e.get("category_id", "Other") or "Other"
         actual_by_category[cat] = actual_by_category.get(cat, 0) + e.get("amount", 0)
     
     # 4. REMAINING LIABILITY: planned_cost - actual_cost

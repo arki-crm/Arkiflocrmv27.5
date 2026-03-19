@@ -24278,7 +24278,9 @@ class VendorMappingCreate(BaseModel):
     project_id: str  # Links to CRM project
     vendor_id: Optional[str] = None  # Reference to accounting_vendors
     vendor_name: str  # Display name (also used for quick-create if vendor_id not provided)
-    category: str  # Modular, Non-Modular, Installation, Transport, Other
+    category: str  # Material, Furniture & Decor, Labour, etc. (from accounting_categories)
+    work_type: str = "general"  # modular, non_modular, civil, general (MANDATORY)
+    sub_category: Optional[str] = None  # Optional: Plywood, Laminate, Sofa, etc.
     planned_amount: float
     notes: Optional[str] = None
 
@@ -24286,6 +24288,8 @@ class VendorMappingUpdate(BaseModel):
     vendor_id: Optional[str] = None
     vendor_name: Optional[str] = None
     category: Optional[str] = None
+    work_type: Optional[str] = None
+    sub_category: Optional[str] = None
     planned_amount: Optional[float] = None
     notes: Optional[str] = None
 

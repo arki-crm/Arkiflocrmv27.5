@@ -30225,7 +30225,7 @@ async def get_trial_balance(
             if txn.get("source_module") == "invoice_ledger":
                 continue
             # Skip any entry with reference_type related to invoices
-            if txn.get("reference_type") in ["invoice_payment", "purchase_invoice", "execution_entry"]:
+            if txn.get("reference_type") in ["invoice_payment", "purchase_invoice", "execution_entry", "execution_ledger"]:
                 continue
             # Skip entries linked to another transaction (part of double-entry)
             if txn.get("linked_transaction_id"):

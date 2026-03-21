@@ -6,7 +6,6 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
-import { Checkbox } from '../components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -31,8 +30,7 @@ import {
   ArrowDownRight,
   Search,
   AlertCircle,
-  FileSpreadsheet,
-  EyeOff
+  FileSpreadsheet
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -56,7 +54,6 @@ export default function GeneralLedger() {
   const [period, setPeriod] = useState('month');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
-  const [hideCounterEntries, setHideCounterEntries] = useState(false); // NEW: Hide [DE] counter entries
 
   const formatCurrency = (val) => {
     if (val === null || val === undefined || val === '' || val === 0) return '—';
@@ -119,10 +116,6 @@ export default function GeneralLedger() {
       if (selectedProject && selectedProject !== '__all__') {
         url += `&project_id=${selectedProject}`;
       }
-      // Add hide counter entries filter (useful for "All Accounts" view)
-      if (hideCounterEntries) {
-        url += `&hide_counter_entries=true`;
-      }
       
       const res = await axios.get(url, { withCredentials: true });
       setLedgerData(res.data);
@@ -139,7 +132,7 @@ export default function GeneralLedger() {
     } finally {
       setLoading(false);
     }
-  }, [selectedAccount, selectedParty, selectedProject, period, customStart, customEnd, hideCounterEntries]);
+  }, [selectedAccount, selectedParty, selectedProject, period, customStart, customEnd]);
 
   useEffect(() => {
     fetchAccounts();
@@ -149,7 +142,7 @@ export default function GeneralLedger() {
     if (selectedAccount && (period !== 'custom' || (customStart && customEnd))) {
       fetchLedger();
     }
-  }, [selectedAccount, selectedParty, selectedProject, period, fetchLedger, customStart, customEnd, hideCounterEntries]);
+  }, [selectedAccount, selectedParty, selectedProject, period, fetchLedger, customStart, customEnd]);
 
   const handleExport = async () => {
     if (!selectedAccount) return;
@@ -471,25 +464,6 @@ export default function GeneralLedger() {
                   />
                 </div>
               </>
-            )}
-            
-            {/* Hide Counter Entries Option - Only for All Accounts view */}
-            {selectedAccount === 'all' && (
-              <div className="flex items-center space-x-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md">
-                <Checkbox 
-                  id="hideCounterEntries" 
-                  checked={hideCounterEntries}
-                  onCheckedChange={setHideCounterEntries}
-                  data-testid="hide-counter-entries-checkbox"
-                />
-                <label
-                  htmlFor="hideCounterEntries"
-                  className="text-sm text-amber-800 cursor-pointer flex items-center gap-1"
-                >
-                  <EyeOff className="w-3.5 h-3.5" />
-                  Hide [DE] entries
-                </label>
-              </div>
             )}
             
             {ledgerData && (

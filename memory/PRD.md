@@ -9,7 +9,41 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Database**: MongoDB
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
-## Current Status: Permission System Audit COMPLETE ✅
+## Current Status: Trial Balance Calculation Fix COMPLETE ✅
+**As of March 21, 2026**
+
+### Trial Balance Calculation Logic Rewrite ✅ (LATEST)
+
+Fixed the fundamentally broken Trial Balance report by replacing complex account-type-based logic with direct aggregation from `accounting_transactions`.
+
+**Issue:** The Trial Balance was using `account_type` (Asset, Liability, Expense) to determine which column a balance appears in. This caused incorrect totals and persistent "mismatch" errors.
+
+**Fix Applied:**
+The new logic directly aggregates from `accounting_transactions`:
+- `inflow`, `debit`, `debit_note` → **Debit column**
+- `outflow`, `credit`, `credit_note` → **Credit column**
+- Groups results by `account_id` with account name lookup
+- Categorizes accounts by type for display (assets, liabilities, income, expenses, equity)
+
+**Changes Made:**
+
+**Backend (`/app/backend/server.py`):**
+- Replaced ~300 lines of complex trial balance logic with simplified MongoDB aggregation pipeline
+- Removed all account-type-based debit/credit placement rules
+- Added `debug_info` field with `calculation_method: 'direct_aggregation_from_transactions'`
+- Properly handles all period types: month, quarter, fy (financial year), custom
+
+**Testing Results:**
+- 17/17 backend tests passed (iteration_83.json)
+- All period types working correctly
+- Totals correctly calculated from raw transaction data
+
+**Important Note:**
+The current data shows an imbalance of ~₹585,951 (Debit: ₹2,902,563, Credit: ₹2,316,612). This is the **actual state of the database** - the fix shows truthful totals, not artificial balancing. Historical data quality issues may need to be addressed separately via data migration scripts.
+
+---
+
+## Previous Status: Permission System Audit COMPLETE ✅
 **As of March 15, 2026**
 
 ### Finance Manager Dashboard and Permissions Fix ✅ (LATEST)

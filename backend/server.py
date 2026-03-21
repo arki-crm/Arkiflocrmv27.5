@@ -29367,6 +29367,96 @@ async def create_liability(liability: LiabilityCreate, request: Request):
     
     await db.finance_liabilities.insert_one(liability_doc)
     
+    # ============ FIX 1: Create Double-Entry Accounting Transactions ============
+    # When a liability is created, we need to:
+    # 1. DEBIT the expense account (increases expense)
+    # 2. CREDIT Accounts Payable (increases liability)
+    liability_date = liability_doc["created_at"][:10]  # Extract YYYY-MM-DD
+    
+    if is_double_entry_required(liability_date):
+        # Map liability category to expense account
+        category_to_expense = {
+            "material": {"account_id": "acc_material_expense", "account_name": "Material Expense", "account_type": "expense"},
+            "labor": {"account_id": "acc_labor_expense", "account_name": "Labor Expense", "account_type": "expense"},
+            "transport": {"account_id": "acc_transport_expense", "account_name": "Transport Expense", "account_type": "expense"},
+            "subcontract": {"account_id": "acc_subcontract_expense", "account_name": "Subcontract Expense", "account_type": "expense"},
+            "site_expense": {"account_id": "acc_site_expense", "account_name": "Site Expense", "account_type": "expense"},
+            "overhead": {"account_id": "acc_overhead_expense", "account_name": "Overhead Expense", "account_type": "expense"},
+            "other": {"account_id": "acc_general_expense", "account_name": "General Expense", "account_type": "expense"},
+        }
+        expense_account = category_to_expense.get(liability.category, DEFAULT_EXPENSE_ACCOUNT)
+        
+        # Ensure the expense account exists
+        await ensure_counter_account_exists(expense_account)
+        
+        # Create primary transaction (Expense Debit)
+        primary_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+        primary_txn = {
+            "transaction_id": primary_txn_id,
+            "transaction_date": liability_date,
+            "transaction_type": "outflow",  # Debit to expense
+            "amount": liability.amount,
+            "account_id": expense_account["account_id"],
+            "category_id": "liability_creation",
+            "source_module": "liability",
+            "source_id": liability_doc["liability_id"],
+            "reference_type": "liability_creation",
+            "reference_id": liability_doc["liability_id"],
+            "party_id": vendor_id,
+            "party_type": "vendor",
+            "party_name": vendor_name,
+            "project_id": liability.project_id,
+            "remarks": f"Liability created: {vendor_name} - {liability.description or liability.category}",
+            "is_double_entry": True,
+            "entry_role": "primary",
+            "is_daybook_entry": True,
+            "is_cashbook_entry": False,  # Not a cash movement
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "created_by": user_doc.get("user_id"),
+            "created_by_name": user_doc.get("name")
+        }
+        await db.accounting_transactions.insert_one(primary_txn)
+        
+        # Create counter transaction (Accounts Payable Credit)
+        counter_account = {"account_id": "acc_vendor_payable", "account_name": "Accounts Payable", "account_type": "liability"}
+        await ensure_counter_account_exists(counter_account)
+        
+        counter_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+        counter_txn = {
+            "transaction_id": counter_txn_id,
+            "transaction_date": liability_date,
+            "transaction_type": "inflow",  # Credit to liability (increases AP)
+            "amount": liability.amount,
+            "account_id": counter_account["account_id"],
+            "category_id": "liability_creation",
+            "source_module": "liability",
+            "source_id": liability_doc["liability_id"],
+            "reference_type": "liability_creation",
+            "reference_id": liability_doc["liability_id"],
+            "party_id": vendor_id,
+            "party_type": "vendor",
+            "party_name": vendor_name,
+            "project_id": liability.project_id,
+            "remarks": f"Liability created (AP Credit): {vendor_name} - {liability.description or liability.category}",
+            "is_double_entry": True,
+            "entry_role": "counter",
+            "linked_transaction_id": primary_txn_id,
+            "is_daybook_entry": True,
+            "is_cashbook_entry": False,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "created_by": user_doc.get("user_id"),
+            "created_by_name": user_doc.get("name")
+        }
+        await db.accounting_transactions.insert_one(counter_txn)
+        
+        # Link primary to counter
+        await db.accounting_transactions.update_one(
+            {"transaction_id": primary_txn_id},
+            {"$set": {"linked_transaction_id": counter_txn_id}}
+        )
+    
     # Audit log for liability creation
     await create_audit_log(
         entity_type="liability",
@@ -29886,14 +29976,38 @@ async def get_trial_balance(
             end = now.replace(month=now.month + 1, day=1) - timedelta(seconds=1)
         period_label = now.strftime("%B %Y")
     elif period == "quarter":
-        quarter = (now.month - 1) // 3
-        start = now.replace(month=quarter * 3 + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_month = (quarter + 1) * 3 + 1
-        if end_month > 12:
-            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        # FIX 4: Indian Financial Year quarters (Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar)
+        import calendar
+        if now.month >= 4:
+            fy_start_year = now.year
         else:
-            end = now.replace(month=end_month, day=1) - timedelta(seconds=1)
-        period_label = f"Q{quarter + 1} {now.year}"
+            fy_start_year = now.year - 1
+        
+        fy_month = (now.month - 4) % 12   # Apr=0, May=1, ..., Mar=11
+        quarter = fy_month // 3            # 0=Q1(Apr-Jun), 1=Q2, 2=Q3, 3=Q4
+        
+        quarter_start_month = (quarter * 3 + 4 - 1) % 12 + 1  # Q1->4, Q2->7, Q3->10, Q4->1
+        quarter_end_month = (quarter_start_month + 2 - 1) % 12 + 1  # Q1->6, Q2->9, Q3->12, Q4->3
+        
+        # Determine the calendar year for start and end months
+        if quarter_start_month >= 4:
+            start_year = fy_start_year
+        else:
+            start_year = fy_start_year + 1
+            
+        if quarter_end_month >= 4:
+            end_year = fy_start_year
+        else:
+            end_year = fy_start_year + 1
+        
+        last_day = calendar.monthrange(end_year, quarter_end_month)[1]
+        
+        start = now.replace(year=start_year, month=quarter_start_month, 
+                           day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = now.replace(year=end_year, month=quarter_end_month, 
+                         day=last_day, hour=23, minute=59, second=59, microsecond=999999)
+        
+        period_label = f"Q{quarter + 1} FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
     elif period == "fy":
         # Financial Year: April 1 to March 31 (India)
         if now.month >= 4:
@@ -29920,6 +30034,9 @@ async def get_trial_balance(
     
     start_iso = start.isoformat()
     end_iso = end.isoformat()
+    # FIX 3: Extract date strings for transaction_date filtering
+    start_date_str = start.strftime("%Y-%m-%d")
+    end_date_str = end.strftime("%Y-%m-%d")
     
     # ========================================================================
     # SIMPLIFIED TRIAL BALANCE CALCULATION
@@ -29940,8 +30057,16 @@ async def get_trial_balance(
     # Aggregation pipeline to sum debits and credits by account
     # In this system: inflow = DEBIT (money coming in), outflow = CREDIT (money going out)
     pipeline = [
-        # Filter by date range
-        {"$match": {"created_at": {"$gte": start_iso, "$lte": end_iso}}},
+        # FIX 3: Filter by transaction_date (with fallback to created_at for legacy data)
+        {"$match": {
+            "$or": [
+                {"transaction_date": {"$gte": start_date_str, "$lte": end_date_str}},
+                {
+                    "transaction_date": {"$exists": False},
+                    "created_at": {"$gte": start_iso, "$lte": end_iso}
+                }
+            ]
+        }},
         # Group by account_id and sum based on transaction_type
         {"$group": {
             "_id": "$account_id",
@@ -30231,11 +30356,15 @@ async def get_daily_closing_snapshot(
     # Calculate closing balance for each account as of selected date
     account_balances = []
     
+    # FIX 5: Get date string for transaction_date filtering
+    target_date_str = target_date.strftime("%Y-%m-%d")
+    start_of_day_iso = target_date.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    
     for account in accounts:
         account_id = account.get("account_id")
         account_name = account.get("account_name") or account.get("name", "Unknown")
         account_type = (account.get("account_type") or "other").lower()
-        opening_balance = account.get("opening_balance", 0) or 0
+        master_opening = account.get("opening_balance", 0) or 0
         # Support both 'holder' and 'custodian' field names
         holder = account.get("holder") or account.get("custodian") or account.get("owner") or "Unassigned"
         
@@ -30258,24 +30387,46 @@ async def get_daily_closing_snapshot(
             else:
                 normalized_type = "cash"  # Default to cash for unknown liquidity accounts
         
-        # Get all transactions for this account up to end of selected day
-        inflows = await db.accounting_transactions.find({
+        # FIX 5: Calculate OPENING balance from transactions BEFORE selected date
+        # Opening = master_opening + all transactions BEFORE the start of selected day
+        pre_period_txns = await db.accounting_transactions.find({
             "account_id": account_id,
-            "transaction_type": "inflow",
-            "created_at": {"$lte": end_of_day_iso}
-        }, {"_id": 0, "amount": 1}).to_list(50000)
+            "$or": [
+                {"transaction_date": {"$lt": target_date_str}},
+                {
+                    "transaction_date": {"$exists": False},
+                    "created_at": {"$lt": start_of_day_iso}
+                }
+            ]
+        }, {"_id": 0, "amount": 1, "transaction_type": 1}).to_list(100000)
         
-        outflows = await db.accounting_transactions.find({
+        pre_inflows = sum(t.get("amount", 0) for t in pre_period_txns 
+                        if t.get("transaction_type") == "inflow")
+        pre_outflows = sum(t.get("amount", 0) for t in pre_period_txns 
+                         if t.get("transaction_type") == "outflow")
+        
+        # Correct opening balance for the selected date
+        opening_balance = master_opening + pre_inflows - pre_outflows
+        
+        # FIX 5: Get ONLY the selected day's transactions for day movement
+        day_txns = await db.accounting_transactions.find({
             "account_id": account_id,
-            "transaction_type": "outflow",
-            "created_at": {"$lte": end_of_day_iso}
-        }, {"_id": 0, "amount": 1}).to_list(50000)
+            "$or": [
+                {"transaction_date": {"$gte": target_date_str, "$lte": target_date_str}},
+                {
+                    "transaction_date": {"$exists": False},
+                    "created_at": {"$gte": start_of_day_iso, "$lte": end_of_day_iso}
+                }
+            ]
+        }, {"_id": 0, "amount": 1, "transaction_type": 1}).to_list(50000)
         
-        total_inflows = sum(t.get("amount", 0) for t in inflows)
-        total_outflows = sum(t.get("amount", 0) for t in outflows)
+        day_inflows = sum(t.get("amount", 0) for t in day_txns 
+                        if t.get("transaction_type") == "inflow")
+        day_outflows = sum(t.get("amount", 0) for t in day_txns 
+                         if t.get("transaction_type") == "outflow")
         
-        # Closing balance = Opening + Inflows - Outflows
-        closing_balance = opening_balance + total_inflows - total_outflows
+        # Closing balance = Opening + day's net movement
+        closing_balance = opening_balance + day_inflows - day_outflows
         
         account_balances.append({
             "account_id": account_id,
@@ -30287,8 +30438,8 @@ async def get_daily_closing_snapshot(
                 "upi_wallet": "UPI/Wallet"
             }.get(normalized_type, normalized_type.title()),
             "opening_balance": opening_balance,
-            "total_inflows": total_inflows,
-            "total_outflows": total_outflows,
+            "total_inflows": day_inflows,
+            "total_outflows": day_outflows,
             "closing_balance": closing_balance,
             "holder": holder,
             "bank_name": account.get("bank_name"),
@@ -30627,6 +30778,7 @@ async def create_journal_entry(request: Request):
                 "transaction_type": "outflow",
                 "amount": line["debit"],
                 "date": je_date,
+                "transaction_date": je_date,  # FIX 2: Add transaction_date for report queries
                 "category_id": "journal_entry",
                 "source_module": "journal_entry",
                 "reference_id": reference_number,
@@ -30636,6 +30788,7 @@ async def create_journal_entry(request: Request):
                 "je_line_id": line["line_id"],
                 "created_by": user.user_id,
                 "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),  # FIX 2: Add updated_at
                 "is_verified": True  # JE entries are auto-verified
             }
             await db.accounting_transactions.insert_one(txn_doc)
@@ -30648,6 +30801,7 @@ async def create_journal_entry(request: Request):
                 "transaction_type": "inflow",
                 "amount": line["credit"],
                 "date": je_date,
+                "transaction_date": je_date,  # FIX 2: Add transaction_date for report queries
                 "category_id": "journal_entry",
                 "source_module": "journal_entry",
                 "reference_id": reference_number,
@@ -30657,6 +30811,7 @@ async def create_journal_entry(request: Request):
                 "je_line_id": line["line_id"],
                 "created_by": user.user_id,
                 "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),  # FIX 2: Add updated_at
                 "is_verified": True
             }
             await db.accounting_transactions.insert_one(txn_doc)
@@ -30950,14 +31105,38 @@ async def get_general_ledger(
             end = now.replace(month=now.month + 1, day=1) - timedelta(seconds=1)
         period_label = now.strftime("%B %Y")
     elif period == "quarter":
-        quarter = (now.month - 1) // 3
-        start = now.replace(month=quarter * 3 + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_month = (quarter + 1) * 3 + 1
-        if end_month > 12:
-            end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(seconds=1)
+        # FIX 4: Indian Financial Year quarters (Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar)
+        import calendar
+        if now.month >= 4:
+            fy_start_year = now.year
         else:
-            end = now.replace(month=end_month, day=1) - timedelta(seconds=1)
-        period_label = f"Q{quarter + 1} {now.year}"
+            fy_start_year = now.year - 1
+        
+        fy_month = (now.month - 4) % 12   # Apr=0, May=1, ..., Mar=11
+        quarter = fy_month // 3            # 0=Q1(Apr-Jun), 1=Q2, 2=Q3, 3=Q4
+        
+        quarter_start_month = (quarter * 3 + 4 - 1) % 12 + 1  # Q1->4, Q2->7, Q3->10, Q4->1
+        quarter_end_month = (quarter_start_month + 2 - 1) % 12 + 1  # Q1->6, Q2->9, Q3->12, Q4->3
+        
+        # Determine the calendar year for start and end months
+        if quarter_start_month >= 4:
+            start_year = fy_start_year
+        else:
+            start_year = fy_start_year + 1
+            
+        if quarter_end_month >= 4:
+            end_year = fy_start_year
+        else:
+            end_year = fy_start_year + 1
+        
+        last_day = calendar.monthrange(end_year, quarter_end_month)[1]
+        
+        start = now.replace(year=start_year, month=quarter_start_month, 
+                           day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = now.replace(year=end_year, month=quarter_end_month, 
+                         day=last_day, hour=23, minute=59, second=59, microsecond=999999)
+        
+        period_label = f"Q{quarter + 1} FY {fy_start_year}-{str(fy_start_year + 1)[2:]}"
     elif period == "fy":
         # Financial Year: April 1 to March 31 (India)
         if now.month >= 4:

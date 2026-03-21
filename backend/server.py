@@ -42688,6 +42688,52 @@ async def record_invoice_payment(execution_id: str, payment: InvoicePaymentRecor
     
     await db.accounting_transactions.insert_one(cashbook_entry)
     
+    # ============ DOUBLE-ENTRY: Create counter entry for Vendor Payable ============
+    # Debit Vendor Payable (reduces liability) - this is the counter to the bank credit
+    counter_txn_id = f"txn_{uuid.uuid4().hex[:10]}"
+    counter_entry = {
+        "transaction_id": counter_txn_id,
+        "transaction_date": payment.payment_date,
+        "transaction_type": "inflow",  # Reduces liability (debit in accounting)
+        "entry_type": "vendor_payable_settlement",
+        "amount": payment.amount,
+        "debit": payment.amount,
+        "credit": 0,
+        "mode": payment.payment_mode,
+        "category_id": "vendor_payable",
+        "account_id": "vendor_payable",
+        "account_name": "Vendor Payable",
+        "project_id": entry.get("project_id"),
+        "vendor_id": entry.get("vendor_id"),
+        "party_id": entry.get("vendor_id"),
+        "party_type": "vendor",
+        "party_name": vendor_name,
+        "description": f"Payment to {vendor_name} - Invoice #{invoice_no or 'N/A'}",
+        "remarks": payment.remarks or f"Settlement of vendor payable",
+        "reference_type": "invoice_payment",
+        "reference_id": payment_id,
+        "linked_transaction_id": txn_id,  # Link to the bank transaction
+        "is_double_entry": True,
+        "entry_role": "counter",
+        "is_cashbook_entry": False,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name
+    }
+    await db.accounting_transactions.insert_one(counter_entry)
+    
+    # Mark primary entry as double-entry
+    await db.accounting_transactions.update_one(
+        {"transaction_id": txn_id},
+        {"$set": {
+            "is_double_entry": True,
+            "entry_role": "primary",
+            "linked_transaction_id": counter_txn_id,
+            "debit": 0,
+            "credit": payment.amount
+        }}
+    )
+    
     # Update account balance (reduce by outflow amount)
     await db.accounting_accounts.update_one(
         {"account_id": payment.account_id},

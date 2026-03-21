@@ -38,14 +38,31 @@ async def main():
     
     # Find all cashbook entries with customer_payment category
     # These are duplicates because receipts module should be the only source
+    # Also include legacy entries with missing/unknown source_module
     duplicate_query = {
-        "source_module": "cashbook",
-        "category_id": "customer_payment"
+        "$or": [
+            {"source_module": "cashbook", "category_id": "customer_payment"},
+            {"source_module": {"$in": [None, "unknown"]}, "category_id": "customer_payment"},
+            {"source_module": {"$exists": False}, "category_id": "customer_payment"}
+        ]
     }
     
-    duplicates = await db.accounting_transactions.find(duplicate_query, {"_id": 0}).to_list(10000)
+    # Exclude entries from receipts module (the authoritative source)
+    duplicate_query["source_module"] = {"$nin": ["receipts", "receipt_cancellation"]}
     
-    print(f"Found {len(duplicates)} cashbook customer_payment entries (duplicates)")
+    duplicates = await db.accounting_transactions.find(
+        {"$and": [
+            {"$or": [
+                {"source_module": "cashbook", "category_id": "customer_payment"},
+                {"source_module": {"$in": [None, "unknown"]}, "category_id": "customer_payment"},
+                {"source_module": {"$exists": False}, "category_id": "customer_payment"}
+            ]},
+            {"source_module": {"$nin": ["receipts", "receipt_cancellation"]}}
+        ]},
+        {"_id": 0}
+    ).to_list(10000)
+    
+    print(f"Found {len(duplicates)} duplicate customer_payment entries (from cashbook or unknown source)")
     print()
     
     if not duplicates:

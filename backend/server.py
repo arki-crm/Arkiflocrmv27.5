@@ -23220,10 +23220,12 @@ async def list_transactions(
                 {"account_id": {"$ne": None}},  # Has account = real transaction
                 {"entry_type": {"$nin": ["purchase_invoice_credit", "purchase_invoice"]}}  # Not a credit purchase
             ]},
-            # SINGLE SOURCE OF POSTING: Exclude duplicate cashbook customer_payment entries
-            # These are handled by receipts module
+            # SINGLE SOURCE OF POSTING: Exclude duplicate customer_payment entries
+            # Covers: explicit cashbook, legacy entries with missing/unknown source_module
             {"$nor": [
-                {"source_module": "cashbook", "category_id": "customer_payment"}
+                {"source_module": "cashbook", "category_id": "customer_payment"},
+                {"source_module": {"$in": [None, "unknown"]}, "category_id": "customer_payment"},
+                {"source_module": {"$exists": False}, "category_id": "customer_payment"}
             ]}
         ]
     
@@ -30183,9 +30185,12 @@ async def get_trial_balance(
                         "created_at": {"$gte": start_iso, "$lte": end_iso}
                     }
                 ]},
-                # Exclude cashbook entries for customer_payment - receipts module is authoritative
+                # Exclude duplicate customer_payment entries - receipts module is authoritative
+                # Covers: explicit cashbook, legacy entries with missing/unknown source_module
                 {"$nor": [
-                    {"source_module": "cashbook", "category_id": "customer_payment"}
+                    {"source_module": "cashbook", "category_id": "customer_payment"},
+                    {"source_module": {"$in": [None, "unknown"]}, "category_id": "customer_payment"},
+                    {"source_module": {"$exists": False}, "category_id": "customer_payment"}
                 ]}
             ]
         }},
@@ -31345,8 +31350,13 @@ async def get_general_ledger(
         opening_balance_from_master = account.get("opening_balance", 0) or 0
     
     # ============ SINGLE SOURCE OF POSTING FILTER ============
-    # Exclude cashbook entries for customer_payment - receipts module is authoritative
-    duplicate_exclusion = {"$nor": [{"source_module": "cashbook", "category_id": "customer_payment"}]}
+    # Exclude duplicate customer_payment entries - receipts module is authoritative
+    # Covers: explicit cashbook, legacy entries with missing/unknown source_module
+    duplicate_exclusion = {"$nor": [
+        {"source_module": "cashbook", "category_id": "customer_payment"},
+        {"source_module": {"$in": [None, "unknown"]}, "category_id": "customer_payment"},
+        {"source_module": {"$exists": False}, "category_id": "customer_payment"}
+    ]}
     
     # Calculate Opening Balance
     # Opening = Master opening balance + sum of transactions BEFORE start date
@@ -31504,10 +31514,17 @@ async def get_all_accounts_general_ledger(
     query = {"created_at": {"$gte": start_iso, "$lte": end_iso}}
     
     # ============ SINGLE SOURCE OF POSTING FILTER ============
-    # Exclude cashbook entries for customer_payment - receipts module is authoritative
-    # This prevents duplicate entries from appearing in the ledger
+    # Exclude duplicate customer_payment entries - receipts module is authoritative
+    # This covers:
+    # 1. Explicit cashbook entries with customer_payment category
+    # 2. Legacy entries with missing/unknown source_module but customer_payment category
+    #    (these are old cashbook entries before source_module was properly tracked)
+    # 
+    # KEEP entries where source_module is 'receipts' (the authoritative source)
     query["$nor"] = [
-        {"source_module": "cashbook", "category_id": "customer_payment"}
+        {"source_module": "cashbook", "category_id": "customer_payment"},
+        {"source_module": {"$in": [None, "unknown"]}, "category_id": "customer_payment"},
+        {"source_module": {"$exists": False}, "category_id": "customer_payment"}
     ]
     
     if party_id:

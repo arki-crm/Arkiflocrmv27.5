@@ -30092,11 +30092,19 @@ async def get_trial_balance(
     # ===== SYSTEM ACCOUNTS (Double-Entry Accounts) =====
     # Get ALL double-entry transactions for system accounts in period
     # This includes BOTH primary and counter entries to capture all movements
+    # IMPORTANT: Exclude accounts that are handled elsewhere (bank/cash, party accounts)
+    bank_account_ids = [a["account_id"] for a in accounts if a.get("account_type") in ["bank", "cash", "upi", "wallet"]]
+    # Also exclude vendor_payable as it's handled by party_balances (Accounts Payable)
+    excluded_account_ids = bank_account_ids + ["vendor_payable", "acc_vendor_payable", "accounts_payable"]
+    
     system_entries = await db.accounting_transactions.find({
         "created_at": {"$gte": start_iso, "$lte": end_iso},
         "is_double_entry": True,
-        # Only include system accounts (not bank/cash which are handled above)
-        "account_id": {"$nin": [a["account_id"] for a in accounts if a.get("account_type") in ["bank", "cash", "upi", "wallet"]]}
+        # Exclude counter entries - they are the opposite side of primary entries
+        # Including both would double-count the amounts
+        "entry_role": {"$ne": "counter"},
+        # Only include system accounts (not bank/cash/vendor_payable which are handled above)
+        "account_id": {"$nin": excluded_account_ids}
     }, {"_id": 0}).to_list(50000)
     
     # Group entries by account_id

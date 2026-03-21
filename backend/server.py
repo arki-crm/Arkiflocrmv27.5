@@ -29850,12 +29850,11 @@ async def get_trial_balance(
 ):
     """Get Trial Balance report for a period
     
-    Groups accounts by:
-    - Assets (Bank/Cash accounts, Receivables)
-    - Liabilities (Payables, Open liabilities)
-    - Income (Project revenue, Other income)
-    - Expenses (Project costs, Operating expenses)
-    - Equity (Retained earnings, if applicable)
+    SIMPLIFIED LOGIC (as per user requirement):
+    - Directly aggregate debit and credit amounts from accounting_transactions
+    - Group by account_id
+    - For each account: sum inflows as DEBIT, sum outflows as CREDIT
+    - Total Debits MUST equal Total Credits (fundamental accounting equation)
     
     Shows Debit and Credit columns with totals.
     
@@ -29922,23 +29921,55 @@ async def get_trial_balance(
     start_iso = start.isoformat()
     end_iso = end.isoformat()
     
-    # Get all bank/cash accounts (check both collections for compatibility)
-    accounts = await db.finance_accounts.find({}, {"_id": 0}).to_list(100)
-    if not accounts:
-        accounts = await db.accounting_accounts.find({"is_active": True}, {"_id": 0}).to_list(100)
-    accounts_map = {a["account_id"]: a for a in accounts}
+    # ========================================================================
+    # SIMPLIFIED TRIAL BALANCE CALCULATION
+    # Directly aggregate from accounting_transactions collection
+    # No complex rules based on account_type - just sum what's recorded
+    # ========================================================================
     
-    # Get all categories
-    categories = await db.accounting_categories.find({}, {"_id": 0}).to_list(100)
-    categories_map = {c["category_id"]: c for c in categories}
+    # Get all accounts for lookup
+    all_accounts = await db.accounting_accounts.find({}, {"_id": 0}).to_list(500)
+    accounts_map = {a["account_id"]: a for a in all_accounts}
     
-    # Get transactions in the period
-    # Exclude double-entry counter transactions to avoid double-counting
-    # Get ALL transactions in period (primary + counter)
-    # No exclusions - Trial Balance must include all entries
-    transactions = await db.accounting_transactions.find({
-        "created_at": {"$gte": start_iso, "$lte": end_iso}
-    }, {"_id": 0}).to_list(50000)
+    # Also check finance_accounts for bank/cash accounts
+    finance_accounts = await db.finance_accounts.find({}, {"_id": 0}).to_list(100)
+    for fa in finance_accounts:
+        if fa.get("account_id") not in accounts_map:
+            accounts_map[fa["account_id"]] = fa
+    
+    # Aggregation pipeline to sum debits and credits by account
+    # In this system: inflow = DEBIT (money coming in), outflow = CREDIT (money going out)
+    pipeline = [
+        # Filter by date range
+        {"$match": {"created_at": {"$gte": start_iso, "$lte": end_iso}}},
+        # Group by account_id and sum based on transaction_type
+        {"$group": {
+            "_id": "$account_id",
+            "total_debit": {
+                "$sum": {
+                    "$cond": [
+                        {"$in": ["$transaction_type", ["inflow", "debit", "debit_note"]]},
+                        {"$ifNull": ["$amount", 0]},
+                        0
+                    ]
+                }
+            },
+            "total_credit": {
+                "$sum": {
+                    "$cond": [
+                        {"$in": ["$transaction_type", ["outflow", "credit", "credit_note"]]},
+                        {"$ifNull": ["$amount", 0]},
+                        0
+                    ]
+                }
+            },
+            "transaction_count": {"$sum": 1}
+        }},
+        # Sort by account_id for consistent output
+        {"$sort": {"_id": 1}}
+    ]
+    
+    account_balances = await db.accounting_transactions.aggregate(pipeline).to_list(1000)
     
     # Initialize trial balance structure
     trial_balance = {
@@ -29949,325 +29980,60 @@ async def get_trial_balance(
         "equity": []
     }
     
-    # Track totals
-    total_debit = 0
-    total_credit = 0
+    # Track grand totals
+    grand_total_debit = 0
+    grand_total_credit = 0
     
-    # ===== ASSETS =====
-    # Bank and Cash accounts only (exclude system accounts which are handled separately)
-    for account in accounts:
-        acc_id = account.get("account_id")
+    # Process each account's aggregated data
+    for bal in account_balances:
+        acc_id = bal["_id"]
+        debit = bal["total_debit"]
+        credit = bal["total_credit"]
         
-        # Skip system accounts - they are handled in the System Accounts section
-        if account.get("is_system_account"):
-            continue
-            
-        acc_name = account.get("account_name") or account.get("name", "Unknown")
-        acc_type = account.get("account_type", "bank")
-        
-        # Only include bank/cash type accounts in Assets
-        if acc_type not in ["bank", "cash", "upi", "wallet"]:
+        # Skip accounts with no activity
+        if debit == 0 and credit == 0:
             continue
         
-        # Calculate balance from transactions in period
-        acc_inflows = sum(t.get("amount", 0) for t in transactions 
-                        if t.get("account_id") == acc_id and t.get("transaction_type") == "inflow")
-        acc_outflows = sum(t.get("amount", 0) for t in transactions 
-                         if t.get("account_id") == acc_id and t.get("transaction_type") == "outflow")
+        # Look up account details
+        acc_info = accounts_map.get(acc_id, {})
+        acc_name = acc_info.get("account_name") or acc_info.get("name") or acc_id or "Unknown Account"
+        acc_type = acc_info.get("account_type", "expense")  # Default to expense if unknown
         
-        # For assets: Debit increases, Credit decreases
-        # Net debit balance = inflows - outflows (if positive, it's a debit)
-        net_movement = acc_inflows - acc_outflows
+        # Build account entry
+        entry = {
+            "account_id": acc_id,
+            "account_name": acc_name,
+            "debit": debit,
+            "credit": credit,
+            "net": debit - credit,
+            "transaction_count": bal["transaction_count"]
+        }
         
-        debit = acc_inflows
-        credit = acc_outflows
-        
-        if debit > 0 or credit > 0:
-            trial_balance["assets"].append({
-                "account_name": f"{acc_name} ({acc_type.title()})",
-                "account_id": acc_id,
-                "debit": debit,
-                "credit": credit,
-                "net": net_movement
-            })
-            total_debit += debit
-            total_credit += credit
-    
-    # NOTE: Accounts Receivable is NOT included in Trial Balance
-    # Receipts are already recorded as bank/cash inflows (debit to bank, credit to customer advance)
-    # Adding AR here would cause double-counting. The Trial Balance only shows actual 
-    # accounting transactions, not calculated projections from project signoff values.
-    
-    # ===== LIABILITIES =====
-    # Get open liabilities from the period
-    open_liabilities = await db.finance_liabilities.find({
-        "created_at": {"$gte": start_iso, "$lte": end_iso}
-    }, {"_id": 0, "amount": 1, "amount_remaining": 1, "vendor_name": 1, "liability_id": 1}).to_list(10000)
-    
-    liab_created = sum(l.get("amount", 0) for l in open_liabilities)
-    liab_paid = sum(l.get("amount", 0) - l.get("amount_remaining", 0) for l in open_liabilities)
-    
-    if liab_created > 0 or liab_paid > 0:
-        trial_balance["liabilities"].append({
-            "account_name": "Accounts Payable (Vendor Liabilities)",
-            "account_id": "payables",
-            "debit": liab_paid,  # Payments reduce liability (debit)
-            "credit": liab_created,  # New liabilities (credit)
-            "net": liab_created - liab_paid
-        })
-        total_debit += liab_paid
-        total_credit += liab_created
-    
-    # ===== PARTY SUB-LEDGER INTEGRATION =====
-    # Ensure control accounts exist
-    await ensure_control_accounts_exist()
-    
-    # Get party ledger entries in period
-    party_entries = await db.party_ledger_entries.find({
-        "created_at": {"$gte": start_iso, "$lte": end_iso}
-    }, {"_id": 0}).to_list(50000)
-    
-    # Get all party accounts for lookup
-    party_accounts = await db.party_subledger_accounts.find({}, {"_id": 0}).to_list(1000)
-    party_accounts_map = {p["account_id"]: p for p in party_accounts}
-    
-    # Group by party account
-    party_balances = {}
-    for entry in party_entries:
-        acc_id = entry.get("party_account_id")
-        if acc_id not in party_balances:
-            party_acc = party_accounts_map.get(acc_id, {})
-            party_balances[acc_id] = {
-                "account_name": party_acc.get("account_name", acc_id),
-                "account_id": acc_id,
-                "party_type": party_acc.get("party_type", "unknown"),
-                "ledger_type": party_acc.get("ledger_type", "unknown"),
-                "debit": 0,
-                "credit": 0
-            }
-        
-        amount = entry.get("amount", 0)
-        if entry.get("transaction_type") == "debit":
-            party_balances[acc_id]["debit"] += amount
-        else:
-            party_balances[acc_id]["credit"] += amount
-    
-    # Add party accounts to appropriate groups
-    # Vendor accounts go to Liabilities (Accounts Payable)
-    vendor_total_debit = 0
-    vendor_total_credit = 0
-    for acc_id, bal in party_balances.items():
-        if bal["party_type"] == "vendor" and (bal["debit"] > 0 or bal["credit"] > 0):
-            bal["net"] = bal["credit"] - bal["debit"]  # Liability: credit increases
-            trial_balance["liabilities"].append(bal)
-            vendor_total_debit += bal["debit"]
-            vendor_total_credit += bal["credit"]
-            total_debit += bal["debit"]
-            total_credit += bal["credit"]
-    
-    # Customer accounts go to Assets (Accounts Receivable)
-    customer_total_debit = 0
-    customer_total_credit = 0
-    for acc_id, bal in party_balances.items():
-        if bal["party_type"] == "customer" and (bal["debit"] > 0 or bal["credit"] > 0):
-            bal["net"] = bal["debit"] - bal["credit"]  # Asset: debit increases
-            trial_balance["assets"].append(bal)
-            customer_total_debit += bal["debit"]
-            customer_total_credit += bal["credit"]
-            total_debit += bal["debit"]
-            total_credit += bal["credit"]
-    
-    # Employee accounts go to Liabilities (Employee Payables)
-    employee_total_debit = 0
-    employee_total_credit = 0
-    for acc_id, bal in party_balances.items():
-        if bal["party_type"] == "employee" and (bal["debit"] > 0 or bal["credit"] > 0):
-            bal["net"] = bal["credit"] - bal["debit"]  # Liability: credit increases
-            trial_balance["liabilities"].append(bal)
-            employee_total_debit += bal["debit"]
-            employee_total_credit += bal["credit"]
-            total_debit += bal["debit"]
-            total_credit += bal["credit"]
-    
-    # ===== SYSTEM ACCOUNTS (Double-Entry Accounts) =====
-    # Get ALL double-entry transactions for system accounts in period
-    # This includes BOTH primary and counter entries to capture all movements
-    # IMPORTANT: Exclude accounts that are handled elsewhere (bank/cash, party accounts)
-    bank_account_ids = [a["account_id"] for a in accounts if a.get("account_type") in ["bank", "cash", "upi", "wallet"]]
-    # Also exclude vendor_payable as it's handled by party_balances (Accounts Payable)
-    excluded_account_ids = bank_account_ids + ["vendor_payable", "acc_vendor_payable", "accounts_payable"]
-    
-    system_entries = await db.accounting_transactions.find({
-        "created_at": {"$gte": start_iso, "$lte": end_iso},
-        "is_double_entry": True,
-        # Exclude counter entries - they are the opposite side of primary entries
-        # Including both would double-count the amounts
-        "entry_role": {"$ne": "counter"},
-        # Only include system accounts (not bank/cash/vendor_payable which are handled above)
-        "account_id": {"$nin": excluded_account_ids}
-    }, {"_id": 0}).to_list(50000)
-    
-    # Group entries by account_id
-    system_account_balances = {}
-    for entry in system_entries:
-        acc_id = entry.get("account_id")
-        if acc_id not in system_account_balances:
-            # Lookup account type from accounting_accounts
-            acc_doc = await db.accounting_accounts.find_one({"account_id": acc_id}, {"_id": 0})
-            acc_name = acc_doc.get("account_name", acc_id) if acc_doc else acc_id
-            acc_type = acc_doc.get("account_type", "expense") if acc_doc else "expense"
-            system_account_balances[acc_id] = {
-                "account_name": acc_name,
-                "account_id": acc_id,
-                "account_type": acc_type,
-                "debit": 0,
-                "credit": 0
-            }
-        
-        amount = entry.get("amount", 0)
-        acc_type = system_account_balances[acc_id]["account_type"]
-        txn_type = entry.get("transaction_type")
-        
-        # Interpret transaction_type based on account type
-        # 
-        # For Liabilities/Income (normal credit balance):
-        #   - outflow = Credit (increases liability/income)
-        #   - inflow = Debit (decreases liability/income)
-        # 
-        # For Expenses/Assets (normal debit balance):
-        #   - inflow = Debit (increases expense/asset)
-        #   - outflow = Credit (decreases expense/asset)
-        
-        if acc_type in ["liability", "income", "revenue"]:
-            # For liabilities/income/revenue: outflow = Credit increase, inflow = Debit decrease
-            if txn_type == "outflow":
-                system_account_balances[acc_id]["credit"] += amount
-            else:
-                system_account_balances[acc_id]["debit"] += amount
-        else:
-            # For expenses/assets: inflow = Debit increase, outflow = Credit decrease
-            if txn_type == "inflow":
-                system_account_balances[acc_id]["debit"] += amount
-            else:
-                system_account_balances[acc_id]["credit"] += amount
-    
-    # Add system accounts to appropriate groups
-    for acc_id, bal in system_account_balances.items():
-        if bal["debit"] == 0 and bal["credit"] == 0:
-            continue
-            
-        acc_type = bal["account_type"]
-        bal["net"] = bal["debit"] - bal["credit"] if acc_type in ["asset", "expense"] else bal["credit"] - bal["debit"]
-        
-        if acc_type == "liability":
-            trial_balance["liabilities"].append(bal)
+        # Categorize by account type for display grouping
+        if acc_type in ["bank", "cash", "upi", "wallet", "asset"]:
+            trial_balance["assets"].append(entry)
+        elif acc_type in ["liability", "payable"]:
+            trial_balance["liabilities"].append(entry)
         elif acc_type in ["income", "revenue"]:
-            trial_balance["income"].append(bal)
-        elif acc_type == "expense":
-            trial_balance["expenses"].append(bal)
-        elif acc_type == "asset":
-            trial_balance["assets"].append(bal)
+            trial_balance["income"].append(entry)
+        elif acc_type in ["expense", "cost"]:
+            trial_balance["expenses"].append(entry)
+        elif acc_type == "equity":
+            trial_balance["equity"].append(entry)
+        else:
+            # Default uncategorized to expenses
+            trial_balance["expenses"].append(entry)
         
-        total_debit += bal["debit"]
-        total_credit += bal["credit"]
+        # Add to grand totals
+        grand_total_debit += debit
+        grand_total_credit += credit
     
-    # ===== INCOME =====
-    # Project Revenue (inflows linked to projects)
-    # Only count legacy entries (non-double-entry) - new entries are in system accounts
-    project_income = sum(t.get("amount", 0) for t in transactions 
-                        if t.get("project_id") and t.get("transaction_type") == "inflow"
-                        and not t.get("is_double_entry"))
+    # Sort each category by debit amount (descending)
+    for category in trial_balance:
+        trial_balance[category].sort(key=lambda x: x["debit"], reverse=True)
     
-    if project_income > 0:
-        trial_balance["income"].append({
-            "account_name": "Project Revenue",
-            "account_id": "project_revenue",
-            "debit": 0,
-            "credit": project_income,
-            "net": -project_income  # Credit balance
-        })
-        total_credit += project_income
-    
-    # Other Income (inflows not linked to projects)
-    # Only count legacy entries (non-double-entry)
-    # Exclude: internal transfers, customer payments
-    other_income = sum(t.get("amount", 0) for t in transactions 
-                      if not t.get("project_id") and t.get("transaction_type") == "inflow"
-                      and t.get("category_id") not in ["internal_transfer", "customer_payment"]
-                      and not t.get("is_double_entry"))
-    
-    if other_income > 0:
-        trial_balance["income"].append({
-            "account_name": "Other Income",
-            "account_id": "other_income",
-            "debit": 0,
-            "credit": other_income,
-            "net": -other_income
-        })
-        total_credit += other_income
-    
-    # ===== EXPENSES =====
-    # Group expenses by category
-    # Only count legacy entries (non-double-entry) - new entries are in system accounts
-    expense_by_category = {}
-    for txn in transactions:
-        if txn.get("transaction_type") == "outflow" and txn.get("category_id") != "internal_transfer":
-            # Skip ALL double-entry transactions (any truthy value)
-            if txn.get("is_double_entry"):
-                continue
-            # Skip counter entries
-            if txn.get("entry_role") in ["counter", "primary"]:
-                continue
-            # Skip vendor payable related entries (handled in party balances)
-            if txn.get("category_id") in ["vendor_payable", "invoice_payment", "acc_vendor_payable"]:
-                continue
-            # Skip entries that came from invoice_ledger (handled separately)
-            if txn.get("source_module") == "invoice_ledger":
-                continue
-            # Skip any entry with reference_type related to invoices
-            if txn.get("reference_type") in ["invoice_payment", "purchase_invoice", "execution_entry", "execution_ledger"]:
-                continue
-            # Skip entries linked to another transaction (part of double-entry)
-            if txn.get("linked_transaction_id"):
-                continue
-                
-            cat_id = txn.get("category_id", "uncategorized")
-            cat_name = categories_map.get(cat_id, {}).get("name", cat_id.replace("_", " ").title() if cat_id else "Uncategorized")
-            
-            if cat_id not in expense_by_category:
-                expense_by_category[cat_id] = {
-                    "account_name": cat_name,
-                    "account_id": cat_id,
-                    "debit": 0,
-                    "credit": 0
-                }
-            expense_by_category[cat_id]["debit"] += txn.get("amount", 0)
-    
-    for cat_id, exp in expense_by_category.items():
-        if exp["debit"] > 0:
-            exp["net"] = exp["debit"]  # Debit balance for expenses
-            trial_balance["expenses"].append(exp)
-            total_debit += exp["debit"]
-    
-    # Sort expenses by amount (descending)
-    trial_balance["expenses"].sort(key=lambda x: x["debit"], reverse=True)
-    
-    # ===== EQUITY =====
-    # NO artificial balancing - equity section left empty unless real equity accounts exist
-    # Trial Balance must show actual computed totals only
-    
-    # Calculate final totals - actual values, no forced balancing
-    final_total_debit = sum(
-        sum(item["debit"] for item in trial_balance[group])
-        for group in ["assets", "liabilities", "income", "expenses", "equity"]
-    )
-    final_total_credit = sum(
-        sum(item["credit"] for item in trial_balance[group])
-        for group in ["assets", "liabilities", "income", "expenses", "equity"]
-    )
-    
-    # Calculate imbalance - show truth, not corrected numbers
-    imbalance_amount = final_total_debit - final_total_credit
+    # Calculate imbalance
+    imbalance_amount = grand_total_debit - grand_total_credit
     is_balanced = abs(imbalance_amount) < 1  # Allow small rounding difference
     
     return {
@@ -30280,21 +30046,28 @@ async def get_trial_balance(
         "trial_balance": trial_balance,
         
         "totals": {
-            "total_debit": final_total_debit,
-            "total_credit": final_total_credit,
+            "total_debit": grand_total_debit,
+            "total_credit": grand_total_credit,
             "difference": imbalance_amount,
-            "imbalance_amount": imbalance_amount,  # Explicit field for mismatch
+            "imbalance_amount": imbalance_amount,
             "is_balanced": is_balanced
         },
         
         "summary": {
-            "total_assets_movement": sum(item["debit"] - item["credit"] for item in trial_balance["assets"]),
-            "total_liabilities_movement": sum(item["credit"] - item["debit"] for item in trial_balance["liabilities"]),
+            "total_assets_movement": sum(item["net"] for item in trial_balance["assets"]),
+            "total_liabilities_movement": sum(item["net"] for item in trial_balance["liabilities"]),
             "total_income": sum(item["credit"] for item in trial_balance["income"]),
             "total_expenses": sum(item["debit"] for item in trial_balance["expenses"]),
             "net_profit_loss": sum(item["credit"] for item in trial_balance["income"]) - sum(item["debit"] for item in trial_balance["expenses"])
+        },
+        
+        "debug_info": {
+            "total_accounts_with_activity": len(account_balances),
+            "calculation_method": "direct_aggregation_from_transactions"
         }
     }
+
+
 
 
 # ============================================================================

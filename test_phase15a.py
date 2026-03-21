@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 import uuid
 
 class Phase15ATester:
-    def __init__(self, base_url="https://double-entry-system-2.preview.emergentagent.com"):
+    def __init__(self, base_url="https://double-entry-repair.preview.emergentagent.com"):
         self.base_url = base_url
         self.admin_token = None
         self.designer_token = None

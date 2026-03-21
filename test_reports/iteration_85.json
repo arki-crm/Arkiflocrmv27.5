@@ -1,0 +1,55 @@
+{
+  "test_iteration": 85,
+  "test_date": "2026-03-21",
+  "feature_tested": "Fix duplicate ledger entries caused by multiple posting sources",
+  "test_results": {
+    "TEST_1_cashbook_blocks_customer_payment": {
+      "status": "PASSED",
+      "description": "Cashbook endpoint correctly blocks customer_payment category with clear error message",
+      "expected": "400 error with message directing to Receipts module",
+      "actual": "400 error: Category 'customer_payment' cannot be used here. Customer receipts must be created through the Receipts module..."
+    },
+    "TEST_2_cashbook_blocks_customer_advance": {
+      "status": "PASSED",
+      "description": "Cashbook endpoint correctly blocks customer_advance category",
+      "expected": "400 error",
+      "actual": "400 error with appropriate message"
+    },
+    "TEST_3_general_ledger_excludes_duplicates": {
+      "status": "PASSED",
+      "description": "General Ledger excludes cashbook customer_payment entries",
+      "expected": "0 cashbook customer_payment entries in GL",
+      "actual": "0 cashbook customer_payment entries found (filtered correctly)"
+    },
+    "TEST_4_trial_balance_working": {
+      "status": "PASSED",
+      "description": "Trial Balance endpoint returns valid data",
+      "expected": "Valid trial balance with totals",
+      "actual": "Trial Balance returned with summary including assets, liabilities, income, expenses"
+    },
+    "TEST_5_receipt_creates_double_entry": {
+      "status": "PASSED",
+      "description": "Receipt creates proper double-entry (Dr Bank, Cr Customer Advance)",
+      "expected": "2 entries: 1 primary (Bank inflow) + 1 counter (Customer Advance)",
+      "actual": "Receipt rcp_36e04c17 created with 2 entries: txn_40afd1ce (Bank debit ₹5000) + txn_42e10b21e5b9 (Customer Advance credit ₹5000)"
+    },
+    "TEST_6_gl_shows_both_entries": {
+      "status": "PASSED",
+      "description": "General Ledger shows both primary and counter entries for receipt",
+      "expected": "2 entries in GL with correct Dr/Cr",
+      "actual": "Dr Bank ₹5000, Cr Customer Advance ₹5000"
+    }
+  },
+  "summary": {
+    "total_tests": 6,
+    "passed": 6,
+    "failed": 0,
+    "fix_verified": true
+  },
+  "cleanup_script_available": "/app/backend/scripts/cleanup_cashbook_customer_payment_duplicates.py",
+  "notes": [
+    "Cashbook API view intentionally filters to only cash/bank/digital accounts",
+    "Counter entries to liability accounts (Customer Advance) appear in GL but not cashbook view",
+    "This is correct behavior - cashbook shows cash movements, GL shows full double-entry"
+  ]
+}

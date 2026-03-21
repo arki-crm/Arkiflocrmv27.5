@@ -19,8 +19,10 @@ import os
 import time
 import secrets
 
-# Get BASE_URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
+# Get BASE_URL from environment or use default
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001').rstrip('/')
+if not BASE_URL or BASE_URL == '':
+    BASE_URL = 'http://localhost:8001'
 
 # Test credentials
 TEST_EMAIL = "sidheeq.arkidots@gmail.com"

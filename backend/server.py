@@ -23219,6 +23219,11 @@ async def list_transactions(
             {"$or": [
                 {"account_id": {"$ne": None}},  # Has account = real transaction
                 {"entry_type": {"$nin": ["purchase_invoice_credit", "purchase_invoice"]}}  # Not a credit purchase
+            ]},
+            # SINGLE SOURCE OF POSTING: Exclude duplicate cashbook customer_payment entries
+            # These are handled by receipts module
+            {"$nor": [
+                {"source_module": "cashbook", "category_id": "customer_payment"}
             ]}
         ]
     
@@ -23279,12 +23284,27 @@ async def list_transactions(
 
 @api_router.post("/accounting/transactions")
 async def create_transaction(txn: TransactionCreate, request: Request):
-    """Create a new transaction entry with guardrails"""
+    """Create a new transaction entry with guardrails
+    
+    IMPORTANT: This endpoint is for EXPENSE entries only.
+    Customer payments MUST go through /api/finance/receipts endpoint.
+    This ensures single-source-of-truth for the General Ledger.
+    """
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
     if not has_permission(user_doc, "finance.add_transaction"):
         raise HTTPException(status_code=403, detail="Access denied - no finance.add_transaction permission")
+    
+    # ============ SINGLE SOURCE OF POSTING ENFORCEMENT ============
+    # Block customer_payment category - MUST use /api/finance/receipts endpoint
+    # This prevents duplicate ledger entries from multiple posting sources
+    BLOCKED_CATEGORIES = ["customer_payment", "customer_advance", "receipt"]
+    if txn.category_id in BLOCKED_CATEGORIES:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Category '{txn.category_id}' cannot be used here. Customer receipts must be created through the Receipts module to ensure correct double-entry posting."
+        )
     
     if not txn.remarks or not txn.remarks.strip():
         raise HTTPException(status_code=400, detail="Remarks is required")
@@ -30148,15 +30168,25 @@ async def get_trial_balance(
     
     # Aggregation pipeline to sum debits and credits by account
     # In this system: inflow = DEBIT (money coming in), outflow = CREDIT (money going out)
+    # 
+    # SINGLE SOURCE OF POSTING: Exclude cashbook customer_payment entries
+    # to prevent duplicate entries from inflating totals
     pipeline = [
         # FIX 3: Filter by transaction_date (with fallback to created_at for legacy data)
+        # Also exclude duplicate cashbook customer_payment entries
         {"$match": {
-            "$or": [
-                {"transaction_date": {"$gte": start_date_str, "$lte": end_date_str}},
-                {
-                    "transaction_date": {"$exists": False},
-                    "created_at": {"$gte": start_iso, "$lte": end_iso}
-                }
+            "$and": [
+                {"$or": [
+                    {"transaction_date": {"$gte": start_date_str, "$lte": end_date_str}},
+                    {
+                        "transaction_date": {"$exists": False},
+                        "created_at": {"$gte": start_iso, "$lte": end_iso}
+                    }
+                ]},
+                # Exclude cashbook entries for customer_payment - receipts module is authoritative
+                {"$nor": [
+                    {"source_module": "cashbook", "category_id": "customer_payment"}
+                ]}
             ]
         }},
         # Group by account_id and sum based on transaction_type
@@ -31314,9 +31344,14 @@ async def get_general_ledger(
         account_type = account.get("account_type", "unknown")
         opening_balance_from_master = account.get("opening_balance", 0) or 0
     
+    # ============ SINGLE SOURCE OF POSTING FILTER ============
+    # Exclude cashbook entries for customer_payment - receipts module is authoritative
+    duplicate_exclusion = {"$nor": [{"source_module": "cashbook", "category_id": "customer_payment"}]}
+    
     # Calculate Opening Balance
     # Opening = Master opening balance + sum of transactions BEFORE start date
     opening_query = {"account_id": account_id, "created_at": {"$lt": start_iso}}
+    opening_query.update(duplicate_exclusion)
     if party_filter:
         opening_query.update(party_filter)
     
@@ -31333,6 +31368,7 @@ async def get_general_ledger(
     
     # Get transactions within the period
     period_query = {"account_id": account_id, "created_at": {"$gte": start_iso, "$lte": end_iso}}
+    period_query.update(duplicate_exclusion)
     if party_filter:
         period_query.update(party_filter)
     
@@ -31458,11 +31494,21 @@ async def get_all_accounts_general_ledger(
     
     Returns transactions grouped by account, ordered by date.
     Useful for viewing complete ledger across all accounts.
+    
+    IMPORTANT: Filters out duplicate cashbook entries for customer_payment
+    to enforce single-source-of-posting (receipts module is authoritative).
     """
     now = datetime.now(timezone.utc)
     
     # Build query filter
     query = {"created_at": {"$gte": start_iso, "$lte": end_iso}}
+    
+    # ============ SINGLE SOURCE OF POSTING FILTER ============
+    # Exclude cashbook entries for customer_payment - receipts module is authoritative
+    # This prevents duplicate entries from appearing in the ledger
+    query["$nor"] = [
+        {"source_module": "cashbook", "category_id": "customer_payment"}
+    ]
     
     if party_id:
         query["party_id"] = party_id

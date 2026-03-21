@@ -249,7 +249,25 @@ async def create_double_entry_pair(
     
     For Assets/Expenses (debit increases):
     - When Bank pays money (outflow/credit), Expense/Asset increases (outflow/debit)
+    
+    SAFEGUARD: Prevents duplicate counter entries for the same primary transaction.
     """
+    # SAFEGUARD: Check if counter entry already exists for this primary transaction
+    primary_txn_id = primary_txn.get("transaction_id")
+    reference_id = primary_txn.get("reference_id") or primary_txn.get("receipt_id") or primary_txn.get("source_id")
+    
+    if primary_txn_id:
+        existing_counter = await db.accounting_transactions.find_one({
+            "$or": [
+                {"paired_transaction_id": primary_txn_id},
+                {"linked_transaction_id": primary_txn_id}
+            ],
+            "entry_role": "counter"
+        })
+        if existing_counter:
+            logger.warning(f"Counter entry already exists for primary {primary_txn_id}")
+            return existing_counter.get("transaction_id")
+    
     # Ensure counter account exists
     await ensure_counter_account_exists(counter_account_info)
     
@@ -23389,7 +23407,10 @@ async def create_transaction(txn: TransactionCreate, request: Request):
     
     # ============ DOUBLE-ENTRY ENFORCEMENT ============
     # Create counter-entry for transactions after cutoff date
-    if is_double_entry_required(txn.transaction_date) and txn.category_id not in ["internal_transfer", "journal_entry"]:
+    # IMPORTANT: Skip customer_payment category - receipts module handles this
+    # to prevent duplicate entries when both cashbook and receipts are used
+    excluded_categories = ["internal_transfer", "journal_entry", "customer_payment"]
+    if is_double_entry_required(txn.transaction_date) and txn.category_id not in excluded_categories:
         counter_account = get_counter_account_for_category(txn.category_id, txn.transaction_type)
         await create_double_entry_pair(
             primary_txn=new_txn,
@@ -33122,19 +33143,32 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
     }
     
     await db.finance_receipts.insert_one(receipt_doc)
-    await db.accounting_transactions.insert_one(txn_doc)
     
-    # ============ DOUBLE-ENTRY ENFORCEMENT ============
-    if is_double_entry_required(payment_date):
-        # Customer receipts credit Customer Advance (liability), NOT revenue
-        # Revenue is recognized later via Journal Entry when work is completed/billed
-        customer_advance_account = {"account_id": "acc_customer_advance", "account_name": "Customer Advance", "account_type": "liability"}
-        await create_double_entry_pair(
-            primary_txn=txn_doc,
-            counter_account_info=customer_advance_account,
-            user_id=user.user_id,
-            user_name=user.name
-        )
+    # SAFEGUARD: Check if accounting entries already exist for this receipt
+    existing_entries = await db.accounting_transactions.count_documents({
+        "$or": [
+            {"receipt_id": receipt_doc["receipt_id"]},
+            {"reference_id": receipt_doc["receipt_id"]},
+            {"source_id": receipt_doc["receipt_id"]}
+        ]
+    })
+    
+    if existing_entries > 0:
+        logger.warning(f"Accounting entries already exist for receipt {receipt_doc['receipt_id']} - skipping transaction creation")
+    else:
+        await db.accounting_transactions.insert_one(txn_doc)
+        
+        # ============ DOUBLE-ENTRY ENFORCEMENT ============
+        if is_double_entry_required(payment_date):
+            # Customer receipts credit Customer Advance (liability), NOT revenue
+            # Revenue is recognized later via Journal Entry when work is completed/billed
+            customer_advance_account = {"account_id": "acc_customer_advance", "account_name": "Customer Advance", "account_type": "liability"}
+            await create_double_entry_pair(
+                primary_txn=txn_doc,
+                counter_account_info=customer_advance_account,
+                user_id=user.user_id,
+                user_name=user.name
+            )
     
     # Update account balance
     await db.accounting_accounts.update_one(

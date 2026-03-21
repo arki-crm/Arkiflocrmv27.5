@@ -29599,16 +29599,59 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
     
     await db.accounting_transactions.insert_one(cashbook_txn)
     
-    # Create double-entry pair for liability settlement (after cutoff date)
+    # Create double-entry for liability settlement (after cutoff date)
+    # IMPORTANT: Settlement requires DEBIT to Accounts Payable (reduces liability)
+    # Standard create_double_entry_pair would create a Credit, so we handle this manually
     if is_double_entry_required(settlement.payment_date):
-        counter_account = COUNTER_ACCOUNT_MAP.get("accounts_payable", DEFAULT_EXPENSE_ACCOUNT)
-        if counter_account:
-            await create_double_entry_pair(
-                primary_txn=cashbook_txn,
-                counter_account_info=counter_account,
-                user_id=user.user_id,
-                user_name=user.name
-            )
+        counter_account = {"account_id": "acc_vendor_payable", "account_name": "Accounts Payable", "account_type": "liability"}
+        await ensure_counter_account_exists(counter_account)
+        
+        counter_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+        counter_txn = {
+            "transaction_id": counter_txn_id,
+            "transaction_date": settlement.payment_date,
+            # For liability settlement: OUTFLOW to AP = DEBIT = reduces liability
+            "transaction_type": "outflow",
+            "amount": settlement.amount,
+            "mode": "double_entry",
+            "category_id": "liability_settlement",
+            "account_id": counter_account["account_id"],
+            "project_id": liability.get("project_id"),
+            "remarks": f"[DE] Settlement: {liability.get('vendor_name')} - AP Debit (reduces payable)",
+            
+            # Party metadata
+            "party_id": liability.get("vendor_id"),
+            "party_type": "vendor",
+            "party_name": liability.get("vendor_name"),
+            
+            # Double-entry linking
+            "is_double_entry": True,
+            "paired_transaction_id": txn_id,
+            "reference_id": liability_id,
+            "entry_role": "counter",
+            
+            # Source tracking
+            "source_module": "liability",
+            "source_id": liability_id,
+            "reference_type": "liability_settlement",
+            
+            "is_system_generated": True,
+            "created_at": now.isoformat(),
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "updated_at": now.isoformat()
+        }
+        await db.accounting_transactions.insert_one(counter_txn)
+        
+        # Link primary to counter
+        await db.accounting_transactions.update_one(
+            {"transaction_id": txn_id},
+            {"$set": {
+                "is_double_entry": True,
+                "paired_transaction_id": counter_txn_id,
+                "entry_role": "primary"
+            }}
+        )
     
     # Update account balance (reduce by outflow amount)
     await db.accounting_accounts.update_one(

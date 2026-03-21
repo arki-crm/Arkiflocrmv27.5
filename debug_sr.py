@@ -7,7 +7,7 @@ import requests
 import json
 
 def debug_service_request():
-    base_url = "https://double-entry-repair.preview.emergentagent.com"
+    base_url = "https://ledger-recovery.preview.emergentagent.com"
     
     # Use the admin token from the previous test
     admin_token = "test_admin_session_b8b8b8b8b8b8b8b8"  # This will need to be updated

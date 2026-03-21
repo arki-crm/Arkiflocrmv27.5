@@ -23249,7 +23249,20 @@ async def list_transactions(
     
     for txn in transactions:
         txn["account_name"] = accounts.get(txn.get("account_id"), {}).get("account_name", "Unknown")
-        txn["category_name"] = categories.get(txn.get("category_id"), {}).get("name", "Unknown")
+        # Category lookup with fallback to "General" instead of "Unknown"
+        cat_id = txn.get("category_id")
+        if cat_id and cat_id in categories:
+            txn["category_name"] = categories[cat_id].get("name", "General")
+        else:
+            # Auto-assign based on source_module or transaction_type
+            if txn.get("source_module") == "receipts":
+                txn["category_name"] = "Customer Payment"
+            elif txn.get("source_module") == "liability":
+                txn["category_name"] = "Liability Settlement" if "settlement" in (txn.get("reference_type") or "") else "Liability Creation"
+            elif txn.get("transaction_type") == "inflow":
+                txn["category_name"] = "Income"
+            else:
+                txn["category_name"] = "General"
         
         if txn.get("project_id"):
             project = await db.projects.find_one(
@@ -23790,7 +23803,7 @@ async def get_transactions_needing_review(request: Request):
     for txn in transactions:
         cat = await db.accounting_categories.find_one({"category_id": txn.get("category_id")})
         if cat:
-            txn["category_name"] = cat.get("name", "Unknown")
+            txn["category_name"] = cat.get("name", "General")
     
     return transactions
 
@@ -24209,7 +24222,7 @@ async def report_category_summary(
             cat_info = categories.get(cat_id, {})
             cat_map[cat_id] = {
                 "category_id": cat_id,
-                "category_name": cat_info.get("name", "Unknown"),
+                "category_name": cat_info.get("name", "General"),
                 "inflow": 0,
                 "outflow": 0,
                 "count": 0
@@ -25381,6 +25394,21 @@ async def get_daily_transactions(request: Request, date: str):
         account = accounts.get(txn.get("account_id"), {})
         category = categories.get(txn.get("category_id"), {})
         
+        # Category name with smart fallback
+        cat_id = txn.get("category_id")
+        if cat_id and cat_id in categories:
+            category_name = categories[cat_id].get("name", "General")
+        else:
+            # Auto-assign based on source_module or transaction_type
+            if txn.get("source_module") == "receipts":
+                category_name = "Customer Payment"
+            elif txn.get("source_module") == "liability":
+                category_name = "Liability Settlement" if "settlement" in (txn.get("reference_type") or "") else "Liability Creation"
+            elif txn.get("transaction_type") == "inflow":
+                category_name = "Income"
+            else:
+                category_name = "General"
+        
         # Determine vendor/project name
         counterparty = None
         counterparty_type = None
@@ -25426,8 +25454,8 @@ async def get_daily_transactions(request: Request, date: str):
             "account_type": account.get("account_type"),
             "reference": txn.get("reference") or txn.get("remarks") or "-",
             "category_id": txn.get("category_id"),
-            "category_name": category.get("name", "Uncategorized"),
-            "purpose": txn.get("purpose") or category.get("name", ""),
+            "category_name": category_name,  # Use smart fallback variable
+            "purpose": txn.get("purpose") or category_name,
             "counterparty": counterparty,
             "counterparty_type": counterparty_type,
             "project_id": txn.get("project_id"),
@@ -26069,7 +26097,7 @@ async def get_pending_approvals(request: Request):
     accounts = {a["account_id"]: a for a in await db.accounting_accounts.find({}, {"_id": 0}).to_list(100)}
     
     for txn in pending:
-        txn["category_name"] = categories.get(txn.get("category_id"), {}).get("name", "Unknown")
+        txn["category_name"] = categories.get(txn.get("category_id"), {}).get("name", "General")
         txn["account_name"] = accounts.get(txn.get("account_id"), {}).get("account_name", "Unknown")
     
     return pending
@@ -26320,7 +26348,7 @@ async def list_expense_requests(
             er["project_pid"] = p.get("pid", "").replace("ARKI-", "")
             er["client_name"] = p.get("client_name", "")
         if er.get("category_id") and er["category_id"] in categories:
-            er["category_name"] = categories[er["category_id"]].get("name", "Unknown")
+            er["category_name"] = categories[er["category_id"]].get("name", "General")
         if er.get("vendor_id") and er["vendor_id"] in vendors:
             er["vendor_name"] = vendors[er["vendor_id"]].get("vendor_name", "Unknown")
     
@@ -26416,7 +26444,7 @@ async def get_expense_request(request_id: str, request: Request):
     if expense_req.get("category_id"):
         cat = await db.accounting_categories.find_one({"category_id": expense_req["category_id"]}, {"_id": 0})
         if cat:
-            expense_req["category_name"] = cat.get("name", "Unknown")
+            expense_req["category_name"] = cat.get("name", "General")
     
     if expense_req.get("vendor_id"):
         vendor = await db.accounting_vendors.find_one({"vendor_id": expense_req["vendor_id"]}, {"_id": 0})
@@ -33113,13 +33141,17 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
     }
     
     # Also create a cashbook transaction (inflow)
+    # CATEGORY FLOW: receipt -> cashbook -> daybook -> ledger
+    receipt_category_id = "customer_payment"
+    logger.info(f"Receipt {receipt_number}: category_id={receipt_category_id} for amount={receipt.amount}")
+    
     txn_doc = {
         "transaction_id": f"txn_{secrets.token_hex(4)}",
         "transaction_date": payment_date,  # CRITICAL: Must match receipt payment date
         "transaction_type": "inflow",
         "amount": receipt.amount,
         "mode": receipt.payment_mode,
-        "category_id": "customer_payment",  # Customer payment category
+        "category_id": receipt_category_id,  # Customer payment category - MANDATORY
         "account_id": receipt.account_id,
         "project_id": receipt.project_id,
         # Party metadata for ledger traceability

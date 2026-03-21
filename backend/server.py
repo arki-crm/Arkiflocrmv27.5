@@ -30212,17 +30212,23 @@ async def get_trial_balance(
     expense_by_category = {}
     for txn in transactions:
         if txn.get("transaction_type") == "outflow" and txn.get("category_id") != "internal_transfer":
-            # Skip double-entry transactions (handled in system accounts section)
-            if txn.get("is_double_entry") == True:
+            # Skip ALL double-entry transactions (any truthy value)
+            if txn.get("is_double_entry"):
                 continue
             # Skip counter entries
-            if txn.get("entry_role") == "counter":
+            if txn.get("entry_role") in ["counter", "primary"]:
                 continue
             # Skip vendor payable related entries (handled in party balances)
-            if txn.get("category_id") in ["vendor_payable", "invoice_payment"]:
+            if txn.get("category_id") in ["vendor_payable", "invoice_payment", "acc_vendor_payable"]:
                 continue
             # Skip entries that came from invoice_ledger (handled separately)
             if txn.get("source_module") == "invoice_ledger":
+                continue
+            # Skip any entry with reference_type related to invoices
+            if txn.get("reference_type") in ["invoice_payment", "purchase_invoice", "execution_entry"]:
+                continue
+            # Skip entries linked to another transaction (part of double-entry)
+            if txn.get("linked_transaction_id"):
                 continue
                 
             cat_id = txn.get("category_id", "uncategorized")

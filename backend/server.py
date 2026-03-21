@@ -31068,7 +31068,8 @@ async def get_general_ledger(
     project_id: str = None,  # Optional - filter by project
     period: str = "month",  # month, quarter, fy, custom
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    hide_counter_entries: bool = False  # NEW: Option to hide [DE] counter entries
 ):
     """Get General Ledger for a specific account or all accounts
     
@@ -31082,6 +31083,7 @@ async def get_general_ledger(
     - account_id="all" or empty: Returns ledger grouped by account
     - party_id/party_type: Filter by customer/vendor/employee
     - project_id: Filter by project
+    - hide_counter_entries: If true, exclude [DE] counter entries to avoid duplicates
     
     Reads strictly from accounting_transactions.
     Must match Trial Balance for same account/date range.
@@ -31172,7 +31174,8 @@ async def get_general_ledger(
             period_label=period_label,
             party_id=party_id,
             party_type=party_type,
-            project_id=project_id
+            project_id=project_id,
+            hide_counter_entries=hide_counter_entries
         )
     
     # ============================================================
@@ -31360,17 +31363,28 @@ async def get_all_accounts_general_ledger(
     period_label: str,
     party_id: Optional[str] = None,
     party_type: Optional[str] = None,
-    project_id: Optional[str] = None
+    project_id: Optional[str] = None,
+    hide_counter_entries: bool = False
 ) -> dict:
     """Generate General Ledger for ALL accounts combined.
     
     Returns transactions grouped by account, ordered by date.
     Useful for viewing complete ledger across all accounts.
+    
+    Args:
+        hide_counter_entries: If True, excludes [DE] counter entries to avoid
+                             showing the same transaction twice (once in primary
+                             account, once in counter account).
     """
     now = datetime.now(timezone.utc)
     
     # Build query filter
     query = {"created_at": {"$gte": start_iso, "$lte": end_iso}}
+    
+    # NEW: Option to hide counter entries to avoid duplicates
+    if hide_counter_entries:
+        query["entry_role"] = {"$ne": "counter"}
+    
     if party_id:
         query["party_id"] = party_id
     if party_type:
@@ -31534,14 +31548,16 @@ async def get_all_accounts_general_ledger(
         "filters": {
             "party_id": party_id,
             "party_type": party_type,
-            "project_id": project_id
+            "project_id": project_id,
+            "hide_counter_entries": hide_counter_entries
         },
         
         "summary": {
             "total_debit": total_debit,
             "total_credit": total_credit,
             "net_movement": total_credit - total_debit,
-            "accounts_count": len(accounts_list)
+            "accounts_count": len(accounts_list),
+            "counter_entries_hidden": hide_counter_entries
         },
         
         # Grouped by account

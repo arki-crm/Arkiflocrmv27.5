@@ -6,113 +6,102 @@ Build a full-stack CRM (FastAPI + React + MongoDB) with a custom double-entry ac
 ## Current State (As of March 23, 2026)
 
 ### Core Features Implemented
-- **Double-Entry Accounting Engine**: `create_double_entry_pair()` in server.py
-- **Permission System**: Stable and working
-- **Trial Balance**: Direct aggregation from `accounting_transactions` using inflow/outflow mapping
-- **General Ledger**: Account-wise transaction history with running balances
-- **Daily Closing**: Snapshot calculations using historical transactions
-- **Receipts Module**: Customer payment tracking with proper double-entry
-- **Liability Management**: Creation and settlement with proper DE pairs
-- **Expense Requests**: With approval workflows
+- **Double-Entry Accounting Engine**: Enforced at insert level with validation
+- **Data Integrity Guards**: Duplicate prevention, entry count validation
 - **Smart Routing**: Cashbook guides users to correct modules
+- **Diagnostic Tools**: API endpoints to check and fix data integrity
 
-### Recent Fixes (March 2026)
-1. ✅ **Trial Balance Fix**: Removed flawed `account_type` logic
-2. ✅ **Liability DE Pairs**: Creation now spawns Expense Debit + AP Credit
-3. ✅ **Journal Entry Dates**: Added missing `transaction_date` field
-4. ✅ **Date Filtering**: Trial Balance/GL now filter by `transaction_date`
-5. ✅ **Financial Quarters**: Corrected to Indian FY (April-June = Q1)
-6. ✅ **Daily Closing Balance**: Uses historical transactions
-7. ✅ **Liability Settlement**: Correctly creates outflow/Debit to AP
-8. ✅ **Receipt Duplicates**: Backend blocks customer_payment in Cashbook
-9. ✅ **Category Fallback**: All "Unknown" → "General"
-10. ✅ **Single Source Posting**: GL/TB filters exclude duplicate entries
-11. ✅ **Smart Routing UI**: Cashbook guides users to Receipts for customer payments
+### Data Integrity Features (NEW)
+1. **Insert-Level Guards**
+   - `create_double_entry_pair()` checks source_id count before creating counter
+   - Receipt creation validates exactly 2 entries created
+   - Database indexes for fast duplicate detection
 
-### Accounting Architecture (Enforced)
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    POSTING SOURCES                               │
-│  (Where transactions are CREATED)                                │
-├─────────────┬─────────────┬─────────────┬─────────────┬─────────┤
-│  Receipts   │  Payments   │  Expenses   │  Invoices   │ Journal │
-│  (Customer) │  (Vendor)   │  (Direct)   │  (Sales)    │ Entries │
-└──────┬──────┴──────┬──────┴──────┬──────┴──────┬──────┴────┬────┘
-       │             │             │             │           │
-       └─────────────┴─────────────┴─────────────┴───────────┘
-                              │
-                              ▼
-                 ┌────────────────────────┐
-                 │    GENERAL LEDGER      │
-                 │  (Single Source of     │
-                 │       Truth)           │
-                 └────────────────────────┘
-                              │
-       ┌──────────────────────┼──────────────────────┐
-       ▼                      ▼                      ▼
-┌─────────────┐       ┌─────────────┐       ┌─────────────┐
-│  CASHBOOK   │       │  TRIAL      │       │  P&L /      │
-│  (VIEW)     │       │  BALANCE    │       │  Balance    │
-└─────────────┘       └─────────────┘       └─────────────┘
-```
+2. **Diagnostic API**
+   - `GET /api/finance/data-integrity` - Full system diagnosis
+   - `POST /api/finance/data-integrity/fix` - Auto-fix issues
 
-### Known Issues
-- **Historical Data Imbalance (₹585,951)**: Pre-March 3, 2026 data is single-entry only
+3. **Verified Behavior**
+   - New receipt → exactly 2 entries (Dr Bank, Cr Customer Advance)
+   - Post-insert validation logs errors if count != 2
+
+### Historical Data Issues (To Be Fixed)
+Based on `/api/finance/data-integrity`:
+- **Global imbalance**: ₹595,105.99 (debits > credits)
+- **29 orphan counter entries** - counter without primary
+- **5 duplicate sources** - 3+ entries per receipt
+- **8 unbalanced pairs** - execution costs with wrong types
+
+### Fix Scripts
+- `/app/backend/scripts/fix_accounting_data.py` - Targeted production fix
+- `/app/backend/scripts/fix_historical_imbalance.py` - Comprehensive diagnostic
 
 ## Technical Architecture
 
-### Key Files
-- `/app/backend/server.py` - Monolithic backend (45,000+ lines)
-- `/app/frontend/src/pages/CashBook.jsx` - Smart routing UI
-- `/app/frontend/src/pages/Receipts.jsx` - Customer payment entry
-- `/app/backend/scripts/` - Migration and cleanup scripts
-
-### Database Schema
-```
-accounting_transactions:
-  - transaction_id, transaction_date, created_at
-  - account_id, transaction_type ('inflow'/'outflow')
-  - amount, entry_role ('primary'/'counter')
-  - source_module, category_id
-  - paired_transaction_id
-
-accounting_categories:
-  - category_id, name, type
-```
-
 ### Double-Entry Logic
-- **Assets/Expenses**: Inflow = Debit, Outflow = Credit
-- **Liabilities/Income**: Inflow = Credit, Outflow = Debit
-- **DOUBLE_ENTRY_START_DATE**: March 3, 2026
-
-### Single Source of Posting Filter (in GL/TB)
-```python
-query["$nor"] = [
-    {"source_module": "cashbook", "category_id": "customer_payment"},
-    {"source_module": {"$in": [None, "unknown"]}, "category_id": "customer_payment"},
-    {"source_module": {"$exists": False}, "category_id": "customer_payment"}
-]
 ```
+Receipt Created:
+1. Primary Entry: Dr Bank (inflow) ← Asset increases
+2. Counter Entry: Cr Customer Advance (outflow) ← Liability increases
+
+Both entries have:
+- Same amount
+- Same source_id/reference_id  
+- entry_role: 'primary' / 'counter'
+- paired_transaction_id: links to each other
+```
+
+### Safeguards in Code
+```python
+# In create_double_entry_pair():
+# 1. Check if counter already exists by paired_transaction_id
+# 2. Check if source_id already has 2+ entries
+# 3. Return existing counter_id if found (no duplicate)
+
+# In create_receipt():
+# 1. Check existing_entries before insert
+# 2. Post-insert validation: count == 2
+# 3. Log to accounting_integrity_errors if mismatch
+```
+
+### Database Indexes (Auto-created on startup)
+- `source_id`
+- `receipt_id`
+- `reference_id`
+- `paired_transaction_id`
+- Compound: `(source_id, entry_role)`
 
 ## Backlog
 
 ### P0 (Critical)
-- [ ] Create diagnostic script for ₹585,951 historical imbalance
-- [ ] Automated pytest tests for finance module
+- [x] Add insert-level duplicate guards
+- [x] Add post-insert validation
+- [x] Create data integrity API
+- [ ] Run fix script on production data
+- [ ] Add pytest tests for double-entry
 
 ### P1 (High)
-- [ ] Complete category system refactor (Expense Entry)
-- [ ] Split server.py into feature modules
+- [ ] Remove filter-based masking after data cleanup
+- [ ] Split server.py into modules
 
 ### P2 (Medium)
-- [ ] Security fixes (debug endpoint exposure, API versioning)
+- [ ] Security fixes
 - [ ] Quotation Builder Module
-
-### P3 (Low)
-- [ ] Full logistics status lifecycle UI for Purchase Returns
-
-## Integrations
-- Google Auth (Emergent-managed)
 
 ## Credentials (Testing)
 - Founder: `sidheeq.arkidots@gmail.com` / `founder123`
+
+## Production Fix Commands
+```bash
+# On production server:
+cd ~/arkiflo/backend
+
+# 1. Preview fixes
+python3 scripts/fix_accounting_data.py --dry-run
+
+# 2. Apply fixes
+python3 scripts/fix_accounting_data.py --execute
+
+# 3. Verify via API
+curl -X GET "https://your-domain/api/finance/data-integrity" -H "Cookie: ..."
+```

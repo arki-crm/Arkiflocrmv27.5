@@ -256,6 +256,7 @@ async def create_double_entry_pair(
     primary_txn_id = primary_txn.get("transaction_id")
     reference_id = primary_txn.get("reference_id") or primary_txn.get("receipt_id") or primary_txn.get("source_id")
     
+    # Check by primary transaction ID
     if primary_txn_id:
         existing_counter = await db.accounting_transactions.find_one({
             "$or": [
@@ -267,6 +268,27 @@ async def create_double_entry_pair(
         if existing_counter:
             logger.warning(f"Counter entry already exists for primary {primary_txn_id}")
             return existing_counter.get("transaction_id")
+    
+    # ADDITIONAL SAFEGUARD: Check by source_id/reference_id
+    if reference_id:
+        existing_by_source = await db.accounting_transactions.count_documents({
+            "$or": [
+                {"source_id": reference_id},
+                {"reference_id": reference_id},
+                {"receipt_id": reference_id}
+            ]
+        })
+        if existing_by_source >= 2:
+            logger.warning(f"Source {reference_id} already has {existing_by_source} entries - skipping counter creation")
+            # Find and return existing counter
+            existing = await db.accounting_transactions.find_one({
+                "$or": [
+                    {"source_id": reference_id},
+                    {"reference_id": reference_id}
+                ],
+                "entry_role": "counter"
+            })
+            return existing.get("transaction_id") if existing else None
     
     # Ensure counter account exists
     await ensure_counter_account_exists(counter_account_info)
@@ -30040,6 +30062,258 @@ async def get_pnl_snapshot(
     }
 
 
+
+# ============================================================================
+# ============ ACCOUNTING DATA INTEGRITY VALIDATION ==========================
+# ============================================================================
+
+@api_router.get("/finance/data-integrity")
+async def check_data_integrity(request: Request):
+    """
+    Validate accounting data integrity.
+    
+    Checks:
+    1. Total Debits = Total Credits (global balance)
+    2. Each source_id has exactly 2 entries (for post-cutoff transactions)
+    3. No orphan counter entries
+    4. No duplicate entries for same source
+    
+    Returns detailed report of any issues found.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_reports"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    all_txns = await db.accounting_transactions.find({}, {"_id": 0}).to_list(100000)
+    
+    # 1. Global balance check
+    total_inflows = sum(t.get("amount", 0) for t in all_txns if t.get("transaction_type") == "inflow")
+    total_outflows = sum(t.get("amount", 0) for t in all_txns if t.get("transaction_type") == "outflow")
+    global_imbalance = total_inflows - total_outflows
+    
+    # 2. Group by source_id
+    from collections import defaultdict
+    by_source = defaultdict(list)
+    no_source = []
+    
+    for t in all_txns:
+        source = t.get("receipt_id") or t.get("source_id") or t.get("reference_id")
+        if source and source != t.get("transaction_id"):
+            by_source[source].append(t)
+        else:
+            no_source.append(t)
+    
+    # 3. Find problems
+    problems = {
+        "missing_counter": [],
+        "orphan_counter": [],
+        "duplicates": [],
+        "unbalanced_pairs": []
+    }
+    
+    cutoff_date = "2026-03-03"
+    
+    for source_id, entries in by_source.items():
+        # Check entry count
+        if len(entries) == 1:
+            entry = entries[0]
+            txn_date = (entry.get("transaction_date") or entry.get("created_at", "2020-01-01"))[:10]
+            if txn_date >= cutoff_date:
+                if entry.get("entry_role") == "counter":
+                    problems["orphan_counter"].append({
+                        "source_id": source_id,
+                        "transaction_id": entry.get("transaction_id"),
+                        "amount": entry.get("amount")
+                    })
+                else:
+                    problems["missing_counter"].append({
+                        "source_id": source_id,
+                        "transaction_id": entry.get("transaction_id"),
+                        "amount": entry.get("amount"),
+                        "source_module": entry.get("source_module")
+                    })
+        elif len(entries) == 2:
+            # Check if amounts match
+            amounts = [e.get("amount", 0) for e in entries]
+            types = [e.get("transaction_type") for e in entries]
+            if amounts[0] != amounts[1]:
+                problems["unbalanced_pairs"].append({
+                    "source_id": source_id,
+                    "amounts": amounts
+                })
+            if types[0] == types[1]:
+                problems["unbalanced_pairs"].append({
+                    "source_id": source_id,
+                    "issue": f"Both entries are {types[0]}"
+                })
+        elif len(entries) > 2:
+            problems["duplicates"].append({
+                "source_id": source_id,
+                "count": len(entries),
+                "transaction_ids": [e.get("transaction_id") for e in entries]
+            })
+    
+    # Calculate severity
+    is_healthy = (
+        abs(global_imbalance) < 1 and 
+        len(problems["missing_counter"]) == 0 and
+        len(problems["duplicates"]) == 0
+    )
+    
+    return {
+        "status": "healthy" if is_healthy else "issues_found",
+        "global_balance": {
+            "total_debits": total_inflows,
+            "total_credits": total_outflows,
+            "imbalance": global_imbalance,
+            "is_balanced": abs(global_imbalance) < 1
+        },
+        "transaction_counts": {
+            "total": len(all_txns),
+            "with_source": sum(len(v) for v in by_source.values()),
+            "without_source": len(no_source),
+            "source_groups": len(by_source)
+        },
+        "problems": {
+            "missing_counter_entries": len(problems["missing_counter"]),
+            "orphan_counter_entries": len(problems["orphan_counter"]),
+            "duplicate_entries": len(problems["duplicates"]),
+            "unbalanced_pairs": len(problems["unbalanced_pairs"])
+        },
+        "details": problems if not is_healthy else None
+    }
+
+
+@api_router.post("/finance/data-integrity/fix")
+async def fix_data_integrity(request: Request):
+    """
+    Fix data integrity issues.
+    
+    Creates missing counter entries for transactions after the cutoff date.
+    Removes duplicate entries (keeps 1 primary + 1 counter).
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Founder can fix data integrity")
+    
+    all_txns = await db.accounting_transactions.find({}, {"_id": 0}).to_list(100000)
+    
+    from collections import defaultdict
+    by_source = defaultdict(list)
+    
+    for t in all_txns:
+        source = t.get("receipt_id") or t.get("source_id") or t.get("reference_id")
+        if source and source != t.get("transaction_id"):
+            by_source[source].append(t)
+    
+    cutoff_date = "2026-03-03"
+    fixes_applied = 0
+    fix_log = []
+    
+    for source_id, entries in by_source.items():
+        if len(entries) == 1:
+            entry = entries[0]
+            txn_date = (entry.get("transaction_date") or entry.get("created_at", "2020-01-01"))[:10]
+            
+            # Only fix post-cutoff transactions
+            if txn_date >= cutoff_date and entry.get("entry_role") != "counter":
+                # Determine counter account based on category
+                category_id = entry.get("category_id", "")
+                if category_id == "customer_payment":
+                    counter_account = "acc_customer_advance"
+                elif category_id == "liability_settlement":
+                    counter_account = "acc_accounts_payable"
+                elif entry.get("transaction_type") == "outflow":
+                    counter_account = "acc_general_expense"
+                else:
+                    counter_account = "acc_general_income"
+                
+                # Create counter entry
+                counter_type = "outflow" if entry.get("transaction_type") == "inflow" else "inflow"
+                counter_txn = {
+                    "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+                    "transaction_date": entry.get("transaction_date"),
+                    "transaction_type": counter_type,
+                    "amount": entry.get("amount"),
+                    "mode": "double_entry",
+                    "category_id": entry.get("category_id"),
+                    "account_id": counter_account,
+                    "project_id": entry.get("project_id"),
+                    "remarks": f"[DE-FIX] Counter for {entry.get('remarks', '')}",
+                    "party_id": entry.get("party_id"),
+                    "party_type": entry.get("party_type"),
+                    "is_double_entry": True,
+                    "paired_transaction_id": entry.get("transaction_id"),
+                    "reference_id": source_id,
+                    "source_id": source_id,
+                    "entry_role": "counter",
+                    "source_module": entry.get("source_module", "data_fix"),
+                    "is_system_generated": True,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "created_by": user.user_id,
+                    "created_by_name": user.name
+                }
+                
+                await db.accounting_transactions.insert_one(counter_txn)
+                
+                # Update primary entry
+                await db.accounting_transactions.update_one(
+                    {"transaction_id": entry.get("transaction_id")},
+                    {"$set": {
+                        "entry_role": "primary",
+                        "is_double_entry": True,
+                        "paired_transaction_id": counter_txn["transaction_id"]
+                    }}
+                )
+                
+                fixes_applied += 1
+                fix_log.append({
+                    "action": "created_counter",
+                    "source_id": source_id,
+                    "amount": entry.get("amount")
+                })
+        
+        elif len(entries) > 2:
+            # Remove duplicates - keep first primary and first counter
+            primary = next((e for e in entries if e.get("entry_role") == "primary"), entries[0])
+            counter = next((e for e in entries if e.get("entry_role") == "counter"), None)
+            
+            keep_ids = {primary.get("transaction_id")}
+            if counter:
+                keep_ids.add(counter.get("transaction_id"))
+            
+            for e in entries:
+                if e.get("transaction_id") not in keep_ids:
+                    await db.accounting_transactions.delete_one({"transaction_id": e.get("transaction_id")})
+                    fixes_applied += 1
+                    fix_log.append({
+                        "action": "removed_duplicate",
+                        "source_id": source_id,
+                        "transaction_id": e.get("transaction_id")
+                    })
+    
+    # Log the fix
+    await db.accounting_audit_log.insert_one({
+        "action": "data_integrity_fix",
+        "fixes_applied": fixes_applied,
+        "fix_log": fix_log,
+        "executed_at": datetime.now(timezone.utc).isoformat(),
+        "executed_by": user.user_id,
+        "executed_by_name": user.name
+    })
+    
+    return {
+        "success": True,
+        "fixes_applied": fixes_applied,
+        "fix_log": fix_log[:50] if len(fix_log) > 50 else fix_log  # Limit response size
+    }
+
+
+
 # ============================================================================
 # ============ TRIAL BALANCE REPORT ==========================================
 # ============================================================================
@@ -30171,11 +30445,12 @@ async def get_trial_balance(
     # Aggregation pipeline to sum debits and credits by account
     # In this system: inflow = DEBIT (money coming in), outflow = CREDIT (money going out)
     # 
-    # SINGLE SOURCE OF POSTING: Exclude cashbook customer_payment entries
-    # to prevent duplicate entries from inflating totals
+    # LEGACY DATA FILTER: This filter excludes known duplicate entries from historical data
+    # where both cashbook and receipts module created entries for the same transaction.
+    # After running /api/finance/data-integrity/fix, this filter can be removed.
+    # The proper fix is at the insert level - see create_receipt() and create_double_entry_pair()
     pipeline = [
         # FIX 3: Filter by transaction_date (with fallback to created_at for legacy data)
-        # Also exclude duplicate cashbook customer_payment entries
         {"$match": {
             "$and": [
                 {"$or": [
@@ -30185,8 +30460,8 @@ async def get_trial_balance(
                         "created_at": {"$gte": start_iso, "$lte": end_iso}
                     }
                 ]},
-                # Exclude duplicate customer_payment entries - receipts module is authoritative
-                # Covers: explicit cashbook, legacy entries with missing/unknown source_module
+                # LEGACY: Exclude duplicate customer_payment entries from historical data
+                # This filter will be unnecessary once historical data is cleaned
                 {"$nor": [
                     {"source_module": "cashbook", "category_id": "customer_payment"},
                     {"source_module": {"$in": [None, "unknown"]}, "category_id": "customer_payment"},
@@ -33264,6 +33539,29 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
                 user_id=user.user_id,
                 user_name=user.name
             )
+            
+            # ============ POST-INSERT VALIDATION ============
+            # Verify exactly 2 entries were created (1 primary + 1 counter)
+            entry_count = await db.accounting_transactions.count_documents({
+                "$or": [
+                    {"receipt_id": receipt_doc["receipt_id"]},
+                    {"reference_id": receipt_doc["receipt_id"]},
+                    {"source_id": receipt_doc["receipt_id"]}
+                ]
+            })
+            
+            if entry_count != 2:
+                logger.error(f"DATA INTEGRITY ERROR: Receipt {receipt_doc['receipt_id']} has {entry_count} entries (expected 2)")
+                # Log for investigation but don't fail the request
+                await db.accounting_integrity_errors.insert_one({
+                    "error_type": "entry_count_mismatch",
+                    "source_id": receipt_doc["receipt_id"],
+                    "expected_count": 2,
+                    "actual_count": entry_count,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+            else:
+                logger.info(f"Receipt {receipt_doc['receipt_id']}: Verified 2 entries created (Dr Bank, Cr Customer Advance)")
     
     # Update account balance
     await db.accounting_accounts.update_one(
@@ -38952,6 +39250,27 @@ async def start_backup_scheduler():
     )
     backup_scheduler.start()
     logger.info("Backup scheduler started - daily backups at midnight")
+
+
+@app.on_event("startup")
+async def ensure_accounting_indexes():
+    """Create indexes to ensure data integrity in accounting transactions"""
+    try:
+        # Index to quickly find entries by source_id
+        await db.accounting_transactions.create_index("source_id")
+        await db.accounting_transactions.create_index("receipt_id")
+        await db.accounting_transactions.create_index("reference_id")
+        await db.accounting_transactions.create_index("paired_transaction_id")
+        
+        # Compound index for duplicate detection
+        await db.accounting_transactions.create_index([
+            ("source_id", 1),
+            ("entry_role", 1)
+        ])
+        
+        logger.info("✓ Accounting transaction indexes created/verified")
+    except Exception as e:
+        logger.error(f"Failed to create accounting indexes: {e}")
 
 
 @app.on_event("shutdown")

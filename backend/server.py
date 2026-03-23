@@ -32378,39 +32378,74 @@ async def export_general_ledger(
     start_iso = start.isoformat()
     end_iso = end.isoformat()
     
-    # Get account details (check both collections)
-    account = await db.finance_accounts.find_one({"account_id": account_id}, {"_id": 0})
-    if not account:
-        account = await db.accounting_accounts.find_one({"account_id": account_id}, {"_id": 0})
-    
-    if not account:
-        category = await db.accounting_categories.find_one({"category_id": account_id}, {"_id": 0})
-        if category:
-            account_name = category.get("name", account_id)
-            opening_balance_from_master = 0
-        else:
-            raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
+    # ============ HANDLE "all" ACCOUNTS ============
+    if account_id == "all":
+        # Export all accounts combined
+        account_name = "All Accounts Combined"
+        opening_balance_from_master = 0
+        
+        # Get all transactions in period (with duplicate filter)
+        query = {
+            "created_at": {"$gte": start_iso, "$lte": end_iso},
+            "$nor": [
+                {"source_module": "cashbook", "category_id": "customer_payment"},
+                {"source_module": {"$in": [None, "unknown"]}, "category_id": "customer_payment"},
+                {"source_module": {"$exists": False}, "category_id": "customer_payment"}
+            ]
+        }
+        transactions = await db.accounting_transactions.find(query, {"_id": 0}).to_list(100000)
+        transactions.sort(key=lambda x: (x.get("created_at", ""), x.get("transaction_id", "")))
+        
+        # Calculate opening balance from before period
+        query_before = {
+            "created_at": {"$lt": start_iso},
+            "$nor": [
+                {"source_module": "cashbook", "category_id": "customer_payment"},
+                {"source_module": {"$in": [None, "unknown"]}, "category_id": "customer_payment"},
+                {"source_module": {"$exists": False}, "category_id": "customer_payment"}
+            ]
+        }
+        transactions_before = await db.accounting_transactions.find(
+            query_before, {"_id": 0, "transaction_type": 1, "amount": 1}
+        ).to_list(100000)
+        
+        inflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "inflow")
+        outflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "outflow")
+        calculated_opening = inflows_before - outflows_before
     else:
-        account_name = account.get("account_name") or account.get("name", account_id)
-        opening_balance_from_master = account.get("opening_balance", 0) or 0
-    
-    # Calculate opening balance
-    transactions_before = await db.accounting_transactions.find({
-        "account_id": account_id,
-        "created_at": {"$lt": start_iso}
-    }, {"_id": 0, "transaction_type": 1, "amount": 1}).to_list(100000)
-    
-    inflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "inflow")
-    outflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "outflow")
-    calculated_opening = opening_balance_from_master + inflows_before - outflows_before
-    
-    # Get transactions within period
-    transactions = await db.accounting_transactions.find({
-        "account_id": account_id,
-        "created_at": {"$gte": start_iso, "$lte": end_iso}
-    }, {"_id": 0}).to_list(50000)
-    
-    transactions.sort(key=lambda x: (x.get("created_at", ""), x.get("transaction_id", "")))
+        # Get specific account details (check both collections)
+        account = await db.finance_accounts.find_one({"account_id": account_id}, {"_id": 0})
+        if not account:
+            account = await db.accounting_accounts.find_one({"account_id": account_id}, {"_id": 0})
+        
+        if not account:
+            category = await db.accounting_categories.find_one({"category_id": account_id}, {"_id": 0})
+            if category:
+                account_name = category.get("name", account_id)
+                opening_balance_from_master = 0
+            else:
+                raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
+        else:
+            account_name = account.get("account_name") or account.get("name", account_id)
+            opening_balance_from_master = account.get("opening_balance", 0) or 0
+        
+        # Calculate opening balance
+        transactions_before = await db.accounting_transactions.find({
+            "account_id": account_id,
+            "created_at": {"$lt": start_iso}
+        }, {"_id": 0, "transaction_type": 1, "amount": 1}).to_list(100000)
+        
+        inflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "inflow")
+        outflows_before = sum(t.get("amount", 0) for t in transactions_before if t.get("transaction_type") == "outflow")
+        calculated_opening = opening_balance_from_master + inflows_before - outflows_before
+        
+        # Get transactions within period
+        transactions = await db.accounting_transactions.find({
+            "account_id": account_id,
+            "created_at": {"$gte": start_iso, "$lte": end_iso}
+        }, {"_id": 0}).to_list(50000)
+        
+        transactions.sort(key=lambda x: (x.get("created_at", ""), x.get("transaction_id", "")))
     
     # Build export rows
     rows = []

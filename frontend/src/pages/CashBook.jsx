@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -6,6 +7,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
+import { Alert, AlertDescription } from '../components/ui/alert';
 import { 
   Select,
   SelectContent,
@@ -44,7 +46,9 @@ import {
   X,
   FileText,
   Image,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Info,
+  ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, getLocalDateString, formatDateLocal, formatTimeLocal } from '../lib/utils';
@@ -68,13 +72,20 @@ const THRESHOLDS = {
 };
 
 // Static Income Categories for Money In
+// NOTE: Customer payments should go through Receipts module, not Cashbook
 const INCOME_CATEGORIES = [
-  { category_id: 'income_project_payment', name: 'Project Payment' },
-  { category_id: 'income_advance_booking', name: 'Advance / Booking Amount' },
-  { category_id: 'income_design_fee', name: 'Design Fee' },
-  { category_id: 'income_refund_reversal', name: 'Refund Reversal' },
-  { category_id: 'income_other', name: 'Other Income' }
+  { category_id: 'income_refund_reversal', name: 'Refund Reversal (from vendor)' },
+  { category_id: 'income_other', name: 'Other Income (non-customer)' }
 ];
+
+// Categories that should be redirected to other modules
+const REDIRECT_CATEGORIES = {
+  'customer_payment': { module: 'Receipts', path: '/receipts', message: 'Customer payments must be recorded through the Receipts module for proper double-entry accounting.' },
+  'customer_advance': { module: 'Receipts', path: '/receipts', message: 'Customer advances must be recorded through the Receipts module.' },
+  'income_project_payment': { module: 'Receipts', path: '/receipts', message: 'Project payments from customers should be recorded as Receipts.' },
+  'income_advance_booking': { module: 'Receipts', path: '/receipts', message: 'Booking amounts from customers should be recorded as Receipts.' },
+  'income_design_fee': { module: 'Receipts', path: '/receipts', message: 'Design fees from customers should be recorded as Receipts.' },
+};
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', {
@@ -92,6 +103,7 @@ const formatTime = formatTimeLocal;
 
 const CashBook = () => {
   const { user, hasPermission } = useAuth();
+  const navigate = useNavigate();
   // P2-FIX: Use getLocalDateString instead of toISOString to get correct local date
   const [selectedDate, setSelectedDate] = useState(getLocalDateString());
   const [transactions, setTransactions] = useState([]);
@@ -109,6 +121,7 @@ const CashBook = () => {
   const [showNeedsReviewOnly, setShowNeedsReviewOnly] = useState(false);
   const [viewTransaction, setViewTransaction] = useState(null); // For viewing transaction details with attachments
   const [pendingFiles, setPendingFiles] = useState([]); // Files to upload after transaction creation
+  const [showCustomerPaymentRedirect, setShowCustomerPaymentRedirect] = useState(false); // Show redirect dialog for customer payments
   
   // Self-transfer form - P2-FIX: Use getLocalDateString
   const [transferForm, setTransferForm] = useState({
@@ -635,6 +648,30 @@ const CashBook = () => {
                     </Button>
                   </div>
 
+                  {/* Customer Payment Redirect Notice for Money In */}
+                  {newTxn.transaction_type === 'inflow' && (
+                    <Alert className="bg-blue-50 border-blue-200">
+                      <Info className="h-4 w-4 text-blue-600" />
+                      <AlertDescription className="text-blue-800">
+                        <strong>Receiving payment from a customer?</strong>
+                        <p className="text-sm mt-1">
+                          Customer payments should be recorded through the <strong>Receipts</strong> module 
+                          for proper double-entry accounting and project tracking.
+                        </p>
+                        <Button 
+                          variant="link" 
+                          className="p-0 h-auto text-blue-600 font-medium mt-2"
+                          onClick={() => {
+                            setIsAddDialogOpen(false);
+                            navigate('/receipts');
+                          }}
+                        >
+                          Go to Receipts <ExternalLink className="w-3 h-3 ml-1" />
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   {/* Amount */}
                   <div>
                     <Label htmlFor="amount">Amount (₹) *</Label>
@@ -697,7 +734,8 @@ const CashBook = () => {
                       </SelectTrigger>
                       <SelectContent>
                         {newTxn.transaction_type === 'inflow' ? (
-                          // Show Income Categories for Money In
+                          // Show only non-customer income categories
+                          // Customer payments should go through Receipts module
                           INCOME_CATEGORIES.map(cat => (
                             <SelectItem key={cat.category_id} value={cat.category_id}>{cat.name}</SelectItem>
                           ))
@@ -709,6 +747,11 @@ const CashBook = () => {
                         )}
                       </SelectContent>
                     </Select>
+                    {newTxn.transaction_type === 'inflow' && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Note: Customer receipts (project payments, advances, design fees) should be recorded in the Receipts module.
+                      </p>
+                    )}
                   </div>
 
                   {/* Project (Optional) */}

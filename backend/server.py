@@ -24581,11 +24581,18 @@ async def get_project_finance_detail(project_id: str, request: Request):
     # ============================================================
     
     # 1. TOTAL RECEIVED: From finance_receipts (status = active)
-    project_receipts = await db.finance_receipts.find(
+    # For totals, exclude cancelled
+    project_receipts_active = await db.finance_receipts.find(
         {"project_id": project_id, "status": {"$ne": "cancelled"}},
         {"_id": 0, "amount": 1}
     ).to_list(1000)
-    total_inflow = sum(r.get("amount", 0) for r in project_receipts)
+    total_inflow = sum(r.get("amount", 0) for r in project_receipts_active)
+    
+    # For transactions display, get ALL receipts including cancelled (for audit trail)
+    project_receipts_all = await db.finance_receipts.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).to_list(1000)
     
     # 2. ACTUAL COST: Multiple sources for complete expense tracking
     # 2a. Purchase invoices from execution_ledger (grand_total = amount with GST)
@@ -24609,7 +24616,7 @@ async def get_project_finance_detail(project_id: str, request: Request):
     ).to_list(1000)
     recorded_expense_total = sum(e.get("amount", 0) for e in recorded_expenses)
     
-    # 2d. CASHBOOK OUTFLOWS - Direct project expenses from cashbook
+    # 2d. CASHBOOK OUTFLOWS - Direct project expenses from cashbook (for totals)
     # These are expenses tagged to project via cashbook but NOT through expense_requests
     # Exclude entries that came FROM expense_requests to avoid double counting
     cashbook_expenses = await db.accounting_transactions.find({
@@ -24627,6 +24634,13 @@ async def get_project_finance_detail(project_id: str, request: Request):
         "is_cashbook_entry": {"$ne": False}
     }, {"_id": 0}).to_list(1000)
     cashbook_expense_total = sum(e.get("amount", 0) for e in cashbook_expenses)
+    
+    # 2e. ALL PROJECT TRANSACTIONS - For Recent Transactions display
+    # Get ALL accounting_transactions linked to this project (inflows, outflows, reversals)
+    # This ensures complete audit trail visibility
+    all_project_transactions = await db.accounting_transactions.find({
+        "project_id": project_id
+    }, {"_id": 0}).to_list(1000)
     
     # Enrich cashbook expenses with account names for Recent Transactions display
     account_cache = {}
@@ -24763,17 +24777,70 @@ async def get_project_finance_detail(project_id: str, request: Request):
             "source": "cashbook"
         })
     
-    # Add receipts as inflow transactions
-    for r in project_receipts:
+    # Add ALL receipts (including cancelled) as transactions for complete audit trail
+    for r in project_receipts_all:
+        status = r.get("status", "active")
+        is_cancelled = status == "cancelled"
+        
         transactions.append({
             "transaction_id": r.get("receipt_id", ""),
             "transaction_type": "inflow",
             "amount": r.get("amount", 0),
-            "description": f"Receipt from customer",
+            "description": f"Receipt from customer{' [CANCELLED]' if is_cancelled else ''}",
             "category_name": "Customer Receipt",
             "account_name": "Customer Payment",
             "created_at": r.get("payment_date") or r.get("created_at", ""),
-            "source": "finance_receipts"
+            "source": "finance_receipts",
+            "status": status,
+            "is_cancelled": is_cancelled
+        })
+    
+    # Add ALL accounting_transactions linked to this project
+    # This includes: reversals, cancellations, double-entry pairs, and any other entries
+    # Skip entries already added from other sources to avoid duplicates
+    added_txn_ids = {t.get("transaction_id") for t in transactions}
+    
+    for txn in all_project_transactions:
+        txn_id = txn.get("transaction_id", "")
+        
+        # Skip if already added from another source
+        if txn_id in added_txn_ids:
+            continue
+        
+        # Get category name
+        cat_id = txn.get("category_id")
+        cat_name = "General"
+        if cat_id:
+            cat_doc = await db.accounting_categories.find_one({"category_id": cat_id}, {"_id": 0, "name": 1})
+            if cat_doc:
+                cat_name = cat_doc.get("name", cat_id)
+        
+        # Determine description based on source_module and entry_role
+        source_module = txn.get("source_module", "unknown")
+        entry_role = txn.get("entry_role", "primary")
+        remarks = txn.get("remarks", "")
+        
+        if entry_role == "counter":
+            desc = f"[DE Counter] {remarks}" if remarks else f"[DE Counter] {source_module}"
+        elif "cancel" in remarks.lower() or "reversal" in remarks.lower():
+            desc = f"[Reversal] {remarks}"
+        else:
+            desc = remarks or f"Transaction from {source_module}"
+        
+        transactions.append({
+            "transaction_id": txn_id,
+            "transaction_type": txn.get("transaction_type", "outflow"),
+            "amount": txn.get("amount", 0),
+            "description": desc,
+            "category_name": cat_name,
+            "category_id": cat_id,
+            "account_name": txn.get("account_name", ""),
+            "account_id": txn.get("account_id"),
+            "created_at": txn.get("transaction_date") or txn.get("created_at", ""),
+            "source": source_module,
+            "entry_role": entry_role,
+            "is_double_entry": txn.get("is_double_entry", False),
+            "paired_transaction_id": txn.get("paired_transaction_id")
         })
     
     # Sort by created_at descending

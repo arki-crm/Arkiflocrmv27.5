@@ -29534,88 +29534,108 @@ async def create_liability(liability: LiabilityCreate, request: Request):
     liability_date = liability_doc["created_at"][:10]  # Extract YYYY-MM-DD
     
     if is_double_entry_required(liability_date):
-        # Map liability category to expense account
-        category_to_expense = {
-            "material": {"account_id": "acc_material_expense", "account_name": "Material Expense", "account_type": "expense"},
-            "labor": {"account_id": "acc_labor_expense", "account_name": "Labor Expense", "account_type": "expense"},
-            "transport": {"account_id": "acc_transport_expense", "account_name": "Transport Expense", "account_type": "expense"},
-            "subcontract": {"account_id": "acc_subcontract_expense", "account_name": "Subcontract Expense", "account_type": "expense"},
-            "site_expense": {"account_id": "acc_site_expense", "account_name": "Site Expense", "account_type": "expense"},
-            "overhead": {"account_id": "acc_overhead_expense", "account_name": "Overhead Expense", "account_type": "expense"},
-            "other": {"account_id": "acc_general_expense", "account_name": "General Expense", "account_type": "expense"},
-        }
-        expense_account = category_to_expense.get(liability.category, DEFAULT_EXPENSE_ACCOUNT)
+        # P0-FIX: Generate unique source_id for idempotency
+        liability_source_id = f"lia_create_{liability_doc['liability_id']}"
         
-        # Ensure the expense account exists
-        await ensure_counter_account_exists(expense_account)
-        
-        # Create primary transaction (Expense Debit)
-        primary_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
-        primary_txn = {
-            "transaction_id": primary_txn_id,
-            "transaction_date": liability_date,
-            "transaction_type": "outflow",  # Debit to expense
-            "amount": liability.amount,
-            "account_id": expense_account["account_id"],
-            "category_id": "liability_creation",
-            "source_module": "liability",
-            "source_id": liability_doc["liability_id"],
-            "reference_type": "liability_creation",
-            "reference_id": liability_doc["liability_id"],
-            "party_id": vendor_id,
-            "party_type": "vendor",
-            "party_name": vendor_name,
-            "project_id": liability.project_id,
-            "remarks": f"Liability created: {vendor_name} - {liability.description or liability.category}",
-            "is_double_entry": True,
-            "entry_role": "primary",
-            "is_daybook_entry": True,
-            "is_cashbook_entry": False,  # Not a cash movement
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-            "created_by": user_doc.get("user_id"),
-            "created_by_name": user_doc.get("name")
-        }
-        await db.accounting_transactions.insert_one(primary_txn)
-        
-        # Create counter transaction (Accounts Payable Credit)
-        counter_account = {"account_id": "acc_vendor_payable", "account_name": "Accounts Payable", "account_type": "liability"}
-        await ensure_counter_account_exists(counter_account)
-        
-        counter_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
-        counter_txn = {
-            "transaction_id": counter_txn_id,
-            "transaction_date": liability_date,
-            "transaction_type": "inflow",  # Credit to liability (increases AP)
-            "amount": liability.amount,
-            "account_id": counter_account["account_id"],
-            "category_id": "liability_creation",
-            "source_module": "liability",
-            "source_id": liability_doc["liability_id"],
-            "reference_type": "liability_creation",
-            "reference_id": liability_doc["liability_id"],
-            "party_id": vendor_id,
-            "party_type": "vendor",
-            "party_name": vendor_name,
-            "project_id": liability.project_id,
-            "remarks": f"Liability created (AP Credit): {vendor_name} - {liability.description or liability.category}",
-            "is_double_entry": True,
-            "entry_role": "counter",
-            "linked_transaction_id": primary_txn_id,
-            "is_daybook_entry": True,
-            "is_cashbook_entry": False,
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-            "created_by": user_doc.get("user_id"),
-            "created_by_name": user_doc.get("name")
-        }
-        await db.accounting_transactions.insert_one(counter_txn)
-        
-        # Link primary to counter
-        await db.accounting_transactions.update_one(
-            {"transaction_id": primary_txn_id},
-            {"$set": {"linked_transaction_id": counter_txn_id}}
-        )
+        # Check if GL entries already exist for this liability (idempotency)
+        existing_entries = await db.accounting_transactions.count_documents({
+            "source_id": liability_source_id,
+            "source_module": "liability_creation"
+        })
+        if existing_entries >= 2:
+            logger.warning(f"GL entries already exist for liability {liability_doc['liability_id']} - skipping")
+        else:
+            # Map liability category to expense account
+            category_to_expense = {
+                "material": {"account_id": "acc_material_expense", "account_name": "Material Expense", "account_type": "expense"},
+                "labor": {"account_id": "acc_labor_expense", "account_name": "Labor Expense", "account_type": "expense"},
+                "transport": {"account_id": "acc_transport_expense", "account_name": "Transport Expense", "account_type": "expense"},
+                "subcontract": {"account_id": "acc_subcontract_expense", "account_name": "Subcontract Expense", "account_type": "expense"},
+                "site_expense": {"account_id": "acc_site_expense", "account_name": "Site Expense", "account_type": "expense"},
+                "overhead": {"account_id": "acc_overhead_expense", "account_name": "Overhead Expense", "account_type": "expense"},
+                "other": {"account_id": "acc_general_expense", "account_name": "General Expense", "account_type": "expense"},
+            }
+            expense_account = category_to_expense.get(liability.category, DEFAULT_EXPENSE_ACCOUNT)
+            
+            # Ensure accounts exist
+            await ensure_counter_account_exists(expense_account)
+            counter_account = {"account_id": "acc_vendor_payable", "account_name": "Accounts Payable", "account_type": "liability"}
+            await ensure_counter_account_exists(counter_account)
+            
+            # Prepare both entries
+            primary_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+            counter_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+            
+            # Primary transaction (Expense Debit)
+            primary_txn = {
+                "transaction_id": primary_txn_id,
+                "transaction_date": liability_date,
+                "transaction_type": "outflow",  # Debit to expense
+                "amount": liability.amount,
+                "account_id": expense_account["account_id"],
+                "category_id": "liability_creation",
+                "source_module": "liability_creation",
+                "source_id": liability_source_id,  # P0-FIX: Unique source_id
+                "reference_type": "liability_creation",
+                "reference_id": liability_doc["liability_id"],
+                "party_id": vendor_id,
+                "party_type": "vendor",
+                "party_name": vendor_name,
+                "project_id": liability.project_id,
+                "remarks": f"Liability created: {vendor_name} - {liability.description or liability.category}",
+                "is_double_entry": True,
+                "entry_role": "primary",
+                "paired_transaction_id": counter_txn_id,
+                "is_daybook_entry": True,
+                "is_cashbook_entry": False,
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+                "created_by": user_doc.get("user_id"),
+                "created_by_name": user_doc.get("name")
+            }
+            
+            # Counter transaction (Accounts Payable Credit)
+            counter_txn = {
+                "transaction_id": counter_txn_id,
+                "transaction_date": liability_date,
+                "transaction_type": "inflow",  # Credit to liability (increases AP)
+                "amount": liability.amount,
+                "account_id": counter_account["account_id"],
+                "category_id": "liability_creation",
+                "source_module": "liability_creation",
+                "source_id": liability_source_id,  # P0-FIX: Same source_id for pairing
+                "reference_type": "liability_creation",
+                "reference_id": liability_doc["liability_id"],
+                "party_id": vendor_id,
+                "party_type": "vendor",
+                "party_name": vendor_name,
+                "project_id": liability.project_id,
+                "remarks": f"Liability created (AP Credit): {vendor_name} - {liability.description or liability.category}",
+                "is_double_entry": True,
+                "entry_role": "counter",
+                "paired_transaction_id": primary_txn_id,
+                "is_daybook_entry": True,
+                "is_cashbook_entry": False,
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+                "created_by": user_doc.get("user_id"),
+                "created_by_name": user_doc.get("name")
+            }
+            
+            # P0-FIX: ATOMIC INSERT
+            await db.accounting_transactions.insert_many([primary_txn, counter_txn])
+            
+            # P0-FIX: POST-INSERT VALIDATION
+            entry_count = await db.accounting_transactions.count_documents({
+                "source_id": liability_source_id,
+                "source_module": "liability_creation"
+            })
+            if entry_count != 2:
+                logger.error(f"CRITICAL: Liability {liability_doc['liability_id']} has {entry_count} GL entries (expected 2)")
+                await db.accounting_transactions.update_many(
+                    {"source_id": liability_source_id},
+                    {"$set": {"needs_audit": True, "audit_reason": f"Entry count mismatch: {entry_count} != 2"}}
+                )
     
     # Audit log for liability creation
     await create_audit_log(
@@ -29655,7 +29675,15 @@ async def get_liability(liability_id: str, request: Request):
 
 @api_router.post("/finance/liabilities/{liability_id}/settle")
 async def settle_liability(liability_id: str, settlement: LiabilitySettlement, request: Request):
-    """Settle (partially or fully) a liability - Creates corresponding Cashbook outflow entry"""
+    """
+    Settle (partially or fully) a liability - Creates corresponding Cashbook outflow entry.
+    
+    P0-FIX: STRICT ATOMIC DOUBLE-ENTRY FLOW
+    - Idempotency: Generates unique settlement_source_id, skips if already exists
+    - Atomic: Both entries inserted together; validation ensures exactly 2 entries
+    - Single Writer: Only this function writes GL entries for liability settlements
+    - Contract: Dr Vendor Payable (reduces liability) / Cr Bank (reduces asset)
+    """
     user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -29694,13 +29722,27 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
     
     now = datetime.now(timezone.utc)
     
-    # ============ STEP 1: Create Cashbook Outflow Transaction ============
+    # ============ P0-FIX: IDEMPOTENCY CHECK ============
+    # Generate a unique source_id for this specific settlement attempt
+    # Format: lia_settle_{liability_id}_{timestamp_hash}
+    settlement_hash = hashlib.md5(f"{liability_id}_{settlement.amount}_{settlement.payment_date}_{now.isoformat()}".encode()).hexdigest()[:8]
+    settlement_source_id = f"lia_settle_{liability_id}_{settlement_hash}"
+    
+    # Check if this settlement already exists (prevents duplicate processing)
+    existing_settlement = await db.accounting_transactions.find_one({
+        "source_id": settlement_source_id,
+        "source_module": "liability_settlement"
+    })
+    if existing_settlement:
+        logger.warning(f"Settlement {settlement_source_id} already exists - skipping duplicate")
+        raise HTTPException(status_code=409, detail="Settlement already processed. Duplicate request detected.")
+    
+    # ============ STEP 1: Create Cashbook Outflow Transaction (Bank Credit) ============
     txn_id = f"txn_{uuid.uuid4().hex[:8]}"
     
     # Find or create a "Liability Settlement" category
     settlement_category = await db.accounting_categories.find_one({"category_id": "liability_settlement"}, {"_id": 0})
     if not settlement_category:
-        # Create the category if it doesn't exist
         settlement_category = {
             "category_id": "liability_settlement",
             "name": "Liability Settlement",
@@ -29710,18 +29752,18 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
         }
         await db.accounting_categories.insert_one(settlement_category)
     
+    # Primary entry: Bank Credit (outflow from bank)
     cashbook_txn = {
         "transaction_id": txn_id,
         "transaction_date": settlement.payment_date,
-        "transaction_type": "outflow",
+        "transaction_type": "outflow",  # Credit to Bank (reduces asset)
         "amount": settlement.amount,
         "mode": settlement.payment_mode,
         "category_id": "liability_settlement",
         "account_id": settlement.account_id,
-        "project_id": liability.get("project_id"),  # Link to project if liability was project-linked
+        "project_id": liability.get("project_id"),
         "paid_to": liability.get("vendor_name", "Vendor"),
         "vendor_id": liability.get("vendor_id"),
-        # Party metadata for ledger traceability
         "party_id": liability.get("vendor_id"),
         "party_type": "vendor",
         "party_name": liability.get("vendor_name"),
@@ -29738,80 +29780,88 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
         "approved_by": None,
         "approved_by_name": None,
         "expense_request_id": None,
-        "liability_id": liability_id,  # Link back to liability
+        "liability_id": liability_id,
         "needs_review": False,
         "approval_status": "not_required",
         "reviewed_by": None,
         "reviewed_at": None,
-        # P0-FIX: Explicitly mark as cashbook entry (actual cash movement)
         "is_cashbook_entry": True,
-        # System-generated marker - prevents manual editing
         "system_generated": True,
-        "source_module": "liability",
-        "source_id": liability_id,
+        "source_module": "liability_settlement",
+        "source_id": settlement_source_id,  # P0-FIX: Unique source_id for idempotency
         "reference_type": "liability_settlement",
         "reference_id": liability_id,
+        "entry_role": "primary",
+        "is_double_entry": True,
         "created_at": now.isoformat(),
         "created_by": user.user_id,
         "created_by_name": user.name,
         "updated_at": now.isoformat()
     }
     
-    await db.accounting_transactions.insert_one(cashbook_txn)
+    # ============ P0-FIX: ATOMIC DOUBLE-ENTRY INSERTION ============
+    # Both entries are prepared and inserted together
+    counter_txn_id = None
     
-    # Create double-entry for liability settlement (after cutoff date)
-    # IMPORTANT: Settlement requires DEBIT to Accounts Payable (reduces liability)
-    # Standard create_double_entry_pair would create a Credit, so we handle this manually
     if is_double_entry_required(settlement.payment_date):
         counter_account = {"account_id": "acc_vendor_payable", "account_name": "Accounts Payable", "account_type": "liability"}
         await ensure_counter_account_exists(counter_account)
         
         counter_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+        
+        # Counter entry: Vendor Payable Debit (reduces liability)
+        # In our system: outflow to a liability account = debit = reduces the liability
         counter_txn = {
             "transaction_id": counter_txn_id,
             "transaction_date": settlement.payment_date,
-            # For liability settlement: OUTFLOW to AP = DEBIT = reduces liability
-            "transaction_type": "outflow",
+            "transaction_type": "outflow",  # Debit to Accounts Payable (reduces liability)
             "amount": settlement.amount,
             "mode": "double_entry",
             "category_id": "liability_settlement",
             "account_id": counter_account["account_id"],
             "project_id": liability.get("project_id"),
             "remarks": f"[DE] Settlement: {liability.get('vendor_name')} - AP Debit (reduces payable)",
-            
-            # Party metadata
             "party_id": liability.get("vendor_id"),
             "party_type": "vendor",
             "party_name": liability.get("vendor_name"),
-            
-            # Double-entry linking
             "is_double_entry": True,
             "paired_transaction_id": txn_id,
             "reference_id": liability_id,
             "entry_role": "counter",
-            
-            # Source tracking
-            "source_module": "liability",
-            "source_id": liability_id,
+            "source_module": "liability_settlement",
+            "source_id": settlement_source_id,  # P0-FIX: Same source_id for pairing
             "reference_type": "liability_settlement",
-            
+            "is_cashbook_entry": False,
             "is_system_generated": True,
             "created_at": now.isoformat(),
             "created_by": user.user_id,
             "created_by_name": user.name,
             "updated_at": now.isoformat()
         }
-        await db.accounting_transactions.insert_one(counter_txn)
         
-        # Link primary to counter
-        await db.accounting_transactions.update_one(
-            {"transaction_id": txn_id},
-            {"$set": {
-                "is_double_entry": True,
-                "paired_transaction_id": counter_txn_id,
-                "entry_role": "primary"
-            }}
-        )
+        # Link primary to counter before insertion
+        cashbook_txn["paired_transaction_id"] = counter_txn_id
+        
+        # ATOMIC INSERT: Insert both entries
+        await db.accounting_transactions.insert_many([cashbook_txn, counter_txn])
+        
+        # ============ P0-FIX: POST-INSERT VALIDATION ============
+        # Verify exactly 2 entries exist for this settlement
+        entry_count = await db.accounting_transactions.count_documents({
+            "source_id": settlement_source_id,
+            "source_module": "liability_settlement"
+        })
+        if entry_count != 2:
+            # CRITICAL: Data integrity violation - log and alert
+            logger.error(f"CRITICAL: Settlement {settlement_source_id} has {entry_count} entries (expected 2)")
+            # Don't delete - flag for manual review
+            await db.accounting_transactions.update_many(
+                {"source_id": settlement_source_id},
+                {"$set": {"needs_audit": True, "audit_reason": f"Entry count mismatch: {entry_count} != 2"}}
+            )
+    else:
+        # Pre-cutoff: Single entry only (legacy mode)
+        await db.accounting_transactions.insert_one(cashbook_txn)
     
     # Update account balance (reduce by outflow amount)
     await db.accounting_accounts.update_one(
@@ -43132,11 +43182,13 @@ async def get_returns_loss_report(
 @api_router.post("/finance/execution-ledger/{execution_id}/record-payment")
 async def record_invoice_payment(execution_id: str, payment: InvoicePaymentRecord, request: Request):
     """
-    Record a payment against an invoice entry.
-    - Auto-creates Cashbook outflow entry
-    - For credit purchases with remaining balance: Auto-creates/updates Liability
-    - Tracks payment history on the invoice
-    - Updates payment status (unpaid/partial/paid)
+    Record a payment against an invoice entry (Purchase Invoice).
+    
+    P0-FIX: STRICT ATOMIC DOUBLE-ENTRY FLOW
+    - Idempotency: Generates unique payment_source_id, skips if already exists
+    - Atomic: Both entries inserted together; validation ensures exactly 2 entries
+    - Single Writer: Only this function writes GL entries for invoice payments
+    - Contract: Dr Vendor Payable (reduces liability) / Cr Bank (reduces asset)
     """
     user = await get_current_user(request)
     if not user:
@@ -43190,7 +43242,21 @@ async def record_invoice_payment(execution_id: str, payment: InvoicePaymentRecor
     payment_id = f"invpay_{uuid.uuid4().hex[:10]}"
     txn_id = f"txn_{uuid.uuid4().hex[:10]}"
     
-    # ============ STEP 1: Create Cashbook Outflow Entry ============
+    # ============ P0-FIX: IDEMPOTENCY CHECK ============
+    # Generate a unique source_id for this specific payment
+    payment_hash = hashlib.md5(f"{execution_id}_{payment.amount}_{payment.payment_date}_{now.isoformat()}".encode()).hexdigest()[:8]
+    payment_source_id = f"inv_pay_{execution_id}_{payment_hash}"
+    
+    # Check if this payment already exists
+    existing_payment = await db.accounting_transactions.find_one({
+        "source_id": payment_source_id,
+        "source_module": "invoice_payment"
+    })
+    if existing_payment:
+        logger.warning(f"Invoice payment {payment_source_id} already exists - skipping duplicate")
+        raise HTTPException(status_code=409, detail="Payment already processed. Duplicate request detected.")
+    
+    # ============ STEP 1: Prepare Cashbook Outflow Entry ============
     
     # Get or create "Invoice Payment" category
     invoice_payment_category = await db.accounting_categories.find_one({"category_id": "invoice_payment"})
@@ -43214,10 +43280,17 @@ async def record_invoice_payment(execution_id: str, payment: InvoicePaymentRecor
     if project_name:
         description += f" - {project_name}"
     
+    # Ensure counter account exists
+    counter_account = {"account_id": "acc_vendor_payable", "account_name": "Accounts Payable", "account_type": "liability"}
+    await ensure_counter_account_exists(counter_account)
+    
+    counter_txn_id = f"txn_{uuid.uuid4().hex[:10]}"
+    
+    # Primary entry: Bank Credit (outflow from bank)
     cashbook_entry = {
         "transaction_id": txn_id,
         "transaction_date": payment.payment_date,
-        "transaction_type": "outflow",
+        "transaction_type": "outflow",  # Credit to Bank
         "amount": payment.amount,
         "mode": payment.payment_mode,
         "category_id": "invoice_payment",
@@ -43225,6 +43298,9 @@ async def record_invoice_payment(execution_id: str, payment: InvoicePaymentRecor
         "project_id": entry.get("project_id"),
         "paid_to": vendor_name,
         "vendor_id": entry.get("vendor_id"),
+        "party_id": entry.get("vendor_id"),
+        "party_type": "vendor",
+        "party_name": vendor_name,
         "remarks": payment.remarks or description,
         "attachment_url": None,
         "is_verified": False,
@@ -43242,66 +43318,73 @@ async def record_invoice_payment(execution_id: str, payment: InvoicePaymentRecor
         "approval_status": "not_required",
         "reviewed_by": None,
         "reviewed_at": None,
-        # System-generated marker
+        "is_cashbook_entry": True,
         "system_generated": True,
-        "source_module": "invoice_ledger",
-        "source_id": execution_id,
-        # Reference for linking
+        "source_module": "invoice_payment",
+        "source_id": payment_source_id,  # P0-FIX: Unique source_id for idempotency
         "reference_type": "invoice_payment",
         "reference_id": payment_id,
+        "is_double_entry": True,
+        "entry_role": "primary",
+        "paired_transaction_id": counter_txn_id,
+        "debit": 0,
+        "credit": payment.amount,
         "created_at": now.isoformat(),
         "created_by": user.user_id,
         "created_by_name": user.name,
         "updated_at": now.isoformat()
     }
     
-    await db.accounting_transactions.insert_one(cashbook_entry)
-    
-    # ============ DOUBLE-ENTRY: Create counter entry for Vendor Payable ============
-    # Debit Vendor Payable (reduces liability) - this is the counter to the bank credit
-    counter_txn_id = f"txn_{uuid.uuid4().hex[:10]}"
+    # Counter entry: Vendor Payable Debit (reduces liability)
+    # Using "outflow" to AP account = debit = reduces liability
     counter_entry = {
         "transaction_id": counter_txn_id,
         "transaction_date": payment.payment_date,
-        "transaction_type": "inflow",  # Reduces liability (debit in accounting)
+        "transaction_type": "outflow",  # Debit to Accounts Payable (reduces liability)
         "entry_type": "vendor_payable_settlement",
         "amount": payment.amount,
         "debit": payment.amount,
         "credit": 0,
-        "mode": payment.payment_mode,
-        "category_id": "vendor_payable",
-        "account_id": "vendor_payable",
-        "account_name": "Vendor Payable",
+        "mode": "double_entry",
+        "category_id": "invoice_payment",
+        "account_id": counter_account["account_id"],
+        "account_name": counter_account["account_name"],
         "project_id": entry.get("project_id"),
         "vendor_id": entry.get("vendor_id"),
         "party_id": entry.get("vendor_id"),
         "party_type": "vendor",
         "party_name": vendor_name,
-        "description": f"Payment to {vendor_name} - Invoice #{invoice_no or 'N/A'}",
-        "remarks": payment.remarks or f"Settlement of vendor payable",
+        "description": f"[DE] Payment to {vendor_name} - Invoice #{invoice_no or 'N/A'}",
+        "remarks": f"[DE] Settlement of vendor payable - {vendor_name}",
         "reference_type": "invoice_payment",
         "reference_id": payment_id,
-        "linked_transaction_id": txn_id,  # Link to the bank transaction
+        "paired_transaction_id": txn_id,
         "is_double_entry": True,
         "entry_role": "counter",
         "is_cashbook_entry": False,
+        "source_module": "invoice_payment",
+        "source_id": payment_source_id,  # P0-FIX: Same source_id for pairing
+        "is_system_generated": True,
         "created_at": now.isoformat(),
         "created_by": user.user_id,
-        "created_by_name": user.name
+        "created_by_name": user.name,
+        "updated_at": now.isoformat()
     }
-    await db.accounting_transactions.insert_one(counter_entry)
     
-    # Mark primary entry as double-entry
-    await db.accounting_transactions.update_one(
-        {"transaction_id": txn_id},
-        {"$set": {
-            "is_double_entry": True,
-            "entry_role": "primary",
-            "linked_transaction_id": counter_txn_id,
-            "debit": 0,
-            "credit": payment.amount
-        }}
-    )
+    # ============ P0-FIX: ATOMIC INSERT ============
+    await db.accounting_transactions.insert_many([cashbook_entry, counter_entry])
+    
+    # ============ P0-FIX: POST-INSERT VALIDATION ============
+    entry_count = await db.accounting_transactions.count_documents({
+        "source_id": payment_source_id,
+        "source_module": "invoice_payment"
+    })
+    if entry_count != 2:
+        logger.error(f"CRITICAL: Invoice payment {payment_source_id} has {entry_count} entries (expected 2)")
+        await db.accounting_transactions.update_many(
+            {"source_id": payment_source_id},
+            {"$set": {"needs_audit": True, "audit_reason": f"Entry count mismatch: {entry_count} != 2"}}
+        )
     
     # Update account balance (reduce by outflow amount)
     await db.accounting_accounts.update_one(

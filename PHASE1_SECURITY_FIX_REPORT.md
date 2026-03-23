@@ -102,7 +102,7 @@ CORS_ORIGINS="*"
 
 ### After (SECURE):
 ```
-CORS_ORIGINS="https://arkiflo.arkidots.com,https://app.arkiflo.com,https://ledger-recovery.preview.emergentagent.com,http://localhost:3000"
+CORS_ORIGINS="https://arkiflo.arkidots.com,https://app.arkiflo.com,https://accounting-core-fix.preview.emergentagent.com,http://localhost:3000"
 ```
 
 ### Allowed Origins:
@@ -110,7 +110,7 @@ CORS_ORIGINS="https://arkiflo.arkidots.com,https://app.arkiflo.com,https://ledge
 |--------|---------|
 | `https://arkiflo.arkidots.com` | Production domain |
 | `https://app.arkiflo.com` | Alternative production |
-| `https://ledger-recovery.preview.emergentagent.com` | Emergent preview |
+| `https://accounting-core-fix.preview.emergentagent.com` | Emergent preview |
 | `http://localhost:3000` | Local development |
 
 ### Code Location:

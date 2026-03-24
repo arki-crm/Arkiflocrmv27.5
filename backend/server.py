@@ -25030,7 +25030,25 @@ async def get_project_finance_detail(project_id: str, request: Request):
     }, {"_id": 0}).to_list(1000)
     cashbook_expense_total = sum(e.get("amount", 0) for e in cashbook_expenses)
     
-    # 2e. ALL PROJECT TRANSACTIONS - For Recent Transactions display
+    # 2e. PROJECT-LINKED SALARY COMPONENTS (Incentives & Commissions)
+    # These have source_module = "incentive_payout" or "commission_payout"
+    # They are NOT included in cashbook_expenses because source_module != "cashbook"
+    # Only include PRIMARY entries (entry_role = "primary") to avoid double-counting with counter entries
+    project_salary_components = await db.accounting_transactions.find({
+        "project_id": project_id,
+        "transaction_type": "outflow",
+        "source_module": {"$in": ["incentive_payout", "commission_payout"]},
+        # Only primary entries to avoid double-counting
+        "$or": [
+            {"entry_role": "primary"},
+            {"entry_role": {"$exists": False}}  # Legacy entries without entry_role
+        ]
+    }, {"_id": 0, "amount": 1, "source_module": 1, "category_id": 1, "category_name": 1, 
+        "work_type": 1, "account_name": 1, "remarks": 1, "transaction_id": 1,
+        "transaction_date": 1, "created_at": 1, "paid_to": 1, "party_name": 1}).to_list(500)
+    project_salary_total = sum(e.get("amount", 0) for e in project_salary_components)
+    
+    # 2f. ALL PROJECT TRANSACTIONS - For Recent Transactions display
     # Get ALL accounting_transactions linked to this project (inflows, outflows, reversals)
     # This ensures complete audit trail visibility
     all_project_transactions = await db.accounting_transactions.find({
@@ -25046,7 +25064,7 @@ async def get_project_finance_detail(project_id: str, request: Request):
             account_cache[acct_id] = acct.get("account_name", "Unknown") if acct else "Unknown"
         e["account_name"] = account_cache.get(acct_id, "Unknown")
     
-    total_outflow = purchase_invoice_total + approved_expense_total + recorded_expense_total + cashbook_expense_total
+    total_outflow = purchase_invoice_total + approved_expense_total + recorded_expense_total + cashbook_expense_total + project_salary_total
     
     # 3. Group actual costs by category + work_type (for comparison)
     actual_by_category = {}
@@ -25099,6 +25117,21 @@ async def get_project_finance_detail(project_id: str, request: Request):
                     cat = cat_id.replace("_", " ").title()
                 category_name_cache[cat_id] = cat
         
+        work_type = e.get("work_type", "general") or "general"
+        composite_key = f"{cat}|{work_type}"
+        actual_by_category[composite_key] = actual_by_category.get(composite_key, 0) + e.get("amount", 0)
+    
+    # Add project-linked salary components (incentives & commissions) to category breakdown
+    # Map source_module to user-friendly category names
+    salary_category_map = {
+        "incentive_payout": "Incentive Cost",
+        "commission_payout": "Commission Cost"
+    }
+    for e in project_salary_components:
+        source = e.get("source_module", "")
+        # Use the predefined category name for salary components
+        cat = salary_category_map.get(source, "Salary Cost")
+        # Salary components don't have work_type typically - use "general" or derive from project context
         work_type = e.get("work_type", "general") or "general"
         composite_key = f"{cat}|{work_type}"
         actual_by_category[composite_key] = actual_by_category.get(composite_key, 0) + e.get("amount", 0)

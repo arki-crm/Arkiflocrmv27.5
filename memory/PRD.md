@@ -22,6 +22,14 @@ Fixed issue where only 20 transactions were visible in Project Financials → Tr
 - "Collapse to 20" option after all loaded
 - User can now access ALL project transactions
 
+### ✅ Project Financials Salary Component Fix (March 24, 2026)
+
+Fixed issue where project-linked incentives and commissions were NOT appearing in Actual Cost:
+- Added `incentive_payout` and `commission_payout` source_modules to aggregation query
+- Only includes PRIMARY entries (avoids double-counting counter entries)
+- Maps to user-friendly categories: "Incentive Cost", "Commission Cost"
+- Does NOT affect base salary handling (salary_payment excluded)
+
 ### Core Features Implemented
 - **Double-Entry Accounting Engine**: Enforced at insert level with validation
 - **Data Integrity Guards**: Duplicate prevention, entry count validation

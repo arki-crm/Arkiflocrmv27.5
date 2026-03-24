@@ -24988,23 +24988,26 @@ async def get_project_finance_detail(project_id: str, request: Request):
     
     # 2. ACTUAL COST: Multiple sources for complete expense tracking
     # 2a. Purchase invoices from execution_ledger (grand_total = amount with GST)
+    # IMPORTANT: Fetch items array for item-level category/work_type breakdown
     purchase_invoices = await db.execution_ledger.find(
         {"project_id": project_id},
-        {"_id": 0, "grand_total": 1, "total_value": 1, "category": 1}
+        {"_id": 0, "execution_id": 1, "grand_total": 1, "total_value": 1, "category": 1, "work_type": 1, "items": 1, "vendor_name": 1, "invoice_no": 1, "created_at": 1}
     ).to_list(1000)
     purchase_invoice_total = sum(p.get("grand_total") or p.get("total_value", 0) for p in purchase_invoices)
     
     # 2b. Approved expense requests (not yet paid)
+    # IMPORTANT: Fetch work_type for accurate category matching
     approved_expenses = await db.finance_expense_requests.find(
         {"project_id": project_id, "status": "approved"},
-        {"_id": 0, "amount": 1, "category": 1}
+        {"_id": 0, "request_id": 1, "amount": 1, "category": 1, "work_type": 1, "description": 1, "created_at": 1}
     ).to_list(1000)
     approved_expense_total = sum(e.get("amount", 0) for e in approved_expenses)
     
     # 2c. Recorded (paid) expense requests
+    # IMPORTANT: Fetch work_type for accurate category matching
     recorded_expenses = await db.finance_expense_requests.find(
         {"project_id": project_id, "status": "recorded"},
-        {"_id": 0, "amount": 1, "category": 1}
+        {"_id": 0, "request_id": 1, "amount": 1, "category": 1, "work_type": 1, "description": 1, "created_at": 1}
     ).to_list(1000)
     recorded_expense_total = sum(e.get("amount", 0) for e in recorded_expenses)
     
@@ -25073,9 +25076,29 @@ async def get_project_finance_detail(project_id: str, request: Request):
         work_type = e.get("work_type", "general") or "general"
         composite_key = f"{cat}|{work_type}"
         actual_by_category[composite_key] = actual_by_category.get(composite_key, 0) + e.get("amount", 0)
+    
     # Add cashbook expenses to category breakdown
+    # IMPORTANT: Resolve category_id to category name for proper matching with planned categories
+    category_name_cache = {}
     for e in cashbook_expenses:
-        cat = e.get("category_id", "Other") or "Other"
+        cat_id = e.get("category_id")
+        cat = "Other"  # Default
+        
+        if cat_id:
+            # Try to get category name from cache or database
+            if cat_id in category_name_cache:
+                cat = category_name_cache[cat_id]
+            else:
+                # Look up the category name
+                cat_doc = await db.accounting_categories.find_one({"category_id": cat_id}, {"_id": 0, "name": 1})
+                if cat_doc:
+                    cat = cat_doc.get("name", cat_id)
+                else:
+                    # Fallback: use category_id itself but clean it up
+                    # Handle common patterns like "material_purchase" -> "Material"
+                    cat = cat_id.replace("_", " ").title()
+                category_name_cache[cat_id] = cat
+        
         work_type = e.get("work_type", "general") or "general"
         composite_key = f"{cat}|{work_type}"
         actual_by_category[composite_key] = actual_by_category.get(composite_key, 0) + e.get("amount", 0)

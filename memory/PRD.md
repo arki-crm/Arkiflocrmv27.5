@@ -14,6 +14,14 @@ All accounting writes now go through:
 - `create_atomic_single_entry()` - For legacy single entries
 - `create_atomic_journal_entries()` - For journal entries
 
+### ✅ Project Financials Pagination Fix (March 24, 2026)
+
+Fixed issue where only 20 transactions were visible in Project Financials → Transactions section:
+- Added "Load More" button to progressively load transactions
+- Shows count indicator (e.g., "20 of 86")
+- "Collapse to 20" option after all loaded
+- User can now access ALL project transactions
+
 ### Core Features Implemented
 - **Double-Entry Accounting Engine**: Enforced at insert level with validation
 - **Data Integrity Guards**: Duplicate prevention, entry count validation

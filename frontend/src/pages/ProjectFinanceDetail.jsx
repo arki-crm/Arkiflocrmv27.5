@@ -141,6 +141,7 @@ const ProjectFinanceDetail = () => {
   const [lockOverrideForm, setLockOverrideForm] = useState({ lock_percentage: '', reason: '' });
   const [projectProfit, setProjectProfit] = useState(null);
   const [viewTransaction, setViewTransaction] = useState(null); // For viewing transaction details
+  const [visibleTransactions, setVisibleTransactions] = useState(20); // Pagination for transactions
   const [projectLiabilities, setProjectLiabilities] = useState([]);
   const [accountsList, setAccountsList] = useState([]);
   
@@ -202,6 +203,7 @@ const ProjectFinanceDetail = () => {
 
   useEffect(() => {
     fetchData();
+    setVisibleTransactions(20); // Reset pagination when project changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
@@ -1750,8 +1752,13 @@ const ProjectFinanceDetail = () => {
       {/* Recent Transactions */}
       <Card className="border-slate-200">
         <CardHeader className="border-b border-slate-200">
-          <CardTitle className="text-lg font-semibold">
-            Recent Transactions (From Cash Book)
+          <CardTitle className="text-lg font-semibold flex items-center justify-between">
+            <span>Project Transactions</span>
+            {transactions.length > 0 && (
+              <span className="text-sm font-normal text-slate-500">
+                {Math.min(visibleTransactions, transactions.length)} of {transactions.length}
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -1775,7 +1782,7 @@ const ProjectFinanceDetail = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {transactions.slice(0, 20).map((txn) => (
+                  {transactions.slice(0, visibleTransactions).map((txn) => (
                     <tr 
                       key={txn.transaction_id} 
                       className="hover:bg-slate-50 cursor-pointer"
@@ -1824,9 +1831,29 @@ const ProjectFinanceDetail = () => {
                   ))}
                 </tbody>
               </table>
-              {transactions.length > 20 && (
+              {transactions.length > visibleTransactions && (
                 <div className="p-4 text-center border-t border-slate-200">
-                  <p className="text-sm text-slate-500">Showing 20 of {transactions.length} transactions</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVisibleTransactions(prev => Math.min(prev + 20, transactions.length))}
+                    data-testid="load-more-transactions"
+                  >
+                    Load More ({transactions.length - visibleTransactions} remaining)
+                  </Button>
+                </div>
+              )}
+              {transactions.length > 20 && visibleTransactions >= transactions.length && (
+                <div className="p-4 text-center border-t border-slate-200">
+                  <p className="text-sm text-slate-500">All {transactions.length} transactions loaded</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setVisibleTransactions(20)}
+                    className="mt-1 text-xs"
+                  >
+                    Collapse to 20
+                  </Button>
                 </div>
               )}
             </div>

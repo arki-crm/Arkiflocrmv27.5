@@ -30,6 +30,21 @@ Fixed issue where project-linked incentives and commissions were NOT appearing i
 - Maps to user-friendly categories: "Incentive Cost", "Commission Cost"
 - Does NOT affect base salary handling (salary_payment excluded)
 
+### ✅ Incentive/Commission Double-Entry Bug Fix (March 24, 2026)
+
+**Critical Bug Fixed:** Both primary and counter entries were being created with `transaction_type: "outflow"` (both Credit), breaking double-entry accounting.
+
+**Root Cause:** Lines 38481 and 38997 in `server.py` had `transaction_type: "outflow"` for counter entries.
+
+**Fix Applied:**
+- Counter entry now uses `transaction_type: "inflow"` (Debit for expense account)
+- Primary (Cash/Bank): outflow (Credit) - Money leaves bank
+- Counter (Expense): inflow (Debit) - Expense increases
+
+**Data Fix Endpoint Added:** `POST /api/finance/data-integrity/fix-salary-double-entry`
+- `?dry_run=true` - Diagnose without fixing (default)
+- `?dry_run=false` - Apply fixes to corrupted entries
+
 ### Core Features Implemented
 - **Double-Entry Accounting Engine**: Enforced at insert level with validation
 - **Data Integrity Guards**: Duplicate prevention, entry count validation

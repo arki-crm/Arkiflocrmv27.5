@@ -30957,6 +30957,109 @@ async def fix_data_integrity(request: Request):
     }
 
 
+@api_router.post("/finance/data-integrity/fix-salary-double-entry")
+async def fix_salary_double_entry(request: Request, dry_run: bool = True):
+    """
+    Fix broken double-entry for incentive_payout and commission_payout.
+    
+    BUG: Both primary and counter entries were created with transaction_type="outflow"
+    FIX: Counter entry should have transaction_type="inflow" (Debit for expense account)
+    
+    Args:
+        dry_run: If True, only diagnose without fixing. Set to False to apply fixes.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Founder can fix data integrity")
+    
+    fixes_needed = []
+    fixes_applied = 0
+    
+    # Find all broken incentive and commission entries
+    for source_module in ["incentive_payout", "commission_payout"]:
+        # Group by source_id to find pairs
+        pipeline = [
+            {"$match": {"source_module": source_module}},
+            {"$group": {
+                "_id": "$source_id",
+                "entries": {"$push": {
+                    "transaction_id": "$transaction_id",
+                    "transaction_type": "$transaction_type",
+                    "entry_role": "$entry_role",
+                    "amount": "$amount",
+                    "account_id": "$account_id",
+                    "account_name": "$account_name"
+                }},
+                "count": {"$sum": 1}
+            }}
+        ]
+        
+        results = await db.accounting_transactions.aggregate(pipeline).to_list(1000)
+        
+        for r in results:
+            source_id = r["_id"]
+            entries = r["entries"]
+            count = r["count"]
+            
+            # Check if we have exactly 2 entries with SAME transaction_type (broken)
+            if count == 2:
+                types = [e["transaction_type"] for e in entries]
+                if len(set(types)) == 1:  # Both same type = broken
+                    # Find the counter entry (expense account, not cash/bank)
+                    counter_entry = None
+                    for e in entries:
+                        acct = e.get("account_id", "")
+                        if "expense" in acct.lower() or e.get("entry_role") == "counter":
+                            counter_entry = e
+                            break
+                    
+                    if not counter_entry:
+                        # If no clear counter, pick the one that's NOT is_cashbook_entry
+                        # For now, just pick the second one
+                        counter_entry = entries[1] if entries[0].get("account_id", "").startswith("acc_") else entries[0]
+                    
+                    fix_info = {
+                        "source_module": source_module,
+                        "source_id": source_id,
+                        "counter_transaction_id": counter_entry["transaction_id"],
+                        "current_type": counter_entry["transaction_type"],
+                        "correct_type": "inflow",  # Expense accounts should be DEBIT (inflow)
+                        "amount": counter_entry["amount"],
+                        "account_id": counter_entry.get("account_id")
+                    }
+                    fixes_needed.append(fix_info)
+                    
+                    # Apply fix if not dry_run
+                    if not dry_run:
+                        result = await db.accounting_transactions.update_one(
+                            {"transaction_id": counter_entry["transaction_id"]},
+                            {"$set": {"transaction_type": "inflow"}}
+                        )
+                        if result.modified_count > 0:
+                            fixes_applied += 1
+    
+    # Log the fix attempt
+    if not dry_run and fixes_applied > 0:
+        await db.accounting_audit_log.insert_one({
+            "action": "fix_salary_double_entry",
+            "fixes_applied": fixes_applied,
+            "fix_details": fixes_needed,
+            "executed_at": datetime.now(timezone.utc).isoformat(),
+            "executed_by": user.user_id,
+            "executed_by_name": user_doc.get("name", "Unknown")
+        })
+    
+    return {
+        "success": True,
+        "dry_run": dry_run,
+        "fixes_needed": len(fixes_needed),
+        "fixes_applied": fixes_applied,
+        "details": fixes_needed[:20]  # Limit response size
+    }
+
+
 
 # ============================================================================
 # ============ TRIAL BALANCE REPORT ==========================================
@@ -38476,9 +38579,12 @@ async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, requ
     
     # USE ATOMIC DOUBLE-ENTRY
     if is_double_entry_required(data.payment_date):
+        # DOUBLE-ENTRY LOGIC FOR EXPENSE PAYMENT:
+        # Primary (Cash/Bank): outflow (Credit) - Money leaves bank
+        # Counter (Expense): inflow (Debit) - Expense increases
         counter_entry = {
             "transaction_date": data.payment_date,
-            "transaction_type": "outflow",
+            "transaction_type": "inflow",  # FIX: Expense account DEBIT (inflow in our system)
             "amount": incentive.get("amount", 0),
             "mode": "double_entry",
             "category_id": category_id,
@@ -38486,7 +38592,7 @@ async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, requ
             "account_name": "Incentive Expense",
             "account_type": "expense",
             "project_id": incentive.get("project_id"),
-            "remarks": f"[DE] Incentive: {incentive.get('employee_name')}",
+            "remarks": f"[DE] Incentive Expense: {incentive.get('employee_name')}",
             "party_id": incentive.get("employee_id"),
             "party_type": "employee",
             "is_cashbook_entry": False,
@@ -38992,9 +39098,12 @@ async def payout_commission(commission_id: str, data: CommissionPayoutRequest, r
     
     # USE ATOMIC DOUBLE-ENTRY
     if is_double_entry_required(data.payment_date):
+        # DOUBLE-ENTRY LOGIC FOR EXPENSE PAYMENT:
+        # Primary (Cash/Bank): outflow (Credit) - Money leaves bank
+        # Counter (Expense): inflow (Debit) - Expense increases
         counter_entry = {
             "transaction_date": data.payment_date,
-            "transaction_type": "outflow",
+            "transaction_type": "inflow",  # FIX: Expense account DEBIT (inflow in our system)
             "amount": commission.get("amount", 0),
             "mode": "double_entry",
             "category_id": category_id,
@@ -39002,7 +39111,7 @@ async def payout_commission(commission_id: str, data: CommissionPayoutRequest, r
             "account_name": "Commission Expense",
             "account_type": "expense",
             "project_id": commission.get("project_id"),
-            "remarks": f"[DE] Commission: {commission.get('recipient_name')}",
+            "remarks": f"[DE] Commission Expense: {commission.get('recipient_name')}",
             "party_id": commission.get("recipient_id"),
             "party_type": commission.get("recipient_type", "vendor"),
             "is_cashbook_entry": False,

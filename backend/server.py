@@ -23762,18 +23762,13 @@ async def create_transaction(txn: TransactionCreate, request: Request):
         "verified_by": None,
         "verified_at": None,
         # Party metadata for ledger traceability
-        # Note: party_id and party_type should be set based on context
         "party_id": vendor_id if vendor_id else None,
         "party_type": "vendor" if vendor_id else None,
         "party_name": paid_to if vendor_id else None,
-        # Reference for audit trail
-        "reference_id": txn.expense_request_id if txn.expense_request_id else txn_id,
-        "source_module": "cashbook",
-        "source_id": txn_id,
         # Accountability fields
         "requested_by": txn.requested_by or user.user_id,
         "requested_by_name": txn.requested_by_name or user.name,
-        "paid_by": user.user_id,  # Person creating entry = person who paid
+        "paid_by": user.user_id,
         "paid_by_name": user.name,
         "paid_from_account": account.get("account_name", "Unknown"),
         "approved_by": txn.approved_by,
@@ -23784,27 +23779,56 @@ async def create_transaction(txn: TransactionCreate, request: Request):
         "approval_status": approval_status,
         "reviewed_by": None,
         "reviewed_at": None,
+        "is_cashbook_entry": True,
         # Metadata
         "created_at": now.isoformat(),
-        "created_by": user.user_id,
-        "created_by_name": user.name,
         "updated_at": now.isoformat()
     }
     
-    await db.accounting_transactions.insert_one(new_txn)
-    
-    # ============ DOUBLE-ENTRY ENFORCEMENT ============
-    # Create counter-entry for transactions after cutoff date
+    # ============ ATOMIC DOUBLE-ENTRY ENFORCEMENT ============
     # IMPORTANT: Skip customer_payment category - receipts module handles this
-    # to prevent duplicate entries when both cashbook and receipts are used
     excluded_categories = ["internal_transfer", "journal_entry", "customer_payment"]
+    cashbook_source_id = f"cb_{txn_id}"
+    
     if is_double_entry_required(txn.transaction_date) and txn.category_id not in excluded_categories:
         counter_account = get_counter_account_for_category(txn.category_id, txn.transaction_type)
-        await create_double_entry_pair(
-            primary_txn=new_txn,
-            counter_account_info=counter_account,
+        
+        counter_entry = {
+            "transaction_date": txn.transaction_date,
+            "transaction_type": "inflow" if txn.transaction_type == "outflow" else "outflow",
+            "amount": txn.amount,
+            "mode": "double_entry",
+            "category_id": txn.category_id,
+            "account_id": counter_account["account_id"],
+            "account_name": counter_account["account_name"],
+            "account_type": counter_account["account_type"],
+            "project_id": txn.project_id,
+            "remarks": f"[DE] {txn.remarks or 'Cashbook entry'}",
+            "party_id": vendor_id if vendor_id else None,
+            "party_type": "vendor" if vendor_id else None,
+            "party_name": paid_to if vendor_id else None,
+            "is_cashbook_entry": False,
+            "is_daybook_entry": True
+        }
+        
+        await create_atomic_double_entry(
+            source_id=cashbook_source_id,
+            source_module="cashbook",
+            primary_entry=new_txn,
+            counter_entry=counter_entry,
             user_id=user.user_id,
-            user_name=user.name
+            user_name=user.name,
+            skip_if_exists=True
+        )
+    else:
+        # Single entry for excluded categories or pre-cutoff
+        await create_atomic_single_entry(
+            source_id=cashbook_source_id,
+            source_module="cashbook",
+            entry=new_txn,
+            user_id=user.user_id,
+            user_name=user.name,
+            skip_if_exists=True
         )
     
     balance_change = txn.amount if txn.transaction_type == "inflow" else -txn.amount
@@ -30290,7 +30314,14 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
             )
     else:
         # Pre-cutoff: Single entry only (legacy mode)
-        await db.accounting_transactions.insert_one(cashbook_txn)
+        await create_atomic_single_entry(
+            source_id=settlement_source_id,
+            source_module="liability_settlement",
+            entry=cashbook_txn,
+            user_id=user.user_id,
+            user_name=user.name,
+            skip_if_exists=True
+        )
     
     # Update account balance (reduce by outflow amount)
     await db.accounting_accounts.update_one(
@@ -30778,45 +30809,56 @@ async def fix_data_integrity(request: Request):
                 else:
                     counter_account = "acc_general_income"
                 
-                # Create counter entry
+                # Create counter entry using atomic function
                 counter_type = "outflow" if entry.get("transaction_type") == "inflow" else "inflow"
-                counter_txn = {
-                    "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
-                    "transaction_date": entry.get("transaction_date"),
-                    "transaction_type": counter_type,
-                    "amount": entry.get("amount"),
-                    "mode": "double_entry",
-                    "category_id": entry.get("category_id"),
-                    "account_id": counter_account,
-                    "project_id": entry.get("project_id"),
-                    "remarks": f"[DE-FIX] Counter for {entry.get('remarks', '')}",
-                    "party_id": entry.get("party_id"),
-                    "party_type": entry.get("party_type"),
-                    "is_double_entry": True,
-                    "paired_transaction_id": entry.get("transaction_id"),
-                    "reference_id": source_id,
-                    "source_id": source_id,
-                    "entry_role": "counter",
-                    "source_module": entry.get("source_module", "data_fix"),
-                    "is_system_generated": True,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                    "created_by": user.user_id,
-                    "created_by_name": user.name
-                }
+                fix_source_id = f"fix_{source_id}"
                 
-                await db.accounting_transactions.insert_one(counter_txn)
+                # Check if fix already exists
+                existing_fix = await db.accounting_transactions.count_documents({
+                    "source_id": fix_source_id,
+                    "source_module": "data_fix"
+                })
                 
-                # Update primary entry
-                await db.accounting_transactions.update_one(
-                    {"transaction_id": entry.get("transaction_id")},
-                    {"$set": {
-                        "entry_role": "primary",
+                if existing_fix == 0:
+                    counter_txn = {
+                        "transaction_id": f"txn_fix_{uuid.uuid4().hex[:12]}",
+                        "transaction_date": entry.get("transaction_date"),
+                        "transaction_type": counter_type,
+                        "amount": entry.get("amount"),
+                        "mode": "double_entry",
+                        "category_id": entry.get("category_id"),
+                        "account_id": counter_account,
+                        "project_id": entry.get("project_id"),
+                        "remarks": f"[DE-FIX] Counter for {entry.get('remarks', '')}",
+                        "party_id": entry.get("party_id"),
+                        "party_type": entry.get("party_type"),
                         "is_double_entry": True,
-                        "paired_transaction_id": counter_txn["transaction_id"]
-                    }}
-                )
-                
-                fixes_applied += 1
+                        "paired_transaction_id": entry.get("transaction_id"),
+                        "reference_id": source_id,
+                        "source_id": fix_source_id,
+                        "entry_role": "counter",
+                        "source_module": "data_fix",
+                        "is_system_generated": True,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "created_by": user.user_id,
+                        "created_by_name": user.name
+                    }
+                    
+                    await db.accounting_transactions.insert_one(counter_txn)
+                    
+                    # Update primary entry
+                    await db.accounting_transactions.update_one(
+                        {"transaction_id": entry.get("transaction_id")},
+                        {"$set": {
+                            "entry_role": "primary",
+                            "is_double_entry": True,
+                            "paired_transaction_id": counter_txn["transaction_id"],
+                            "source_id": fix_source_id
+                        }}
+                    )
+                    
+                    fixes_applied += 1
+                    fix_log.append(f"Created counter for {source_id}")
                 fix_log.append({
                     "action": "created_counter",
                     "source_id": source_id,
@@ -31872,47 +31914,45 @@ async def reverse_journal_entry(je_id: str, request: Request):
         }
     )
     
-    # Create accounting_transactions for reversal lines
+    # Create accounting_transactions for reversal lines using ATOMIC function
+    je_reversal_txns = []
     for line in reversed_lines:
         if line["debit"] > 0:
-            txn_doc = {
-                "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+            je_reversal_txns.append({
                 "account_id": line["account_id"],
                 "transaction_type": "outflow",
                 "amount": line["debit"],
                 "date": reversal_date,
+                "transaction_date": reversal_date,
                 "category_id": "journal_entry_reversal",
-                "source_module": "journal_entry",
-                "reference_id": reference_number,
                 "is_daybook_entry": True,
                 "remarks": f"JE Reversal: {reversal_doc['narration']}",
-                "je_id": reversal_je_id,
                 "je_line_id": line["line_id"],
-                "created_by": user.user_id,
-                "created_at": now.isoformat(),
                 "is_verified": True
-            }
-            await db.accounting_transactions.insert_one(txn_doc)
+            })
         
         if line["credit"] > 0:
-            txn_doc = {
-                "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+            je_reversal_txns.append({
                 "account_id": line["account_id"],
                 "transaction_type": "inflow",
                 "amount": line["credit"],
                 "date": reversal_date,
+                "transaction_date": reversal_date,
                 "category_id": "journal_entry_reversal",
-                "source_module": "journal_entry",
-                "reference_id": reference_number,
                 "is_daybook_entry": True,
                 "remarks": f"JE Reversal: {reversal_doc['narration']}",
-                "je_id": reversal_je_id,
                 "je_line_id": line["line_id"],
-                "created_by": user.user_id,
-                "created_at": now.isoformat(),
                 "is_verified": True
-            }
-            await db.accounting_transactions.insert_one(txn_doc)
+            })
+    
+    # Use atomic journal entry function
+    await create_atomic_journal_entries(
+        je_id=reversal_je_id,
+        reference_number=reference_number,
+        entries=je_reversal_txns,
+        user_id=user.user_id,
+        user_name=user_doc.get("name", user.email)
+    )
     
     # Audit log for reversal
     await db.audit_logs.insert_one({
@@ -34099,42 +34139,55 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
     if existing_entries > 0:
         logger.warning(f"Accounting entries already exist for receipt {receipt_doc['receipt_id']} - skipping transaction creation")
     else:
-        await db.accounting_transactions.insert_one(txn_doc)
+        # USE ATOMIC DOUBLE-ENTRY FUNCTION
+        receipt_source_id = receipt_doc["receipt_id"]
         
-        # ============ DOUBLE-ENTRY ENFORCEMENT ============
         if is_double_entry_required(payment_date):
             # Customer receipts credit Customer Advance (liability), NOT revenue
-            # Revenue is recognized later via Journal Entry when work is completed/billed
             customer_advance_account = {"account_id": "acc_customer_advance", "account_name": "Customer Advance", "account_type": "liability"}
-            await create_double_entry_pair(
-                primary_txn=txn_doc,
-                counter_account_info=customer_advance_account,
+            
+            counter_entry = {
+                "transaction_date": payment_date,
+                "transaction_type": "outflow",  # Credit to liability (increases Customer Advance)
+                "amount": receipt.amount,
+                "mode": "double_entry",
+                "category_id": receipt_category_id,
+                "account_id": customer_advance_account["account_id"],
+                "account_name": customer_advance_account["account_name"],
+                "account_type": customer_advance_account["account_type"],
+                "project_id": receipt.project_id,
+                "remarks": f"[DE] Customer Advance: {receipt_number}",
+                "party_id": receipt.project_id,
+                "party_type": "customer",
+                "party_name": project.get("client_name"),
+                "receipt_id": receipt_doc["receipt_id"],
+                "is_cashbook_entry": False,
+                "is_daybook_entry": True
+            }
+            
+            # Add receipt tracking to primary
+            txn_doc["is_cashbook_entry"] = True
+            
+            await create_atomic_double_entry(
+                source_id=receipt_source_id,
+                source_module="receipts",
+                primary_entry=txn_doc,
+                counter_entry=counter_entry,
                 user_id=user.user_id,
-                user_name=user.name
+                user_name=user.name,
+                skip_if_exists=True
             )
-            
-            # ============ POST-INSERT VALIDATION ============
-            # Verify exactly 2 entries were created (1 primary + 1 counter)
-            entry_count = await db.accounting_transactions.count_documents({
-                "$or": [
-                    {"receipt_id": receipt_doc["receipt_id"]},
-                    {"reference_id": receipt_doc["receipt_id"]},
-                    {"source_id": receipt_doc["receipt_id"]}
-                ]
-            })
-            
-            if entry_count != 2:
-                logger.error(f"DATA INTEGRITY ERROR: Receipt {receipt_doc['receipt_id']} has {entry_count} entries (expected 2)")
-                # Log for investigation but don't fail the request
-                await db.accounting_integrity_errors.insert_one({
-                    "error_type": "entry_count_mismatch",
-                    "source_id": receipt_doc["receipt_id"],
-                    "expected_count": 2,
-                    "actual_count": entry_count,
-                    "created_at": datetime.now(timezone.utc).isoformat()
-                })
-            else:
-                logger.info(f"Receipt {receipt_doc['receipt_id']}: Verified 2 entries created (Dr Bank, Cr Customer Advance)")
+            logger.info(f"Receipt {receipt_doc['receipt_id']}: Created atomic double-entry (Dr Bank, Cr Customer Advance)")
+        else:
+            # Pre-cutoff: Single entry
+            await create_atomic_single_entry(
+                source_id=receipt_source_id,
+                source_module="receipts",
+                entry=txn_doc,
+                user_id=user.user_id,
+                user_name=user.name,
+                skip_if_exists=True
+            )
     
     # Update account balance
     await db.accounting_accounts.update_one(
@@ -34498,6 +34551,8 @@ async def create_refund(refund: RefundCreate, request: Request):
     # Sales Refund = OUTFLOW (money going out to customer)
     if refund.status == "completed" and refund.refund_type != "forfeited" and refund.amount > 0:
         txn_id = f"txn_{secrets.token_hex(4)}"
+        refund_source_id = f"refund_{refund_doc['refund_id']}"
+        
         txn_doc = {
             "transaction_id": txn_id,
             "transaction_date": now.strftime("%Y-%m-%d"),
@@ -34513,12 +34568,44 @@ async def create_refund(refund: RefundCreate, request: Request):
             "refund_id": refund_doc["refund_id"],
             "is_cashbook_entry": True,
             "is_verified": False,
-            "created_by": user.user_id,
-            "created_by_name": user.name,
-            "created_at": now,
             "updated_at": now
         }
-        await db.accounting_transactions.insert_one(txn_doc)
+        
+        # Use atomic function
+        if is_double_entry_required(now.strftime("%Y-%m-%d")):
+            counter_entry = {
+                "transaction_date": now.strftime("%Y-%m-%d"),
+                "transaction_type": "inflow",  # Reduce Customer Advance
+                "amount": refund.amount,
+                "mode": "double_entry",
+                "category_id": "customer_refund",
+                "account_id": "acc_customer_advance",
+                "account_name": "Customer Advance",
+                "account_type": "liability",
+                "project_id": refund.project_id,
+                "remarks": f"[DE] Refund: {refund_number}",
+                "is_cashbook_entry": False,
+                "is_daybook_entry": True
+            }
+            
+            await create_atomic_double_entry(
+                source_id=refund_source_id,
+                source_module="sales_refund",
+                primary_entry=txn_doc,
+                counter_entry=counter_entry,
+                user_id=user.user_id,
+                user_name=user.name,
+                skip_if_exists=True
+            )
+        else:
+            await create_atomic_single_entry(
+                source_id=refund_source_id,
+                source_module="sales_refund",
+                entry=txn_doc,
+                user_id=user.user_id,
+                user_name=user.name,
+                skip_if_exists=True
+            )
         
         # Update account balance (outflow = decrease)
         await db.accounting_accounts.update_one(
@@ -34603,6 +34690,8 @@ async def update_refund_status(refund_id: str, update: RefundStatusUpdate, reque
     if update.new_status == "completed" and current_status != "completed":
         if refund.get("amount", 0) > 0:
             txn_id = f"txn_{secrets.token_hex(4)}"
+            refund_complete_source_id = f"refund_complete_{refund_id}"
+            
             txn_doc = {
                 "transaction_id": txn_id,
                 "transaction_date": now.strftime("%Y-%m-%d"),
@@ -34618,12 +34707,44 @@ async def update_refund_status(refund_id: str, update: RefundStatusUpdate, reque
                 "refund_id": refund_id,
                 "is_cashbook_entry": True,
                 "is_verified": False,
-                "created_by": user.user_id,
-                "created_by_name": user.name,
-                "created_at": now,
                 "updated_at": now
             }
-            await db.accounting_transactions.insert_one(txn_doc)
+            
+            # Use atomic function
+            if is_double_entry_required(now.strftime("%Y-%m-%d")):
+                counter_entry = {
+                    "transaction_date": now.strftime("%Y-%m-%d"),
+                    "transaction_type": "inflow",
+                    "amount": refund.get("amount"),
+                    "mode": "double_entry",
+                    "category_id": "customer_refund",
+                    "account_id": "acc_customer_advance",
+                    "account_name": "Customer Advance",
+                    "account_type": "liability",
+                    "project_id": refund.get("project_id"),
+                    "remarks": f"[DE] Refund complete: {refund.get('refund_number')}",
+                    "is_cashbook_entry": False,
+                    "is_daybook_entry": True
+                }
+                
+                await create_atomic_double_entry(
+                    source_id=refund_complete_source_id,
+                    source_module="sales_refund_complete",
+                    primary_entry=txn_doc,
+                    counter_entry=counter_entry,
+                    user_id=user.user_id,
+                    user_name=user.name,
+                    skip_if_exists=True
+                )
+            else:
+                await create_atomic_single_entry(
+                    source_id=refund_complete_source_id,
+                    source_module="sales_refund_complete",
+                    entry=txn_doc,
+                    user_id=user.user_id,
+                    user_name=user.name,
+                    skip_if_exists=True
+                )
             
             # Update account balance (outflow = decrease)
             await db.accounting_accounts.update_one(
@@ -34637,8 +34758,10 @@ async def update_refund_status(refund_id: str, update: RefundStatusUpdate, reque
     
     # P0-FIX: Reverse cashbook entry when transitioning to "reversed"
     elif update.new_status == "reversed" and refund.get("transaction_id"):
-        # Create reversal entry
+        # Create reversal entry using atomic function
         reversal_txn_id = f"txn_{secrets.token_hex(4)}"
+        refund_reversal_source_id = f"refund_reversal_{refund_id}"
+        
         reversal_txn = {
             "transaction_id": reversal_txn_id,
             "transaction_date": now.strftime("%Y-%m-%d"),
@@ -34656,12 +34779,43 @@ async def update_refund_status(refund_id: str, update: RefundStatusUpdate, reque
             "is_cashbook_entry": True,
             "is_reversal": True,
             "is_verified": True,  # Auto-verified as it's a reversal
-            "created_by": user.user_id,
-            "created_by_name": user.name,
-            "created_at": now,
             "updated_at": now
         }
-        await db.accounting_transactions.insert_one(reversal_txn)
+        
+        if is_double_entry_required(now.strftime("%Y-%m-%d")):
+            counter_entry = {
+                "transaction_date": now.strftime("%Y-%m-%d"),
+                "transaction_type": "outflow",
+                "amount": refund.get("amount"),
+                "mode": "double_entry",
+                "category_id": "refund_reversal",
+                "account_id": "acc_customer_advance",
+                "account_name": "Customer Advance",
+                "account_type": "liability",
+                "project_id": refund.get("project_id"),
+                "remarks": f"[DE] Refund reversal: {refund.get('refund_number')}",
+                "is_cashbook_entry": False,
+                "is_daybook_entry": True
+            }
+            
+            await create_atomic_double_entry(
+                source_id=refund_reversal_source_id,
+                source_module="sales_refund_reversal",
+                primary_entry=reversal_txn,
+                counter_entry=counter_entry,
+                user_id=user.user_id,
+                user_name=user.name,
+                skip_if_exists=True
+            )
+        else:
+            await create_atomic_single_entry(
+                source_id=refund_reversal_source_id,
+                source_module="sales_refund_reversal",
+                entry=reversal_txn,
+                user_id=user.user_id,
+                user_name=user.name,
+                skip_if_exists=True
+            )
         
         # Restore account balance (inflow = increase)
         await db.accounting_accounts.update_one(
@@ -35266,26 +35420,37 @@ async def cancel_project_financially(
         
         await db.finance_refunds.insert_one(refund_doc)
         
-        # Create outflow transaction
+        # Create outflow transaction using ATOMIC function
         if actual_refund > 0:
+            txn_id = f"txn_{secrets.token_hex(4)}"
+            project_cancel_source_id = f"proj_cancel_{refund_doc['refund_id']}"
+            
             txn_doc = {
-                "transaction_id": f"txn_{secrets.token_hex(4)}",
+                "transaction_id": txn_id,
+                "transaction_date": now.strftime("%Y-%m-%d"),
                 "transaction_type": "outflow",
                 "amount": actual_refund,
                 "mode": "bank_transfer",
-                "category_id": None,
+                "category_id": "project_cancellation",
                 "account_id": account_id,
                 "project_id": project_id,
                 "paid_to": project.get("client_name"),
                 "remarks": f"Refund {refund_number} - {reason}",
                 "refund_id": refund_doc["refund_id"],
                 "is_verified": False,
-                "created_by": user.user_id,
-                "created_by_name": user.name,
-                "created_at": now,
+                "is_cashbook_entry": True,
                 "updated_at": now
             }
-            await db.accounting_transactions.insert_one(txn_doc)
+            
+            # Use atomic single entry (project cancellation doesn't need double-entry)
+            await create_atomic_single_entry(
+                source_id=project_cancel_source_id,
+                source_module="project_cancellation",
+                entry=txn_doc,
+                user_id=user.user_id,
+                user_name=user.name,
+                skip_if_exists=True
+            )
     elif refund_type == "forfeited":
         # No refund, booking forfeited
         refund_doc = {
@@ -37676,8 +37841,10 @@ async def create_stipend_payment(data: StipendPaymentRequest, request: Request):
     if day_closing:
         raise HTTPException(status_code=400, detail=f"Day {data.payment_date} is locked")
     
-    # Create cashbook entry
+    # Create cashbook entry using ATOMIC function
     transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
+    stipend_source_id = f"stipend_{stipend_id}"
+    
     cashbook_entry = {
         "transaction_id": transaction_id,
         "transaction_date": data.payment_date,
@@ -37695,25 +37862,46 @@ async def create_stipend_payment(data: StipendPaymentRequest, request: Request):
         "party_name": employee.get("name", "Trainee"),
         "remarks": data.notes or f"Stipend for {data.month_year}: {employee.get('name', 'Trainee')}",
         "system_generated": True,
-        "source_module": "stipend",
-        "source_id": stipend_id,
         "reference_type": "stipend_payment",
         "reference_id": stipend_id,
-        "created_at": now.isoformat(),
-        "created_by": user.user_id,
-        "created_by_name": user_doc.get("name", "Unknown")
+        "is_cashbook_entry": True
     }
     
-    await db.accounting_transactions.insert_one(cashbook_entry)
-    
-    # ============ DOUBLE-ENTRY ENFORCEMENT ============
+    # USE ATOMIC DOUBLE-ENTRY
     if is_double_entry_required(data.payment_date):
-        training_expense_account = {"account_id": "acc_training_expense", "account_name": "Training Expense", "account_type": "expense"}
-        await create_double_entry_pair(
-            primary_txn=cashbook_entry,
-            counter_account_info=training_expense_account,
+        counter_entry = {
+            "transaction_date": data.payment_date,
+            "transaction_type": "outflow",
+            "amount": data.amount,
+            "mode": "double_entry",
+            "category_id": "training_expense",
+            "account_id": "acc_training_expense",
+            "account_name": "Training Expense",
+            "account_type": "expense",
+            "remarks": f"[DE] Stipend: {employee.get('name', 'Trainee')} - {data.month_year}",
+            "party_id": data.employee_id,
+            "party_type": "employee",
+            "is_cashbook_entry": False,
+            "is_daybook_entry": True
+        }
+        
+        await create_atomic_double_entry(
+            source_id=stipend_source_id,
+            source_module="stipend_payment",
+            primary_entry=cashbook_entry,
+            counter_entry=counter_entry,
             user_id=user.user_id,
-            user_name=user_doc.get("name", "Unknown")
+            user_name=user_doc.get("name", "Unknown"),
+            skip_if_exists=True
+        )
+    else:
+        await create_atomic_single_entry(
+            source_id=stipend_source_id,
+            source_module="stipend_payment",
+            entry=cashbook_entry,
+            user_id=user.user_id,
+            user_name=user_doc.get("name", "Unknown"),
+            skip_if_exists=True
         )
     
     # Update account balance
@@ -38194,7 +38382,9 @@ async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, requ
             "created_at": now.isoformat()
         })
     
-    # Create cashbook entry
+    # Create cashbook entry using ATOMIC function
+    incentive_source_id = f"incentive_{incentive_id}"
+    
     cashbook_entry = {
         "transaction_id": transaction_id,
         "transaction_date": data.payment_date,
@@ -38207,8 +38397,6 @@ async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, requ
         "paid_to": incentive.get("employee_name", "Employee"),
         "remarks": data.notes or f"Incentive payout: {incentive.get('incentive_type_name')} - {incentive.get('employee_name')}",
         "system_generated": True,
-        "source_module": "incentive",
-        "source_id": incentive_id,
         "reference_type": "incentive_payout",
         "reference_id": payment_id,
         # FIX: Explicit flags for proper cashbook AND daybook inclusion
@@ -38222,10 +38410,7 @@ async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, requ
         "party_type": "employee",
         "party_name": incentive.get("employee_name", "Employee"),
         "payment_category": "incentive",
-        "incentive_type": incentive.get("incentive_type"),
-        "created_at": now.isoformat(),
-        "created_by": user.user_id,
-        "created_by_name": user_doc.get("name", "Unknown")
+        "incentive_type": incentive.get("incentive_type")
     }
     
     # Check if day is locked
@@ -38233,16 +38418,42 @@ async def payout_incentive(incentive_id: str, data: IncentivePayoutRequest, requ
     if day_closing:
         raise HTTPException(status_code=400, detail=f"Day {data.payment_date} is locked")
     
-    await db.accounting_transactions.insert_one(cashbook_entry)
-    
-    # ============ DOUBLE-ENTRY ENFORCEMENT ============
+    # USE ATOMIC DOUBLE-ENTRY
     if is_double_entry_required(data.payment_date):
-        incentive_expense_account = {"account_id": "acc_incentive_expense", "account_name": "Incentive Expense", "account_type": "expense"}
-        await create_double_entry_pair(
-            primary_txn=cashbook_entry,
-            counter_account_info=incentive_expense_account,
+        counter_entry = {
+            "transaction_date": data.payment_date,
+            "transaction_type": "outflow",
+            "amount": incentive.get("amount", 0),
+            "mode": "double_entry",
+            "category_id": category_id,
+            "account_id": "acc_incentive_expense",
+            "account_name": "Incentive Expense",
+            "account_type": "expense",
+            "project_id": incentive.get("project_id"),
+            "remarks": f"[DE] Incentive: {incentive.get('employee_name')}",
+            "party_id": incentive.get("employee_id"),
+            "party_type": "employee",
+            "is_cashbook_entry": False,
+            "is_daybook_entry": True
+        }
+        
+        await create_atomic_double_entry(
+            source_id=incentive_source_id,
+            source_module="incentive_payout",
+            primary_entry=cashbook_entry,
+            counter_entry=counter_entry,
             user_id=user.user_id,
-            user_name=user_doc.get("name", "Unknown")
+            user_name=user_doc.get("name", "Unknown"),
+            skip_if_exists=True
+        )
+    else:
+        await create_atomic_single_entry(
+            source_id=incentive_source_id,
+            source_module="incentive_payout",
+            entry=cashbook_entry,
+            user_id=user.user_id,
+            user_name=user_doc.get("name", "Unknown"),
+            skip_if_exists=True
         )
     
     # Update account balance
@@ -38687,7 +38898,9 @@ async def payout_commission(commission_id: str, data: CommissionPayoutRequest, r
             "created_at": now.isoformat()
         })
     
-    # Create cashbook entry
+    # Create cashbook entry using ATOMIC function
+    commission_source_id = f"commission_{commission_id}"
+    
     cashbook_entry = {
         "transaction_id": transaction_id,
         "transaction_date": data.payment_date,
@@ -38700,8 +38913,6 @@ async def payout_commission(commission_id: str, data: CommissionPayoutRequest, r
         "paid_to": commission.get("recipient_name", "Recipient"),
         "remarks": data.notes or f"Commission payout: {commission.get('commission_type_name')} - {commission.get('recipient_name')}",
         "system_generated": True,
-        "source_module": "commission",
-        "source_id": commission_id,
         "reference_type": "commission_payout",
         "reference_id": payment_id,
         # FIX: Explicit flags for proper cashbook AND daybook inclusion
@@ -38715,10 +38926,7 @@ async def payout_commission(commission_id: str, data: CommissionPayoutRequest, r
         "party_type": commission.get("recipient_type", "vendor"),  # Could be employee or vendor
         "party_name": commission.get("recipient_name", "Recipient"),
         "payment_category": "commission",
-        "commission_type": commission.get("commission_type"),
-        "created_at": now.isoformat(),
-        "created_by": user.user_id,
-        "created_by_name": user_doc.get("name", "Unknown")
+        "commission_type": commission.get("commission_type")
     }
     
     # Check if day is locked
@@ -38726,16 +38934,42 @@ async def payout_commission(commission_id: str, data: CommissionPayoutRequest, r
     if day_closing:
         raise HTTPException(status_code=400, detail=f"Day {data.payment_date} is locked")
     
-    await db.accounting_transactions.insert_one(cashbook_entry)
-    
-    # ============ DOUBLE-ENTRY ENFORCEMENT ============
+    # USE ATOMIC DOUBLE-ENTRY
     if is_double_entry_required(data.payment_date):
-        commission_expense_account = {"account_id": "acc_commission_expense", "account_name": "Commission Expense", "account_type": "expense"}
-        await create_double_entry_pair(
-            primary_txn=cashbook_entry,
-            counter_account_info=commission_expense_account,
+        counter_entry = {
+            "transaction_date": data.payment_date,
+            "transaction_type": "outflow",
+            "amount": commission.get("amount", 0),
+            "mode": "double_entry",
+            "category_id": category_id,
+            "account_id": "acc_commission_expense",
+            "account_name": "Commission Expense",
+            "account_type": "expense",
+            "project_id": commission.get("project_id"),
+            "remarks": f"[DE] Commission: {commission.get('recipient_name')}",
+            "party_id": commission.get("recipient_id"),
+            "party_type": commission.get("recipient_type", "vendor"),
+            "is_cashbook_entry": False,
+            "is_daybook_entry": True
+        }
+        
+        await create_atomic_double_entry(
+            source_id=commission_source_id,
+            source_module="commission_payout",
+            primary_entry=cashbook_entry,
+            counter_entry=counter_entry,
             user_id=user.user_id,
-            user_name=user_doc.get("name", "Unknown")
+            user_name=user_doc.get("name", "Unknown"),
+            skip_if_exists=True
+        )
+    else:
+        await create_atomic_single_entry(
+            source_id=commission_source_id,
+            source_module="commission_payout",
+            entry=cashbook_entry,
+            user_id=user.user_id,
+            user_name=user_doc.get("name", "Unknown"),
+            skip_if_exists=True
         )
     
     # Update account balance
@@ -39345,8 +39579,20 @@ async def create_accounting_transaction(
     # Remove None values to keep document clean
     new_txn = {k: v for k, v in new_txn.items() if v is not None}
     
-    # Insert transaction
-    await db.accounting_transactions.insert_one(new_txn)
+    # ========== USE ATOMIC FUNCTION ==========
+    # Generate source_id from transaction data
+    helper_source_id = transaction_data.get("source_id") or f"{source_module}_{txn_id}"
+    
+    new_txn["is_cashbook_entry"] = True  # Helper creates cashbook entries
+    
+    await create_atomic_single_entry(
+        source_id=helper_source_id,
+        source_module=source_module,
+        entry=new_txn,
+        user_id=user_id,
+        user_name=user_name,
+        skip_if_exists=True
+    )
     
     # ========== UPDATE ACCOUNT BALANCE ==========
     if not skip_balance_update:
@@ -40630,11 +40876,14 @@ async def record_recurring_payment(payable_id: str, payment: RecordPaymentReques
     payment_date = payment.payment_date or now.date().isoformat()
     payment_amount = payment.amount or payable["amount"]
     
-    # Create cashbook entry
+    # Create cashbook entry using ATOMIC function
     transaction_id = f"txn_{uuid.uuid4().hex[:10]}"
+    recurring_source_id = f"recurring_{payable_id}"
+    
     new_txn = {
         "transaction_id": transaction_id,
         "date": payment_date,
+        "transaction_date": payment_date,
         "transaction_type": "outflow",
         "amount": payment_amount,
         "mode": payment.mode,
@@ -40649,23 +40898,45 @@ async def record_recurring_payment(payable_id: str, payment: RecordPaymentReques
         "needs_review": False,
         "recurring_payable_id": payable_id,
         "recurring_template_id": payable.get("template_id"),
-        "created_by": user.user_id,
-        "created_by_name": user.name,
-        "created_at": now.isoformat()
+        "is_cashbook_entry": True
     }
     
-    await db.accounting_transactions.insert_one(new_txn)
-    
-    # Create double-entry pair for recurring payment (after cutoff date)
-    if is_double_entry_required(payment.payment_date):
+    # USE ATOMIC DOUBLE-ENTRY
+    if is_double_entry_required(payment_date):
         counter_account = COUNTER_ACCOUNT_MAP.get(payable.get("category_id"), DEFAULT_EXPENSE_ACCOUNT)
-        if counter_account:
-            await create_double_entry_pair(
-                primary_txn=new_txn,
-                counter_account_info=counter_account,
-                user_id=user.user_id,
-                user_name=user.name
-            )
+        
+        counter_entry = {
+            "transaction_date": payment_date,
+            "transaction_type": "outflow",
+            "amount": payment_amount,
+            "mode": "double_entry",
+            "category_id": payable["category_id"],
+            "account_id": counter_account["account_id"],
+            "account_name": counter_account["account_name"],
+            "account_type": counter_account["account_type"],
+            "remarks": f"[DE] Recurring: {payable['template_name']}",
+            "is_cashbook_entry": False,
+            "is_daybook_entry": True
+        }
+        
+        await create_atomic_double_entry(
+            source_id=recurring_source_id,
+            source_module="recurring_payment",
+            primary_entry=new_txn,
+            counter_entry=counter_entry,
+            user_id=user.user_id,
+            user_name=user.name,
+            skip_if_exists=True
+        )
+    else:
+        await create_atomic_single_entry(
+            source_id=recurring_source_id,
+            source_module="recurring_payment",
+            entry=new_txn,
+            user_id=user.user_id,
+            user_name=user.name,
+            skip_if_exists=True
+        )
     
     # Update account balance
     await db.accounting_accounts.update_one(
@@ -41063,21 +41334,23 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
     # Credit purchases should NOT appear in cashbook until payment is made
     # They should only create a liability record and daybook reference
     if entry.purchase_type == "credit":
-        # Create daybook-only entry (NOT a cashbook entry)
+        # Create daybook-only entry using ATOMIC function
+        exec_source_id = f"exec_credit_{entry_id}"
         daybook_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+        
         daybook_entry = {
             "transaction_id": daybook_txn_id,
             "transaction_date": entry.execution_date or entry.invoice_date or now.strftime("%Y-%m-%d"),
             "transaction_type": "outflow",
-            "entry_type": "purchase_invoice_credit",  # Distinct type for credit purchases
-            "is_cashbook_entry": False,  # P0-FIX: Exclude from cashbook queries
+            "entry_type": "purchase_invoice_credit",
+            "is_cashbook_entry": False,
+            "is_daybook_entry": True,
             "amount": grand_total,
             "description": f"Credit Purchase Invoice: {entry.invoice_no or 'N/A'} - {vendor_name or 'Unknown Vendor'}",
-            "account_id": None,  # No account until payment is made
+            "account_id": None,
             "category_id": None,
             "project_id": entry.project_id,
             "vendor_id": vendor_id,
-            # Party metadata for ledger traceability
             "party_id": vendor_id,
             "party_type": "vendor",
             "party_name": vendor_name,
@@ -41085,12 +41358,17 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
             "reference_id": entry_id,
             "liability_id": liability_id,
             "payment_status": "unpaid",
-            "remarks": entry.remarks,
-            "created_by": user.user_id,
-            "created_by_name": user.name,
-            "created_at": now.isoformat()
+            "remarks": entry.remarks
         }
-        await db.accounting_transactions.insert_one(daybook_entry)
+        
+        await create_atomic_single_entry(
+            source_id=exec_source_id,
+            source_module="execution_ledger_credit",
+            entry=daybook_entry,
+            user_id=user.user_id,
+            user_name=user.name,
+            skip_if_exists=True
+        )
     # Cash purchases create actual cashbook entries
     elif entry.purchase_type == "cash" and entry.linked_cashbook_id:
         # Cash purchase is already linked to an existing cashbook entry
@@ -41637,15 +41915,16 @@ async def create_purchase_return(return_data: PurchaseReturnCreate, request: Req
         )
         return_doc["linked_receivable_id"] = receivable_id
     
-    # Create Daybook entry (only if not no_refund)
+    # Create Daybook entry (only if not no_refund) using ATOMIC function
     if return_data.refund_mode != "no_refund":
+        purchase_return_source_id = f"pret_{return_id}"
         daybook_entry = {
             "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
             "transaction_date": return_data.return_date,
             "transaction_type": "adjustment",
             "entry_type": "purchase_return",
-            "is_daybook_entry": True,  # FIX: Explicit daybook flag
-            "is_cashbook_entry": False,  # This is just journal entry, not cash movement yet
+            "is_daybook_entry": True,
+            "is_cashbook_entry": False,
             "amount": return_data.expected_refund_amount,
             "description": f"Purchase Return: {invoice.get('vendor_name', 'Unknown')} - {return_data.return_reason}",
             "project_id": invoice.get("project_id"),
@@ -41653,14 +41932,17 @@ async def create_purchase_return(return_data: PurchaseReturnCreate, request: Req
             "vendor_name": invoice.get("vendor_name"),
             "reference_type": "purchase_return",
             "reference_id": return_id,
-            "source_module": "purchase_return",
-            "source_id": return_id,
-            "refund_status": "pending",
-            "created_by": user.user_id,
-            "created_by_name": user_doc.get("name", "Unknown"),
-            "created_at": now.isoformat()
+            "refund_status": "pending"
         }
-        await db.accounting_transactions.insert_one(daybook_entry)
+        
+        await create_atomic_single_entry(
+            source_id=purchase_return_source_id,
+            source_module="purchase_return",
+            entry=daybook_entry,
+            user_id=user.user_id,
+            user_name=user_doc.get("name", "Unknown"),
+            skip_if_exists=True
+        )
     
     return_doc.pop("_id", None)
     return {
@@ -41789,13 +42071,15 @@ async def update_purchase_return_refund(
             if not existing_txn:
                 txn_id = f"txn_{uuid.uuid4().hex[:12]}"
                 refund_date = update.refund_date or now.strftime("%Y-%m-%d")
-                cashbook_entry = {
+                # ============ ATOMIC DOUBLE-ENTRY REFUND ============
+                source_id = f"pr_refund_{return_id}_{uuid.uuid4().hex[:6]}"
+                primary_entry = {
                     "transaction_id": txn_id,
                     "transaction_date": refund_date,
-                    "transaction_type": "inflow",  # P0-FIX: Purchase refund = INFLOW
+                    "transaction_type": "inflow",  # Purchase refund = INFLOW
                     "entry_type": "purchase_return_refund",
-                    "is_cashbook_entry": True,  # P0-FIX: Explicit cashbook flag
-                    "is_daybook_entry": True,   # FIX: Also mark for daybook
+                    "is_cashbook_entry": True,
+                    "is_daybook_entry": True,
                     "amount": update.actual_refund_received,
                     "mode": update.refund_mode or "bank_transfer",
                     "category_id": "vendor_refund",
@@ -41804,28 +42088,41 @@ async def update_purchase_return_refund(
                     "account_id": update.refund_account_id,
                     "project_id": return_doc.get("project_id"),
                     "vendor_id": return_doc.get("vendor_id"),
+                    "party_id": return_doc.get("vendor_id"),
+                    "party_type": "vendor",
+                    "party_name": return_doc.get("vendor_name"),
                     "reference_type": "purchase_return",
                     "reference_id": return_id,
                     "refund_status": "completed",
-                    "source_module": "purchase_return",
-                    "source_id": return_id,
-                    "is_verified": False,
-                    "created_by": user.user_id,
-                    "created_by_name": user_doc.get("name", "Unknown"),
-                    "created_at": now.isoformat(),
-                    "updated_at": now.isoformat()
+                    "is_verified": False
                 }
-                await db.accounting_transactions.insert_one(cashbook_entry)
                 
-                # ============ DOUBLE-ENTRY ENFORCEMENT ============
-                if is_double_entry_required(refund_date):
-                    vendor_payable_account = {"account_id": "acc_vendor_payable", "account_name": "Accounts Payable", "account_type": "liability"}
-                    await create_double_entry_pair(
-                        primary_txn=cashbook_entry,
-                        counter_account_info=vendor_payable_account,
-                        user_id=user.user_id,
-                        user_name=user_doc.get("name", "Unknown")
-                    )
+                counter_entry = {
+                    "transaction_date": refund_date,
+                    "transaction_type": "outflow",  # Counter = opposite
+                    "entry_type": "purchase_return_refund_counter",
+                    "amount": update.actual_refund_received,
+                    "account_id": "acc_vendor_payable",
+                    "account_name": "Accounts Payable",
+                    "account_type": "liability",
+                    "project_id": return_doc.get("project_id"),
+                    "vendor_id": return_doc.get("vendor_id"),
+                    "party_id": return_doc.get("vendor_id"),
+                    "party_type": "vendor",
+                    "party_name": return_doc.get("vendor_name"),
+                    "reference_type": "purchase_return",
+                    "reference_id": return_id,
+                    "remarks": f"[DE] Vendor Payable reduction for refund {return_id}"
+                }
+                
+                await create_atomic_double_entry(
+                    source_id=source_id,
+                    source_module="purchase_return",
+                    primary_entry=primary_entry,
+                    counter_entry=counter_entry,
+                    user_id=user.user_id,
+                    user_name=user_doc.get("name", "Unknown")
+                )
                 
                 # Update account balance (inflow = increase)
                 await db.accounting_accounts.update_one(
@@ -41853,38 +42150,66 @@ async def update_purchase_return_refund(
                     {"$set": {"status": "settled", "amount_remaining": 0}}
                 )
     
-    # P0-FIX: Handle refund reversal
+    # P0-FIX: Handle refund reversal - ATOMIC DOUBLE-ENTRY
     elif update.refund_status == "reversed" and return_doc.get("linked_transaction_id"):
-        # Create reversal entry
+        # Create reversal entry with atomic double-entry
         reversal_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
-        reversal_txn = {
+        reversal_source_id = f"pr_refund_rev_{return_id}_{uuid.uuid4().hex[:6]}"
+        refund_account = update.refund_account_id or return_doc.get("refund_account_id")
+        reversal_amount = return_doc.get("actual_refund_received", 0)
+        
+        primary_entry = {
             "transaction_id": reversal_txn_id,
             "transaction_date": now.strftime("%Y-%m-%d"),
             "transaction_type": "outflow",  # Reversal of inflow = outflow
             "entry_type": "purchase_refund_reversal",
             "is_cashbook_entry": True,
-            "is_daybook_entry": True,  # FIX: Also mark for daybook
-            "amount": return_doc.get("actual_refund_received", 0),
+            "is_daybook_entry": True,
+            "amount": reversal_amount,
             "mode": "adjustment",
             "category_id": "refund_reversal",
-            "account_id": update.refund_account_id or return_doc.get("refund_account_id"),
+            "account_id": refund_account,
             "project_id": return_doc.get("project_id"),
             "vendor_id": return_doc.get("vendor_id"),
+            "party_id": return_doc.get("vendor_id"),
+            "party_type": "vendor",
+            "party_name": return_doc.get("vendor_name"),
             "paid_to": return_doc.get("vendor_name"),
             "remarks": f"REVERSAL: Purchase Refund {return_id} - {update.remarks or 'Refund reversed'}",
             "reference_type": "purchase_return",
             "reference_id": return_id,
             "original_transaction_id": return_doc.get("linked_transaction_id"),
-            "source_module": "purchase_return",
-            "source_id": return_id,
             "is_reversal": True,
-            "is_verified": True,
-            "created_by": user.user_id,
-            "created_by_name": user_doc.get("name", "Unknown"),
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat()
+            "is_verified": True
         }
-        await db.accounting_transactions.insert_one(reversal_txn)
+        
+        counter_entry = {
+            "transaction_date": now.strftime("%Y-%m-%d"),
+            "transaction_type": "inflow",  # Counter = opposite
+            "entry_type": "purchase_refund_reversal_counter",
+            "amount": reversal_amount,
+            "account_id": "acc_vendor_payable",
+            "account_name": "Accounts Payable",
+            "account_type": "liability",
+            "project_id": return_doc.get("project_id"),
+            "vendor_id": return_doc.get("vendor_id"),
+            "party_id": return_doc.get("vendor_id"),
+            "party_type": "vendor",
+            "party_name": return_doc.get("vendor_name"),
+            "reference_type": "purchase_return",
+            "reference_id": return_id,
+            "remarks": f"[DE] Vendor Payable reinstate for reversal {return_id}",
+            "is_reversal": True
+        }
+        
+        await create_atomic_double_entry(
+            source_id=reversal_source_id,
+            source_module="purchase_return",
+            primary_entry=primary_entry,
+            counter_entry=counter_entry,
+            user_id=user.user_id,
+            user_name=user_doc.get("name", "Unknown")
+        )
         
         # Restore account balance (outflow = decrease)
         await db.accounting_accounts.update_one(
@@ -42052,14 +42377,18 @@ async def update_purchase_return_status(
         })
         
         if not existing_txn:
-            # Create cashbook INFLOW entry (vendor money received)
+            # Create cashbook INFLOW entry (vendor money received) - ATOMIC
             txn_id = f"txn_{uuid.uuid4().hex[:12]}"
-            cashbook_entry = {
+            refund_date = update.refund_date or now.strftime("%Y-%m-%d")
+            source_id = f"pr_refund_v2_{return_id}_{uuid.uuid4().hex[:6]}"
+            
+            primary_entry = {
                 "transaction_id": txn_id,
-                "transaction_date": update.refund_date or now.strftime("%Y-%m-%d"),
+                "transaction_date": refund_date,
                 "transaction_type": "inflow",  # Purchase refund = INFLOW
                 "entry_type": "purchase_return_refund",
                 "is_cashbook_entry": True,
+                "is_daybook_entry": True,
                 "amount": update.actual_refund_received,
                 "mode": update.refund_mode or "bank_transfer",
                 "category_id": "vendor_refund",
@@ -42068,15 +42397,40 @@ async def update_purchase_return_status(
                 "account_id": update.refund_account_id,
                 "project_id": return_doc.get("project_id"),
                 "vendor_id": return_doc.get("vendor_id"),
+                "party_id": return_doc.get("vendor_id"),
+                "party_type": "vendor",
+                "party_name": return_doc.get("vendor_name"),
                 "reference_type": "purchase_return",
                 "reference_id": return_id,
-                "is_verified": False,
-                "created_by": user.user_id,
-                "created_by_name": user_doc.get("name", "Unknown"),
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat()
+                "is_verified": False
             }
-            await db.accounting_transactions.insert_one(cashbook_entry)
+            
+            counter_entry = {
+                "transaction_date": refund_date,
+                "transaction_type": "outflow",  # Counter = opposite
+                "entry_type": "purchase_return_refund_counter",
+                "amount": update.actual_refund_received,
+                "account_id": "acc_vendor_payable",
+                "account_name": "Accounts Payable",
+                "account_type": "liability",
+                "project_id": return_doc.get("project_id"),
+                "vendor_id": return_doc.get("vendor_id"),
+                "party_id": return_doc.get("vendor_id"),
+                "party_type": "vendor",
+                "party_name": return_doc.get("vendor_name"),
+                "reference_type": "purchase_return",
+                "reference_id": return_id,
+                "remarks": f"[DE] Vendor Payable reduction for refund {return_id}"
+            }
+            
+            await create_atomic_double_entry(
+                source_id=source_id,
+                source_module="purchase_return",
+                primary_entry=primary_entry,
+                counter_entry=counter_entry,
+                user_id=user.user_id,
+                user_name=user_doc.get("name", "Unknown")
+            )
             
             # Update account balance (inflow = increase)
             await db.accounting_accounts.update_one(
@@ -42121,33 +42475,62 @@ async def update_purchase_return_status(
         refund_account = return_doc.get("refund_account_id")
         
         if linked_txn_id and actual_refund > 0 and refund_account:
-            # Create reversal entry (OUTFLOW - reverse the inflow)
+            # Create reversal entry (OUTFLOW - reverse the inflow) - ATOMIC
             reversal_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
-            reversal_txn = {
+            reversal_source_id = f"pr_refund_rev_v2_{return_id}_{uuid.uuid4().hex[:6]}"
+            
+            primary_entry = {
                 "transaction_id": reversal_txn_id,
                 "transaction_date": now.strftime("%Y-%m-%d"),
                 "transaction_type": "outflow",  # Reversal of inflow
                 "entry_type": "purchase_refund_reversal",
                 "is_cashbook_entry": True,
+                "is_daybook_entry": True,
                 "amount": actual_refund,
                 "mode": "adjustment",
                 "category_id": "refund_reversal",
                 "account_id": refund_account,
                 "project_id": return_doc.get("project_id"),
                 "vendor_id": return_doc.get("vendor_id"),
+                "party_id": return_doc.get("vendor_id"),
+                "party_type": "vendor",
+                "party_name": return_doc.get("vendor_name"),
                 "paid_to": return_doc.get("vendor_name"),
                 "remarks": f"REVERSAL: {return_id} - {update.reversal_reason}",
                 "reference_type": "purchase_return",
                 "reference_id": return_id,
                 "original_transaction_id": linked_txn_id,
                 "is_reversal": True,
-                "is_verified": True,  # Auto-verified
-                "created_by": user.user_id,
-                "created_by_name": user_doc.get("name", "Unknown"),
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat()
+                "is_verified": True
             }
-            await db.accounting_transactions.insert_one(reversal_txn)
+            
+            counter_entry = {
+                "transaction_date": now.strftime("%Y-%m-%d"),
+                "transaction_type": "inflow",  # Counter = opposite
+                "entry_type": "purchase_refund_reversal_counter",
+                "amount": actual_refund,
+                "account_id": "acc_vendor_payable",
+                "account_name": "Accounts Payable",
+                "account_type": "liability",
+                "project_id": return_doc.get("project_id"),
+                "vendor_id": return_doc.get("vendor_id"),
+                "party_id": return_doc.get("vendor_id"),
+                "party_type": "vendor",
+                "party_name": return_doc.get("vendor_name"),
+                "reference_type": "purchase_return",
+                "reference_id": return_id,
+                "remarks": f"[DE] Vendor Payable reinstate for reversal {return_id}",
+                "is_reversal": True
+            }
+            
+            await create_atomic_double_entry(
+                source_id=reversal_source_id,
+                source_module="purchase_return",
+                primary_entry=primary_entry,
+                counter_entry=counter_entry,
+                user_id=user.user_id,
+                user_name=user_doc.get("name", "Unknown")
+            )
             
             # Restore account balance (outflow = decrease)
             await db.accounting_accounts.update_one(
@@ -42408,25 +42791,34 @@ async def create_sales_return(return_data: SalesReturnCreate, request: Request):
         )
         return_doc["linked_payable_id"] = payable_id
     
-    # Create Daybook entry (only if not no_refund)
+    # Create Daybook entry (only if not no_refund) - ATOMIC SINGLE ENTRY
     if return_data.refund_mode != "no_refund":
+        daybook_source_id = f"sr_daybook_{return_id}"
         daybook_entry = {
             "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
             "transaction_date": return_data.return_date,
             "transaction_type": "adjustment",
             "entry_type": "sales_return",
+            "is_daybook_entry": True,
             "amount": return_data.refund_amount,
             "description": f"Sales Return: {invoice.get('customer_name', 'Unknown')} - {return_data.return_reason}",
             "project_id": invoice.get("project_id"),
             "customer_id": invoice.get("customer_id"),
+            "party_id": invoice.get("customer_id"),
+            "party_type": "customer",
+            "party_name": invoice.get("customer_name"),
             "reference_type": "sales_return",
             "reference_id": return_id,
-            "refund_status": "pending",
-            "created_by": user.user_id,
-            "created_by_name": user_doc.get("name", "Unknown"),
-            "created_at": now.isoformat()
+            "refund_status": "pending"
         }
-        await db.accounting_transactions.insert_one(daybook_entry)
+        
+        await create_atomic_single_entry(
+            source_id=daybook_source_id,
+            source_module="sales_return",
+            entry=daybook_entry,
+            user_id=user.user_id,
+            user_name=user_doc.get("name", "Unknown")
+        )
     
     return_doc.pop("_id", None)
     return {
@@ -42535,44 +42927,59 @@ async def update_sales_return_refund(
         {"$set": update_data}
     )
     
-    # If refund given, create cashbook outflow entry
+    # If refund given, create cashbook outflow entry - ATOMIC DOUBLE-ENTRY
     if update.refund_status in ["partial", "completed"] and update.refund_amount_given and update.refund_amount_given > 0:
         if update.refund_account_id:
-            # Create cashbook outflow entry
+            # Create cashbook outflow entry - ATOMIC
             txn_id = f"txn_{uuid.uuid4().hex[:12]}"
             refund_date = update.refund_date or now.strftime("%Y-%m-%d")
-            cashbook_entry = {
+            source_id = f"sr_refund_{return_id}_{uuid.uuid4().hex[:6]}"
+            
+            primary_entry = {
                 "transaction_id": txn_id,
                 "transaction_date": refund_date,
                 "transaction_type": "outflow",
                 "entry_type": "sales_return_refund",
+                "is_cashbook_entry": True,
+                "is_daybook_entry": True,
                 "amount": update.refund_amount_given,
                 "description": f"Refund to customer: Sales Return {return_id}",
                 "account_id": update.refund_account_id,
                 "project_id": return_doc.get("project_id"),
                 "customer_id": return_doc.get("customer_id"),
-                # Party metadata for ledger traceability
+                "party_id": return_doc.get("customer_id"),
+                "party_type": "customer",
+                "party_name": return_doc.get("customer_name"),
+                "reference_type": "sales_return",
+                "reference_id": return_id
+            }
+            
+            counter_entry = {
+                "transaction_date": refund_date,
+                "transaction_type": "inflow",  # Counter = opposite
+                "entry_type": "sales_return_refund_counter",
+                "amount": update.refund_amount_given,
+                "account_id": "acc_customer_receivable",
+                "account_name": "Accounts Receivable",
+                "account_type": "asset",
+                "project_id": return_doc.get("project_id"),
+                "customer_id": return_doc.get("customer_id"),
                 "party_id": return_doc.get("customer_id"),
                 "party_type": "customer",
                 "party_name": return_doc.get("customer_name"),
                 "reference_type": "sales_return",
                 "reference_id": return_id,
-                "created_by": user.user_id,
-                "created_by_name": user_doc.get("name", "Unknown"),
-                "created_at": now.isoformat()
+                "remarks": f"[DE] Customer Receivable adjustment for refund {return_id}"
             }
-            await db.accounting_transactions.insert_one(cashbook_entry)
             
-            # Create double-entry pair for sales return refund (after cutoff date)
-            if is_double_entry_required(refund_date):
-                counter_account = COUNTER_ACCOUNT_MAP.get("customer_refund", DEFAULT_EXPENSE_ACCOUNT)
-                if counter_account:
-                    await create_double_entry_pair(
-                        primary_txn=cashbook_entry,
-                        counter_account_info=counter_account,
-                        user_id=user.user_id,
-                        user_name=user_doc.get("name", "Unknown")
-                    )
+            await create_atomic_double_entry(
+                source_id=source_id,
+                source_module="sales_return",
+                primary_entry=primary_entry,
+                counter_entry=counter_entry,
+                user_id=user.user_id,
+                user_name=user_doc.get("name", "Unknown")
+            )
             
             # Update account balance
             await db.accounting_accounts.update_one(
@@ -43130,10 +43537,10 @@ async def create_credit_note(data: CreditNoteCreate, request: Request):
         }
     )
     
-    # Create accounting transaction
-    txn_id = f"txn_{uuid.uuid4().hex[:12]}"
-    await db.accounting_transactions.insert_one({
-        "transaction_id": txn_id,
+    # Create accounting transaction - ATOMIC SINGLE ENTRY
+    credit_note_source_id = f"cn_issued_{credit_note_id}"
+    credit_note_entry = {
+        "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
         "transaction_date": data.credit_note_date,
         "transaction_type": "credit_note",
         "entry_type": "credit_note_issued",
@@ -43141,11 +43548,20 @@ async def create_credit_note(data: CreditNoteCreate, request: Request):
         "description": f"Credit Note {credit_note_id} - {data.reason}",
         "project_id": return_doc.get("project_id"),
         "customer_id": return_doc.get("customer_id"),
+        "party_id": return_doc.get("customer_id"),
+        "party_type": "customer",
+        "party_name": return_doc.get("customer_name"),
         "reference_type": "credit_note",
-        "reference_id": credit_note_id,
-        "created_by": user.user_id,
-        "created_at": now.isoformat()
-    })
+        "reference_id": credit_note_id
+    }
+    
+    await create_atomic_single_entry(
+        source_id=credit_note_source_id,
+        source_module="credit_note",
+        entry=credit_note_entry,
+        user_id=user.user_id,
+        user_name=user_doc.get("name", "Unknown")
+    )
     
     credit_note_doc.pop("_id", None)
     return {"success": True, "credit_note": credit_note_doc}
@@ -43246,10 +43662,10 @@ async def create_debit_note(data: DebitNoteCreate, request: Request):
         }
     )
     
-    # Create accounting transaction
-    txn_id = f"txn_{uuid.uuid4().hex[:12]}"
-    await db.accounting_transactions.insert_one({
-        "transaction_id": txn_id,
+    # Create accounting transaction - ATOMIC SINGLE ENTRY
+    debit_note_source_id = f"dn_issued_{debit_note_id}"
+    debit_note_entry = {
+        "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
         "transaction_date": data.debit_note_date,
         "transaction_type": "debit_note",
         "entry_type": "debit_note_issued",
@@ -43257,11 +43673,20 @@ async def create_debit_note(data: DebitNoteCreate, request: Request):
         "description": f"Debit Note {debit_note_id} - {data.reason}",
         "project_id": return_doc.get("project_id"),
         "vendor_id": return_doc.get("vendor_id"),
+        "party_id": return_doc.get("vendor_id"),
+        "party_type": "vendor",
+        "party_name": return_doc.get("vendor_name"),
         "reference_type": "debit_note",
-        "reference_id": debit_note_id,
-        "created_by": user.user_id,
-        "created_at": now.isoformat()
-    })
+        "reference_id": debit_note_id
+    }
+    
+    await create_atomic_single_entry(
+        source_id=debit_note_source_id,
+        source_module="debit_note",
+        entry=debit_note_entry,
+        user_id=user.user_id,
+        user_name=user_doc.get("name", "Unknown")
+    )
     
     debit_note_doc.pop("_id", None)
     return {"success": True, "debit_note": debit_note_doc}
@@ -45613,12 +46038,17 @@ async def create_import_record(data_type: str, row_data: dict, user, now: dateti
             "payment_mode": row_data.get("payment_mode", ""),
             "notes": row_data.get("notes", ""),
             "verified": False,
-            "created_by": user.user_id,
-            "created_by_name": user.name,
-            "created_at": now.isoformat(),
             **import_meta
         }
-        await db.accounting_transactions.insert_one(record)
+        
+        import_source_id = f"import_txn_{record['transaction_id']}"
+        await create_atomic_single_entry(
+            source_id=import_source_id,
+            source_module="data_import",
+            entry=record,
+            user_id=user.user_id,
+            user_name=user.name
+        )
         return {"transaction_id": record["transaction_id"], "amount": record["amount"]}
     
     elif data_type == "receipts":

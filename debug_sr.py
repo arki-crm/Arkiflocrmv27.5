@@ -7,7 +7,7 @@ import requests
 import json
 
 def debug_service_request():
-    base_url = "https://accounting-core-fix.preview.emergentagent.com"
+    base_url = "https://atomic-ledger-engine.preview.emergentagent.com"
     
     # Use the admin token from the previous test
     admin_token = "test_admin_session_b8b8b8b8b8b8b8b8"  # This will need to be updated

@@ -31002,7 +31002,9 @@ async def fix_salary_double_entry(request: Request, dry_run: bool = True):
                     "entry_role": "$entry_role",
                     "amount": "$amount",
                     "account_id": "$account_id",
-                    "account_name": "$account_name"
+                    "account_name": "$account_name",
+                    "remarks": "$remarks",
+                    "is_cashbook_entry": "$is_cashbook_entry"
                 }},
                 "count": {"$sum": 1}
             }}
@@ -31019,38 +31021,54 @@ async def fix_salary_double_entry(request: Request, dry_run: bool = True):
             if count == 2:
                 types = [e["transaction_type"] for e in entries]
                 if len(set(types)) == 1:  # Both same type = broken
-                    # Find the counter entry (expense account, not cash/bank)
+                    # Find the counter entry using multiple detection methods:
+                    # 1. entry_role == "counter"
+                    # 2. account_id contains "expense" 
+                    # 3. remarks starts with "[DE]"
+                    # 4. is_cashbook_entry == False
                     counter_entry = None
+                    primary_entry = None
+                    
                     for e in entries:
-                        acct = e.get("account_id", "")
-                        if "expense" in acct.lower() or e.get("entry_role") == "counter":
+                        acct = e.get("account_id", "") or ""
+                        remarks = e.get("remarks", "") or ""
+                        is_cashbook = e.get("is_cashbook_entry", True)
+                        role = e.get("entry_role", "")
+                        
+                        # Counter entry detection
+                        if (role == "counter" or 
+                            "expense" in acct.lower() or 
+                            remarks.startswith("[DE]") or
+                            is_cashbook == False):
                             counter_entry = e
-                            break
+                        else:
+                            primary_entry = e
                     
-                    if not counter_entry:
-                        # If no clear counter, pick the one that's NOT is_cashbook_entry
-                        # For now, just pick the second one
-                        counter_entry = entries[1] if entries[0].get("account_id", "").startswith("acc_") else entries[0]
+                    # If still no counter identified, use the one without cashbook flag
+                    if not counter_entry and primary_entry:
+                        counter_entry = [e for e in entries if e != primary_entry][0] if len(entries) > 1 else None
                     
-                    fix_info = {
-                        "source_module": source_module,
-                        "source_id": source_id,
-                        "counter_transaction_id": counter_entry["transaction_id"],
-                        "current_type": counter_entry["transaction_type"],
-                        "correct_type": "inflow",  # Expense accounts should be DEBIT (inflow)
-                        "amount": counter_entry["amount"],
-                        "account_id": counter_entry.get("account_id")
-                    }
-                    fixes_needed.append(fix_info)
-                    
-                    # Apply fix if not dry_run
-                    if not dry_run:
-                        result = await db.accounting_transactions.update_one(
-                            {"transaction_id": counter_entry["transaction_id"]},
-                            {"$set": {"transaction_type": "inflow"}}
-                        )
-                        if result.modified_count > 0:
-                            fixes_applied += 1
+                    if counter_entry:
+                        fix_info = {
+                            "source_module": source_module,
+                            "source_id": source_id,
+                            "counter_transaction_id": counter_entry["transaction_id"],
+                            "current_type": counter_entry["transaction_type"],
+                            "correct_type": "inflow",  # Expense accounts should be DEBIT (inflow)
+                            "amount": counter_entry["amount"],
+                            "account_id": counter_entry.get("account_id"),
+                            "remarks": counter_entry.get("remarks", "")[:50]
+                        }
+                        fixes_needed.append(fix_info)
+                        
+                        # Apply fix if not dry_run
+                        if not dry_run:
+                            result = await db.accounting_transactions.update_one(
+                                {"transaction_id": counter_entry["transaction_id"]},
+                                {"$set": {"transaction_type": "inflow"}}
+                            )
+                            if result.modified_count > 0:
+                                fixes_applied += 1
     
     # Log the fix attempt
     if not dry_run and fixes_applied > 0:

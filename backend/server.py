@@ -25031,19 +25031,28 @@ async def get_project_finance_detail(project_id: str, request: Request):
     cashbook_expense_total = sum(e.get("amount", 0) for e in cashbook_expenses)
     
     # 2e. PROJECT-LINKED SALARY COMPONENTS (Incentives & Commissions)
-    # These have source_module = "incentive_payout" or "commission_payout"
-    # They are NOT included in cashbook_expenses because source_module != "cashbook"
+    # These entries can be identified by:
+    # - NEW entries: source_module = "incentive_payout" or "commission_payout"
+    # - OLD entries: payment_category = "incentive" or "commission"
     # Only include PRIMARY entries (entry_role = "primary") to avoid double-counting with counter entries
     project_salary_components = await db.accounting_transactions.find({
         "project_id": project_id,
         "transaction_type": "outflow",
-        "source_module": {"$in": ["incentive_payout", "commission_payout"]},
-        # Only primary entries to avoid double-counting
+        # Match EITHER new source_module OR old payment_category structure
         "$or": [
-            {"entry_role": "primary"},
-            {"entry_role": {"$exists": False}}  # Legacy entries without entry_role
+            {"source_module": {"$in": ["incentive_payout", "commission_payout"]}},
+            {"payment_category": {"$in": ["incentive", "commission"]}}
+        ],
+        # Only primary entries to avoid double-counting
+        # Use $and with $or to handle entry_role filtering
+        "$and": [
+            {"$or": [
+                {"entry_role": "primary"},
+                {"entry_role": {"$exists": False}},  # Legacy entries without entry_role
+                {"entry_role": None}
+            ]}
         ]
-    }, {"_id": 0, "amount": 1, "source_module": 1, "category_id": 1, "category_name": 1, 
+    }, {"_id": 0, "amount": 1, "source_module": 1, "payment_category": 1, "category_id": 1, "category_name": 1, 
         "work_type": 1, "account_name": 1, "remarks": 1, "transaction_id": 1,
         "transaction_date": 1, "created_at": 1, "paid_to": 1, "party_name": 1}).to_list(500)
     project_salary_total = sum(e.get("amount", 0) for e in project_salary_components)
@@ -25122,13 +25131,16 @@ async def get_project_finance_detail(project_id: str, request: Request):
         actual_by_category[composite_key] = actual_by_category.get(composite_key, 0) + e.get("amount", 0)
     
     # Add project-linked salary components (incentives & commissions) to category breakdown
-    # Map source_module to user-friendly category names
+    # Map source_module OR payment_category to user-friendly category names
     salary_category_map = {
         "incentive_payout": "Incentive Cost",
-        "commission_payout": "Commission Cost"
+        "commission_payout": "Commission Cost",
+        "incentive": "Incentive Cost",  # Old payment_category value
+        "commission": "Commission Cost"  # Old payment_category value
     }
     for e in project_salary_components:
-        source = e.get("source_module", "")
+        # Try source_module first, then fall back to payment_category
+        source = e.get("source_module") or e.get("payment_category", "")
         # Use the predefined category name for salary components
         cat = salary_category_map.get(source, "Salary Cost")
         # Salary components don't have work_type typically - use "general" or derive from project context
@@ -31057,6 +31069,228 @@ async def fix_salary_double_entry(request: Request, dry_run: bool = True):
         "fixes_needed": len(fixes_needed),
         "fixes_applied": fixes_applied,
         "details": fixes_needed[:20]  # Limit response size
+    }
+
+
+@api_router.get("/finance/debug/project-salary-entries/{project_id}")
+async def debug_project_salary_entries(project_id: str, request: Request):
+    """
+    Diagnostic endpoint to investigate why historical incentive/commission entries
+    are not appearing in Project Financials.
+    
+    Shows all entries that COULD be incentive/commission related for a project.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Founder can access debug endpoints")
+    
+    # 1. Get entries that MATCH current aggregation logic
+    current_logic_entries = await db.accounting_transactions.find({
+        "project_id": project_id,
+        "transaction_type": "outflow",
+        "source_module": {"$in": ["incentive_payout", "commission_payout"]},
+        "$or": [
+            {"entry_role": "primary"},
+            {"entry_role": {"$exists": False}}
+        ]
+    }, {"_id": 0}).to_list(100)
+    
+    # 2. Get entries that have payment_category = incentive or commission (older structure)
+    payment_category_entries = await db.accounting_transactions.find({
+        "project_id": project_id,
+        "payment_category": {"$in": ["incentive", "commission"]}
+    }, {"_id": 0}).to_list(100)
+    
+    # 3. Get entries with "incentive" or "commission" in remarks/description
+    keyword_entries = await db.accounting_transactions.find({
+        "project_id": project_id,
+        "$or": [
+            {"remarks": {"$regex": "incentive|commission", "$options": "i"}},
+            {"description": {"$regex": "incentive|commission", "$options": "i"}},
+            {"category_id": {"$regex": "incentive|commission", "$options": "i"}}
+        ]
+    }, {"_id": 0}).to_list(100)
+    
+    # 4. Get entries linked to finance_incentives or finance_commissions
+    incentive_refs = await db.accounting_transactions.find({
+        "project_id": project_id,
+        "$or": [
+            {"reference_type": {"$in": ["incentive", "incentive_payout", "commission", "commission_payout"]}},
+            {"incentive_id": {"$exists": True}},
+            {"commission_id": {"$exists": True}}
+        ]
+    }, {"_id": 0}).to_list(100)
+    
+    # 5. Get ALL outflow entries for the project to see full picture
+    all_outflows = await db.accounting_transactions.find({
+        "project_id": project_id,
+        "transaction_type": "outflow"
+    }, {"_id": 0, "transaction_id": 1, "amount": 1, "source_module": 1, 
+        "payment_category": 1, "category_id": 1, "remarks": 1, 
+        "entry_role": 1, "reference_type": 1, "created_at": 1}).to_list(200)
+    
+    # Summarize source_modules found
+    source_module_summary = {}
+    for e in all_outflows:
+        sm = e.get("source_module", "NONE")
+        source_module_summary[sm] = source_module_summary.get(sm, 0) + 1
+    
+    return {
+        "project_id": project_id,
+        "current_logic_matches": {
+            "count": len(current_logic_entries),
+            "total_amount": sum(e.get("amount", 0) for e in current_logic_entries),
+            "entries": current_logic_entries[:5]
+        },
+        "payment_category_matches": {
+            "count": len(payment_category_entries),
+            "total_amount": sum(e.get("amount", 0) for e in payment_category_entries),
+            "entries": payment_category_entries[:5]
+        },
+        "keyword_matches": {
+            "count": len(keyword_entries),
+            "total_amount": sum(e.get("amount", 0) for e in keyword_entries),
+            "entries": keyword_entries[:5]
+        },
+        "reference_type_matches": {
+            "count": len(incentive_refs),
+            "total_amount": sum(e.get("amount", 0) for e in incentive_refs),
+            "entries": incentive_refs[:5]
+        },
+        "all_outflows_summary": {
+            "total_count": len(all_outflows),
+            "source_module_breakdown": source_module_summary
+        },
+        "recommendation": "Compare current_logic_matches with other categories to identify missing entries"
+    }
+
+
+@api_router.post("/finance/data-integrity/fix-historical-salary-entries")
+async def fix_historical_salary_entries(request: Request, project_id: Optional[str] = None, dry_run: bool = True):
+    """
+    Fix historical incentive/commission entries that have incorrect source_module.
+    
+    This ensures older entries created before the source_module standardization
+    are included in Project Financials aggregation.
+    
+    Args:
+        project_id: Optional - fix only for specific project
+        dry_run: If True, only diagnose without fixing. Set to False to apply fixes.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Founder can fix data integrity")
+    
+    fixes_needed = []
+    fixes_applied = 0
+    
+    # Build query
+    base_query = {
+        "project_id": {"$exists": True, "$ne": None},
+        "transaction_type": "outflow",
+        # Entries with payment_category but missing/wrong source_module
+        "payment_category": {"$in": ["incentive", "commission"]},
+        "$or": [
+            {"source_module": {"$exists": False}},
+            {"source_module": None},
+            {"source_module": ""},
+            {"source_module": "cashbook"}  # Incorrectly tagged as cashbook
+        ]
+    }
+    
+    if project_id:
+        base_query["project_id"] = project_id
+    
+    # Find entries that need fixing
+    entries_to_fix = await db.accounting_transactions.find(base_query, {"_id": 0}).to_list(1000)
+    
+    for entry in entries_to_fix:
+        payment_cat = entry.get("payment_category")
+        correct_source_module = "incentive_payout" if payment_cat == "incentive" else "commission_payout"
+        
+        fix_info = {
+            "transaction_id": entry.get("transaction_id"),
+            "project_id": entry.get("project_id"),
+            "amount": entry.get("amount"),
+            "payment_category": payment_cat,
+            "current_source_module": entry.get("source_module"),
+            "correct_source_module": correct_source_module,
+            "remarks": entry.get("remarks", "")[:50]
+        }
+        fixes_needed.append(fix_info)
+        
+        if not dry_run:
+            result = await db.accounting_transactions.update_one(
+                {"transaction_id": entry.get("transaction_id")},
+                {"$set": {"source_module": correct_source_module}}
+            )
+            if result.modified_count > 0:
+                fixes_applied += 1
+    
+    # Also find entries by keyword in remarks (fallback for very old entries)
+    keyword_query = {
+        "project_id": {"$exists": True, "$ne": None},
+        "transaction_type": "outflow",
+        "$or": [
+            {"remarks": {"$regex": "^Incentive payout:", "$options": "i"}},
+            {"remarks": {"$regex": "^Commission payout:", "$options": "i"}},
+            {"description": {"$regex": "^Incentive payout:", "$options": "i"}},
+            {"description": {"$regex": "^Commission payout:", "$options": "i"}}
+        ],
+        "source_module": {"$nin": ["incentive_payout", "commission_payout"]}
+    }
+    
+    if project_id:
+        keyword_query["project_id"] = project_id
+    
+    keyword_entries = await db.accounting_transactions.find(keyword_query, {"_id": 0}).to_list(500)
+    
+    for entry in keyword_entries:
+        remarks = (entry.get("remarks") or entry.get("description") or "").lower()
+        correct_source_module = "incentive_payout" if "incentive" in remarks else "commission_payout"
+        
+        fix_info = {
+            "transaction_id": entry.get("transaction_id"),
+            "project_id": entry.get("project_id"),
+            "amount": entry.get("amount"),
+            "detection_method": "keyword_in_remarks",
+            "current_source_module": entry.get("source_module"),
+            "correct_source_module": correct_source_module,
+            "remarks": entry.get("remarks", "")[:50]
+        }
+        fixes_needed.append(fix_info)
+        
+        if not dry_run:
+            result = await db.accounting_transactions.update_one(
+                {"transaction_id": entry.get("transaction_id")},
+                {"$set": {"source_module": correct_source_module}}
+            )
+            if result.modified_count > 0:
+                fixes_applied += 1
+    
+    # Log the fix attempt
+    if not dry_run and fixes_applied > 0:
+        await db.accounting_audit_log.insert_one({
+            "action": "fix_historical_salary_entries",
+            "project_id": project_id,
+            "fixes_applied": fixes_applied,
+            "fix_details": fixes_needed[:50],
+            "executed_at": datetime.now(timezone.utc).isoformat(),
+            "executed_by": user.user_id,
+            "executed_by_name": user_doc.get("name", "Unknown")
+        })
+    
+    return {
+        "success": True,
+        "dry_run": dry_run,
+        "project_id": project_id or "ALL",
+        "fixes_needed": len(fixes_needed),
+        "fixes_applied": fixes_applied,
+        "details": fixes_needed[:30]  # Limit response size
     }
 
 

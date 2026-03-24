@@ -45,6 +45,20 @@ Fixed issue where project-linked incentives and commissions were NOT appearing i
 - `?dry_run=true` - Diagnose without fixing (default)
 - `?dry_run=false` - Apply fixes to corrupted entries
 
+### ✅ Historical Salary Entry Fix (March 24, 2026)
+
+**Issue:** Old incentive/commission entries with `payment_category` field (instead of `source_module`) were not appearing in Project Financials.
+
+**Fix Applied:**
+1. Updated aggregation query to match BOTH:
+   - `source_module: ["incentive_payout", "commission_payout"]` (new structure)
+   - `payment_category: ["incentive", "commission"]` (old structure)
+2. Updated category mapping to handle both field types
+
+**Debug & Fix Endpoints Added:**
+- `GET /api/finance/debug/project-salary-entries/{project_id}` - Diagnose entry structure
+- `POST /api/finance/data-integrity/fix-historical-salary-entries` - Fix source_module for old entries
+
 ### Core Features Implemented
 - **Double-Entry Accounting Engine**: Enforced at insert level with validation
 - **Data Integrity Guards**: Duplicate prevention, entry count validation

@@ -222,6 +222,228 @@ async def ensure_counter_account_exists(account_info: dict):
         })
 
 
+# =============================================================================
+# UNIFIED ATOMIC DOUBLE-ENTRY FUNCTION
+# =============================================================================
+# ALL accounting transaction writes MUST go through this function.
+# Direct writes to accounting_transactions are PROHIBITED.
+# =============================================================================
+
+class DoubleEntryError(Exception):
+    """Raised when double-entry validation fails"""
+    pass
+
+
+async def create_atomic_double_entry(
+    source_id: str,
+    source_module: str,
+    primary_entry: dict,
+    counter_entry: dict,
+    user_id: str,
+    user_name: str,
+    skip_if_exists: bool = True
+) -> dict:
+    """
+    UNIFIED ATOMIC DOUBLE-ENTRY FUNCTION
+    
+    ALL accounting writes MUST use this function. No exceptions.
+    
+    Guarantees:
+    1. IDEMPOTENCY: Skips if source_id already has entries (prevents duplicates)
+    2. ATOMIC: Both entries inserted together via insert_many (all or nothing)
+    3. VALIDATION: Post-insert check ensures exactly 2 entries exist
+    4. TRACEABILITY: Both entries share the same source_id for pairing
+    
+    Args:
+        source_id: Unique identifier for this transaction (e.g., "rcp_xxx", "lia_settle_xxx")
+        source_module: Module creating this entry (e.g., "receipts", "liability_settlement")
+        primary_entry: The primary transaction dict (Bank/Cash side)
+        counter_entry: The counter transaction dict (Expense/Liability/Income side)
+        user_id: ID of user creating the entry
+        user_name: Name of user creating the entry
+        skip_if_exists: If True, silently skip if entries exist. If False, raise error.
+    
+    Returns:
+        dict with keys: success, primary_id, counter_id, skipped, message
+    
+    Raises:
+        DoubleEntryError: If validation fails after insert
+        HTTPException: If entries already exist and skip_if_exists=False
+    """
+    
+    # ========== STEP 1: IDEMPOTENCY CHECK ==========
+    existing_count = await db.accounting_transactions.count_documents({
+        "source_id": source_id,
+        "source_module": source_module
+    })
+    
+    if existing_count > 0:
+        if existing_count == 2:
+            if skip_if_exists:
+                logger.info(f"[ATOMIC-DE] Skipping {source_id} - already has 2 entries")
+                existing = await db.accounting_transactions.find_one({
+                    "source_id": source_id,
+                    "entry_role": "primary"
+                })
+                return {
+                    "success": True,
+                    "skipped": True,
+                    "primary_id": existing.get("transaction_id") if existing else None,
+                    "message": f"Entries already exist for {source_id}"
+                }
+            else:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Double-entry already exists for {source_id}"
+                )
+        else:
+            # Data integrity issue - wrong number of entries
+            logger.error(f"[ATOMIC-DE] INTEGRITY ERROR: {source_id} has {existing_count} entries (expected 0 or 2)")
+            raise DoubleEntryError(
+                f"Data integrity error: {source_id} has {existing_count} entries. Manual fix required."
+            )
+    
+    # ========== STEP 2: PREPARE ENTRIES ==========
+    now = datetime.now(timezone.utc)
+    
+    primary_txn_id = primary_entry.get("transaction_id") or f"txn_{uuid.uuid4().hex[:12]}"
+    counter_txn_id = counter_entry.get("transaction_id") or f"txn_{uuid.uuid4().hex[:12]}"
+    
+    # Ensure required fields on primary
+    primary_entry.update({
+        "transaction_id": primary_txn_id,
+        "source_id": source_id,
+        "source_module": source_module,
+        "is_double_entry": True,
+        "entry_role": "primary",
+        "paired_transaction_id": counter_txn_id,
+        "created_at": primary_entry.get("created_at") or now.isoformat(),
+        "created_by": user_id,
+        "created_by_name": user_name,
+        "updated_at": now.isoformat()
+    })
+    
+    # Ensure required fields on counter
+    counter_entry.update({
+        "transaction_id": counter_txn_id,
+        "source_id": source_id,
+        "source_module": source_module,
+        "is_double_entry": True,
+        "entry_role": "counter",
+        "paired_transaction_id": primary_txn_id,
+        "is_system_generated": True,
+        "created_at": counter_entry.get("created_at") or now.isoformat(),
+        "created_by": user_id,
+        "created_by_name": user_name,
+        "updated_at": now.isoformat()
+    })
+    
+    # Ensure counter account exists
+    if counter_entry.get("account_id"):
+        counter_account = {
+            "account_id": counter_entry["account_id"],
+            "account_name": counter_entry.get("account_name", counter_entry["account_id"]),
+            "account_type": counter_entry.get("account_type", "expense")
+        }
+        await ensure_counter_account_exists(counter_account)
+    
+    # ========== STEP 3: ATOMIC INSERT ==========
+    try:
+        await db.accounting_transactions.insert_many([primary_entry, counter_entry], ordered=True)
+        logger.info(f"[ATOMIC-DE] Created entries for {source_id}: {primary_txn_id}, {counter_txn_id}")
+    except Exception as e:
+        logger.error(f"[ATOMIC-DE] Insert failed for {source_id}: {e}")
+        raise DoubleEntryError(f"Failed to insert double-entry: {e}")
+    
+    # ========== STEP 4: POST-INSERT VALIDATION ==========
+    final_count = await db.accounting_transactions.count_documents({
+        "source_id": source_id,
+        "source_module": source_module
+    })
+    
+    if final_count != 2:
+        # CRITICAL: Data integrity violation
+        logger.error(f"[ATOMIC-DE] CRITICAL: Post-insert validation failed for {source_id}. Count: {final_count}")
+        
+        # Flag entries for audit (don't delete - preserve for investigation)
+        await db.accounting_transactions.update_many(
+            {"source_id": source_id, "source_module": source_module},
+            {"$set": {
+                "needs_audit": True,
+                "audit_reason": f"Post-insert validation failed: {final_count} entries (expected 2)",
+                "audit_flagged_at": now.isoformat()
+            }}
+        )
+        
+        raise DoubleEntryError(
+            f"Post-insert validation failed for {source_id}: {final_count} entries exist (expected 2)"
+        )
+    
+    return {
+        "success": True,
+        "skipped": False,
+        "primary_id": primary_txn_id,
+        "counter_id": counter_txn_id,
+        "message": f"Created double-entry for {source_id}"
+    }
+
+
+async def create_atomic_single_entry(
+    source_id: str,
+    source_module: str,
+    entry: dict,
+    user_id: str,
+    user_name: str,
+    skip_if_exists: bool = True
+) -> dict:
+    """
+    Create a SINGLE entry (for pre-double-entry-cutoff transactions only).
+    
+    This should ONLY be used for legacy compatibility.
+    New transactions should ALWAYS use create_atomic_double_entry.
+    """
+    
+    # Check if exists
+    existing = await db.accounting_transactions.find_one({
+        "source_id": source_id,
+        "source_module": source_module
+    })
+    
+    if existing:
+        if skip_if_exists:
+            return {
+                "success": True,
+                "skipped": True,
+                "transaction_id": existing.get("transaction_id"),
+                "message": f"Entry already exists for {source_id}"
+            }
+        else:
+            raise HTTPException(status_code=409, detail=f"Entry already exists for {source_id}")
+    
+    now = datetime.now(timezone.utc)
+    txn_id = entry.get("transaction_id") or f"txn_{uuid.uuid4().hex[:12]}"
+    
+    entry.update({
+        "transaction_id": txn_id,
+        "source_id": source_id,
+        "source_module": source_module,
+        "is_double_entry": False,
+        "created_at": entry.get("created_at") or now.isoformat(),
+        "created_by": user_id,
+        "created_by_name": user_name,
+        "updated_at": now.isoformat()
+    })
+    
+    await db.accounting_transactions.insert_one(entry)
+    
+    return {
+        "success": True,
+        "skipped": False,
+        "transaction_id": txn_id,
+        "message": f"Created single entry for {source_id}"
+    }
+
+
 async def create_double_entry_pair(
     primary_txn: dict,
     counter_account_info: dict,
@@ -353,6 +575,115 @@ async def create_double_entry_pair(
     )
     
     return counter_txn_id
+
+
+async def create_atomic_journal_entries(
+    je_id: str,
+    reference_number: str,
+    entries: list,
+    user_id: str,
+    user_name: str
+) -> dict:
+    """
+    Create multiple journal entry transactions atomically.
+    
+    Journal entries are special - they can have multiple debit/credit lines
+    that must balance (total debits = total credits).
+    
+    This is different from standard double-entry which has exactly 2 entries.
+    
+    Args:
+        je_id: Journal entry ID
+        reference_number: JE reference number
+        entries: List of transaction dicts (each with account_id, transaction_type, amount)
+        user_id: User creating the entries
+        user_name: User name
+    
+    Returns:
+        dict with success, transaction_ids, message
+    """
+    source_id = f"je_{je_id}"
+    source_module = "journal_entry"
+    
+    # IDEMPOTENCY CHECK
+    existing_count = await db.accounting_transactions.count_documents({
+        "source_id": source_id,
+        "source_module": source_module
+    })
+    
+    if existing_count > 0:
+        logger.info(f"[ATOMIC-JE] Skipping {source_id} - already has {existing_count} entries")
+        return {
+            "success": True,
+            "skipped": True,
+            "message": f"Journal entry {je_id} already has transactions"
+        }
+    
+    # VALIDATION: Debits must equal credits
+    total_debit = sum(e.get("amount", 0) for e in entries if e.get("transaction_type") == "outflow")
+    total_credit = sum(e.get("amount", 0) for e in entries if e.get("transaction_type") == "inflow")
+    
+    if abs(total_debit - total_credit) > 0.01:
+        raise DoubleEntryError(
+            f"Journal entry unbalanced: Debits ₹{total_debit:,.2f} != Credits ₹{total_credit:,.2f}"
+        )
+    
+    now = datetime.now(timezone.utc)
+    transaction_ids = []
+    
+    # Prepare all entries
+    prepared_entries = []
+    for i, entry in enumerate(entries):
+        txn_id = entry.get("transaction_id") or f"txn_{uuid.uuid4().hex[:12]}"
+        transaction_ids.append(txn_id)
+        
+        prepared_entry = {
+            **entry,
+            "transaction_id": txn_id,
+            "source_id": source_id,
+            "source_module": source_module,
+            "reference_id": reference_number,
+            "je_id": je_id,
+            "is_double_entry": True,  # Part of balanced set
+            "entry_role": "je_line",
+            "entry_index": i,
+            "created_at": now.isoformat(),
+            "created_by": user_id,
+            "created_by_name": user_name,
+            "updated_at": now.isoformat()
+        }
+        prepared_entries.append(prepared_entry)
+    
+    # ATOMIC INSERT
+    try:
+        await db.accounting_transactions.insert_many(prepared_entries, ordered=True)
+        logger.info(f"[ATOMIC-JE] Created {len(prepared_entries)} entries for {je_id}")
+    except Exception as e:
+        logger.error(f"[ATOMIC-JE] Insert failed for {je_id}: {e}")
+        raise DoubleEntryError(f"Failed to insert journal entries: {e}")
+    
+    # POST-INSERT VALIDATION
+    final_count = await db.accounting_transactions.count_documents({
+        "source_id": source_id,
+        "source_module": source_module
+    })
+    
+    if final_count != len(prepared_entries):
+        logger.error(f"[ATOMIC-JE] Validation failed for {je_id}: {final_count} != {len(prepared_entries)}")
+        await db.accounting_transactions.update_many(
+            {"source_id": source_id, "source_module": source_module},
+            {"$set": {
+                "needs_audit": True,
+                "audit_reason": f"Count mismatch: {final_count} != {len(prepared_entries)}"
+            }}
+        )
+    
+    return {
+        "success": True,
+        "skipped": False,
+        "transaction_ids": transaction_ids,
+        "message": f"Created {len(prepared_entries)} journal entry transactions"
+    }
 
 
 def get_counter_account_for_category(category_id: str, transaction_type: str) -> dict:
@@ -23636,9 +23967,46 @@ async def create_self_transfer(transfer: SelfTransferCreate, request: Request):
     # Update outflow with paired transaction ID
     outflow_txn["paired_transaction_id"] = inflow_txn_id
     
-    # Insert both transactions
-    await db.accounting_transactions.insert_one(outflow_txn)
-    await db.accounting_transactions.insert_one(inflow_txn)
+    # USE ATOMIC INSERT for both transactions
+    transfer_source_id = f"trf_{transfer_id}"
+    
+    # Add required fields for atomic function
+    outflow_txn["source_id"] = transfer_source_id
+    outflow_txn["source_module"] = "self_transfer"
+    outflow_txn["is_double_entry"] = True
+    outflow_txn["entry_role"] = "primary"
+    
+    inflow_txn["source_id"] = transfer_source_id
+    inflow_txn["source_module"] = "self_transfer"
+    inflow_txn["is_double_entry"] = True
+    inflow_txn["entry_role"] = "counter"
+    
+    # Check idempotency
+    existing_count = await db.accounting_transactions.count_documents({
+        "source_id": transfer_source_id,
+        "source_module": "self_transfer"
+    })
+    
+    if existing_count == 0:
+        # Atomic insert both transactions
+        await db.accounting_transactions.insert_many([outflow_txn, inflow_txn], ordered=True)
+        
+        # Validate
+        final_count = await db.accounting_transactions.count_documents({
+            "source_id": transfer_source_id,
+            "source_module": "self_transfer"
+        })
+        
+        if final_count != 2:
+            logger.error(f"[ATOMIC-TRANSFER] Validation failed for {transfer_source_id}: {final_count} != 2")
+            await db.accounting_transactions.update_many(
+                {"source_id": transfer_source_id},
+                {"$set": {"needs_audit": True, "audit_reason": f"Count mismatch: {final_count}"}}
+            )
+    elif existing_count == 2:
+        logger.info(f"[ATOMIC-TRANSFER] Transfer {transfer_id} already exists - skipping")
+    else:
+        raise HTTPException(status_code=409, detail=f"Transfer {transfer_id} has invalid state: {existing_count} entries")
     
     # Update account balances
     await db.accounting_accounts.update_one(
@@ -26911,6 +27279,7 @@ async def record_expense_request(request_id: str, data: ExpenseRecordAction, req
     paid_to = data.paid_to or vendor_name or "Vendor/Supplier"
     
     # Create the cashbook transaction
+    expense_source_id = f"exp_record_{request_id}"
     new_txn = {
         "transaction_id": txn_id,
         "transaction_date": data.transaction_date,
@@ -26928,16 +27297,51 @@ async def record_expense_request(request_id: str, data: ExpenseRecordAction, req
         "verified_at": None,
         # Link to expense request
         "source_type": "expense_request",
-        "source_id": request_id,
         "source_number": existing["request_number"],
+        "is_cashbook_entry": True,
         # Timestamps
         "created_at": now.isoformat(),
-        "created_by": user.user_id,
-        "created_by_name": user.name,
         "updated_at": now.isoformat()
     }
     
-    await db.accounting_transactions.insert_one(new_txn)
+    # USE ATOMIC DOUBLE-ENTRY
+    if is_double_entry_required(data.transaction_date):
+        # Get expense account based on category
+        counter_account = get_counter_account_for_category(existing["category_id"], "outflow")
+        
+        counter_entry = {
+            "transaction_date": data.transaction_date,
+            "transaction_type": "outflow",  # Expense debit
+            "amount": existing["amount"],
+            "mode": "double_entry",
+            "category_id": existing["category_id"],
+            "account_id": counter_account["account_id"],
+            "account_name": counter_account["account_name"],
+            "account_type": counter_account["account_type"],
+            "project_id": existing.get("project_id"),
+            "remarks": f"[DE] Expense: {existing['description'][:50]}",
+            "is_cashbook_entry": False,
+            "is_daybook_entry": True
+        }
+        
+        await create_atomic_double_entry(
+            source_id=expense_source_id,
+            source_module="expense_record",
+            primary_entry=new_txn,
+            counter_entry=counter_entry,
+            user_id=user.user_id,
+            user_name=user.name,
+            skip_if_exists=True
+        )
+    else:
+        await create_atomic_single_entry(
+            source_id=expense_source_id,
+            source_module="expense_record",
+            entry=new_txn,
+            user_id=user.user_id,
+            user_name=user.name,
+            skip_if_exists=True
+        )
     
     # Update account balance
     await db.accounting_accounts.update_one(
@@ -27057,6 +27461,7 @@ async def record_expense_refund(request_id: str, data: RefundReceivedAction, req
     category_id = existing.get("category_id")
     
     # Create inflow transaction for refund
+    refund_source_id = f"exp_refund_{request_id}_{uuid.uuid4().hex[:6]}"
     refund_txn = {
         "transaction_id": txn_id,
         "transaction_date": data.received_date,
@@ -27071,25 +27476,49 @@ async def record_expense_refund(request_id: str, data: RefundReceivedAction, req
         "attachment_url": None,
         "is_verified": False,
         "source_type": "expense_refund",
-        "source_id": request_id,
         "source_number": existing["request_number"],
+        "is_cashbook_entry": True,
         "created_at": now.isoformat(),
-        "created_by": user.user_id,
-        "created_by_name": user.name,
         "updated_at": now.isoformat()
     }
     
-    await db.accounting_transactions.insert_one(refund_txn)
-    
-    # ============ DOUBLE-ENTRY ENFORCEMENT ============
+    # USE ATOMIC DOUBLE-ENTRY
     if is_double_entry_required(data.received_date[:10]):
         # Refund credits the expense account (reversal)
         expense_account = {"account_id": "acc_general_expense", "account_name": "General Expense", "account_type": "expense"}
-        await create_double_entry_pair(
-            primary_txn=refund_txn,
-            counter_account_info=expense_account,
+        
+        counter_entry = {
+            "transaction_date": data.received_date,
+            "transaction_type": "inflow",  # Expense credit (reversal)
+            "amount": data.refund_amount,
+            "mode": "double_entry",
+            "category_id": category_id,
+            "account_id": expense_account["account_id"],
+            "account_name": expense_account["account_name"],
+            "account_type": expense_account["account_type"],
+            "project_id": existing.get("project_id"),
+            "remarks": f"[DE] Refund reversal: {existing.get('description', '')[:40]}",
+            "is_cashbook_entry": False,
+            "is_daybook_entry": True
+        }
+        
+        await create_atomic_double_entry(
+            source_id=refund_source_id,
+            source_module="expense_refund",
+            primary_entry=refund_txn,
+            counter_entry=counter_entry,
             user_id=user.user_id,
-            user_name=user.name
+            user_name=user.name,
+            skip_if_exists=True
+        )
+    else:
+        await create_atomic_single_entry(
+            source_id=refund_source_id,
+            source_module="expense_refund",
+            entry=refund_txn,
+            user_id=user.user_id,
+            user_name=user.name,
+            skip_if_exists=True
         )
     
     # Update account balance (inflow)
@@ -31287,53 +31716,45 @@ async def create_journal_entry(request: Request):
     # Insert journal entry
     await db.journal_entries.insert_one(je_doc)
     
-    # Create accounting_transactions for each line
+    # Create accounting_transactions for each line using ATOMIC function
+    je_transactions = []
     for line in enriched_lines:
         if line["debit"] > 0:
-            # Debit entry = outflow
-            txn_doc = {
-                "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+            je_transactions.append({
                 "account_id": line["account_id"],
                 "transaction_type": "outflow",
                 "amount": line["debit"],
                 "date": je_date,
-                "transaction_date": je_date,  # FIX 2: Add transaction_date for report queries
+                "transaction_date": je_date,
                 "category_id": "journal_entry",
-                "source_module": "journal_entry",
-                "reference_id": reference_number,
                 "is_daybook_entry": True,
                 "remarks": f"JE: {narration} - {line.get('narration', '')}",
-                "je_id": je_id,
                 "je_line_id": line["line_id"],
-                "created_by": user.user_id,
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat(),  # FIX 2: Add updated_at
-                "is_verified": True  # JE entries are auto-verified
-            }
-            await db.accounting_transactions.insert_one(txn_doc)
+                "is_verified": True
+            })
         
         if line["credit"] > 0:
-            # Credit entry = inflow
-            txn_doc = {
-                "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+            je_transactions.append({
                 "account_id": line["account_id"],
                 "transaction_type": "inflow",
                 "amount": line["credit"],
                 "date": je_date,
-                "transaction_date": je_date,  # FIX 2: Add transaction_date for report queries
+                "transaction_date": je_date,
                 "category_id": "journal_entry",
-                "source_module": "journal_entry",
-                "reference_id": reference_number,
                 "is_daybook_entry": True,
                 "remarks": f"JE: {narration} - {line.get('narration', '')}",
-                "je_id": je_id,
                 "je_line_id": line["line_id"],
-                "created_by": user.user_id,
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat(),  # FIX 2: Add updated_at
                 "is_verified": True
-            }
-            await db.accounting_transactions.insert_one(txn_doc)
+            })
+    
+    # ATOMIC INSERT of all journal entry lines
+    await create_atomic_journal_entries(
+        je_id=je_id,
+        reference_number=reference_number,
+        entries=je_transactions,
+        user_id=user.user_id,
+        user_name=user_doc.get("name", user.email)
+    )
     
     # Audit log
     await db.audit_logs.insert_one({
@@ -33829,58 +34250,66 @@ async def cancel_receipt(receipt_id: str, request: Request):
         "is_cashbook_entry": True,
         "is_daybook_entry": True,
         "source_module": "receipt_cancellation",
-        "source_id": receipt_id,
         
         # Metadata
         "created_at": now.isoformat(),
-        "created_by": user.user_id,
-        "created_by_name": user.name,
         "updated_at": now.isoformat()
     }
     
-    await db.accounting_transactions.insert_one(primary_reversal)
-    
     # Counter reversal entry: Inflow to Customer Advance (Liability Debit - reduces liability)
+    counter_reversal_id = f"txn_{uuid.uuid4().hex[:12]}"
+    counter_reversal = {
+        "transaction_id": counter_reversal_id,
+        "transaction_date": reversal_date,
+        "transaction_type": "inflow",  # Liability Debit (reduces Customer Advance)
+        "amount": receipt_amount,
+        "mode": "double_entry",
+        "category_id": "receipt_cancellation",
+        "account_id": "acc_customer_advance",
+        "account_name": "Customer Advance",
+        "account_type": "liability",
+        "project_id": project_id,
+        "remarks": f"[DE] Reversal: Receipt {receipt.get('receipt_number')} cancelled",
+        
+        # Party metadata
+        "party_id": project_id,
+        "party_type": "customer",
+        "party_name": party_name,
+        
+        # Linking
+        "is_reversal": True,
+        "is_cashbook_entry": False,
+        "is_daybook_entry": True,
+        
+        # Metadata
+        "is_system_generated": True,
+        "source_module": "receipt_cancellation",
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    # USE ATOMIC DOUBLE-ENTRY FUNCTION
+    cancellation_source_id = f"rcp_cancel_{receipt_id}"
+    
     if is_double_entry_required(reversal_date):
-        counter_reversal_id = f"txn_{uuid.uuid4().hex[:12]}"
-        counter_reversal = {
-            "transaction_id": counter_reversal_id,
-            "transaction_date": reversal_date,
-            "transaction_type": "inflow",  # Liability Debit (reduces Customer Advance)
-            "amount": receipt_amount,
-            "mode": "double_entry",
-            "category_id": "receipt_cancellation",
-            "account_id": "acc_customer_advance",
-            "project_id": project_id,
-            "remarks": f"[DE] Reversal: Receipt {receipt.get('receipt_number')} cancelled",
-            
-            # Party metadata (copy from primary for traceability)
-            "party_id": project_id,
-            "party_type": "customer",
-            "party_name": party_name,
-            
-            # Linking
-            "is_reversal": True,
-            "is_double_entry": True,
-            "paired_transaction_id": reversal_txn_id,
-            "reference_id": receipt_id,
-            "entry_role": "counter",
-            
-            # Metadata
-            "is_system_generated": True,
-            "source_module": "receipt_cancellation",
-            "created_at": now.isoformat(),
-            "created_by": user.user_id,
-            "created_by_name": user.name,
-            "updated_at": now.isoformat()
-        }
-        
-        await db.accounting_transactions.insert_one(counter_reversal)
-        
-        # Update primary with paired_transaction_id
-        await db.accounting_transactions.update_one(
-            {"transaction_id": reversal_txn_id},
-            {"$set": {"paired_transaction_id": counter_reversal_id}}
+        await create_atomic_double_entry(
+            source_id=cancellation_source_id,
+            source_module="receipt_cancellation",
+            primary_entry=primary_reversal,
+            counter_entry=counter_reversal,
+            user_id=user.user_id,
+            user_name=user.name,
+            skip_if_exists=True
+        )
+    else:
+        # Legacy mode - single entry only
+        await create_atomic_single_entry(
+            source_id=cancellation_source_id,
+            source_module="receipt_cancellation",
+            entry=primary_reversal,
+            user_id=user.user_id,
+            user_name=user.name,
+            skip_if_exists=True
         )
     
     # 3. Update bank account balance (reduce by outflow)
@@ -35890,17 +36319,46 @@ async def create_salary_payment(data: SalaryPaymentCreate, request: Request):
     if day_closing:
         raise HTTPException(status_code=400, detail=f"Day {data.payment_date} is already closed. Cannot add transactions.")
     
-    # Insert cashbook entry to accounting_transactions (main cashbook collection)
-    await db.accounting_transactions.insert_one(cashbook_entry)
+    # ============ ATOMIC DOUBLE-ENTRY ============
+    salary_source_id = f"sal_{payment_id}"
     
-    # ============ DOUBLE-ENTRY ENFORCEMENT ============
     if is_double_entry_required(data.payment_date):
-        salary_expense_account = {"account_id": "acc_salary_expense", "account_name": "Salary Expense", "account_type": "expense"}
-        await create_double_entry_pair(
-            primary_txn=cashbook_entry,
-            counter_account_info=salary_expense_account,
+        # Counter entry: Salary Expense Debit
+        counter_entry = {
+            "transaction_date": data.payment_date,
+            "transaction_type": "outflow",  # Expense Debit
+            "amount": data.amount,
+            "mode": "double_entry",
+            "category_id": "salary_payment",
+            "account_id": "acc_salary_expense",
+            "account_name": "Salary Expense",
+            "account_type": "expense",
+            "remarks": f"[DE] Salary expense: {salary_master.get('employee_name', 'Employee')} - {data.month_year}",
+            "party_id": data.employee_id,
+            "party_type": "employee",
+            "party_name": salary_master.get("employee_name", "Unknown"),
+            "is_cashbook_entry": False,
+            "is_daybook_entry": True
+        }
+        
+        await create_atomic_double_entry(
+            source_id=salary_source_id,
+            source_module="salary_payment",
+            primary_entry=cashbook_entry,
+            counter_entry=counter_entry,
             user_id=user.user_id,
-            user_name=user_doc.get("name", "Unknown")
+            user_name=user_doc.get("name", "Unknown"),
+            skip_if_exists=True
+        )
+    else:
+        # Legacy single entry
+        await create_atomic_single_entry(
+            source_id=salary_source_id,
+            source_module="salary_payment",
+            entry=cashbook_entry,
+            user_id=user.user_id,
+            user_name=user_doc.get("name", "Unknown"),
+            skip_if_exists=True
         )
     
     # Update account balance (reduce by outflow)

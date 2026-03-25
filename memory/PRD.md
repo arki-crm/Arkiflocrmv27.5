@@ -59,6 +59,23 @@ Fixed issue where project-linked incentives and commissions were NOT appearing i
 - `GET /api/finance/debug/project-salary-entries/{project_id}` - Diagnose entry structure
 - `POST /api/finance/data-integrity/fix-historical-salary-entries` - Fix source_module for old entries
 
+### ✅ Credit Purchase Double-Entry Fix (March 25, 2026)
+
+**Critical Bug Fixed:** Credit purchases were creating only ONE accounting entry instead of TWO.
+
+**Root Cause:** Line 41781 used `create_atomic_single_entry` instead of `create_atomic_double_entry`.
+
+**Fix Applied:**
+```
+Credit Purchase now creates:
+- Dr Project Expense (outflow) - Expense increases
+- Cr Vendor Payable (inflow) - Liability increases
+```
+
+**Data Fix Endpoint Added:** `POST /api/finance/data-integrity/fix-credit-purchase-entries`
+- `?dry_run=true` - Diagnose orphan entries (default)
+- `?dry_run=false` - Create missing counter entries
+
 ### Core Features Implemented
 - **Double-Entry Accounting Engine**: Enforced at insert level with validation
 - **Data Integrity Guards**: Duplicate prevention, entry count validation

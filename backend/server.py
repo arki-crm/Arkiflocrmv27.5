@@ -31312,6 +31312,143 @@ async def fix_historical_salary_entries(request: Request, project_id: Optional[s
     }
 
 
+@api_router.post("/finance/data-integrity/fix-credit-purchase-entries")
+async def fix_credit_purchase_entries(request: Request, dry_run: bool = True):
+    """
+    Fix credit purchase entries that only have ONE entry (missing counter entry).
+    
+    Correct double-entry for credit purchases:
+    - Dr Project Expense (outflow) - Already exists
+    - Cr Vendor Payable (inflow) - MISSING, needs to be created
+    
+    Args:
+        dry_run: If True, only diagnose without fixing. Set to False to apply fixes.
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Founder can fix data integrity")
+    
+    fixes_needed = []
+    fixes_applied = 0
+    
+    # Find all execution_ledger_credit entries
+    # Group by source_id to find orphans (only 1 entry instead of 2)
+    pipeline = [
+        {"$match": {"source_module": "execution_ledger_credit"}},
+        {"$group": {
+            "_id": "$source_id",
+            "entries": {"$push": {
+                "transaction_id": "$transaction_id",
+                "transaction_type": "$transaction_type",
+                "entry_role": "$entry_role",
+                "amount": "$amount",
+                "account_id": "$account_id",
+                "project_id": "$project_id",
+                "vendor_id": "$vendor_id",
+                "party_name": "$party_name",
+                "reference_id": "$reference_id",
+                "liability_id": "$liability_id",
+                "transaction_date": "$transaction_date"
+            }},
+            "count": {"$sum": 1}
+        }}
+    ]
+    
+    results = await db.accounting_transactions.aggregate(pipeline).to_list(1000)
+    
+    for r in results:
+        source_id = r["_id"]
+        entries = r["entries"]
+        count = r["count"]
+        
+        # Check for orphan entries (only 1 entry, missing counter)
+        if count == 1:
+            primary = entries[0]
+            
+            fix_info = {
+                "source_id": source_id,
+                "primary_transaction_id": primary["transaction_id"],
+                "amount": primary["amount"],
+                "project_id": primary.get("project_id"),
+                "vendor": primary.get("party_name"),
+                "issue": "Missing counter entry (Vendor Payable)",
+                "fix": "Will create Cr Vendor Payable entry"
+            }
+            fixes_needed.append(fix_info)
+            
+            # Apply fix if not dry_run
+            if not dry_run:
+                now = datetime.now(timezone.utc)
+                counter_txn_id = f"txn_fix_{uuid.uuid4().hex[:12]}"
+                
+                counter_entry = {
+                    "transaction_id": counter_txn_id,
+                    "transaction_date": primary.get("transaction_date", now.strftime("%Y-%m-%d")),
+                    "transaction_type": "inflow",  # Liability increase = Credit
+                    "entry_type": "purchase_invoice_credit_counter",
+                    "is_cashbook_entry": False,
+                    "is_daybook_entry": True,
+                    "amount": primary["amount"],
+                    "description": f"[DE-FIX] Vendor Payable counter for {source_id}",
+                    "account_id": "acc_vendor_payable",
+                    "account_name": "Accounts Payable",
+                    "account_type": "liability",
+                    "project_id": primary.get("project_id"),
+                    "vendor_id": primary.get("vendor_id"),
+                    "party_id": primary.get("vendor_id"),
+                    "party_type": "vendor",
+                    "party_name": primary.get("party_name"),
+                    "reference_type": "execution_ledger",
+                    "reference_id": primary.get("reference_id"),
+                    "liability_id": primary.get("liability_id"),
+                    "source_id": source_id,
+                    "source_module": "execution_ledger_credit",
+                    "entry_role": "counter",
+                    "is_double_entry": True,
+                    "paired_transaction_id": primary["transaction_id"],
+                    "remarks": f"[DE-FIX] Counter entry created to restore balance",
+                    "is_system_generated": True,
+                    "created_at": now.isoformat(),
+                    "created_by": user.user_id,
+                    "created_by_name": user_doc.get("name", "Unknown")
+                }
+                
+                await db.accounting_transactions.insert_one(counter_entry)
+                
+                # Update primary entry with pairing info
+                await db.accounting_transactions.update_one(
+                    {"transaction_id": primary["transaction_id"]},
+                    {"$set": {
+                        "entry_role": "primary",
+                        "is_double_entry": True,
+                        "paired_transaction_id": counter_txn_id
+                    }}
+                )
+                
+                fixes_applied += 1
+    
+    # Log the fix attempt
+    if not dry_run and fixes_applied > 0:
+        await db.accounting_audit_log.insert_one({
+            "action": "fix_credit_purchase_entries",
+            "fixes_applied": fixes_applied,
+            "fix_details": fixes_needed,
+            "executed_at": datetime.now(timezone.utc).isoformat(),
+            "executed_by": user.user_id,
+            "executed_by_name": user_doc.get("name", "Unknown")
+        })
+    
+    return {
+        "success": True,
+        "dry_run": dry_run,
+        "orphan_entries_found": len(fixes_needed),
+        "fixes_applied": fixes_applied,
+        "details": fixes_needed[:30]
+    }
+
+
 
 # ============================================================================
 # ============ TRIAL BALANCE REPORT ==========================================
@@ -41747,25 +41884,29 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
         )
         new_entry["linked_liability_id"] = liability_id
     
-    # P0-FIX: Only create Daybook entry for credit purchases (no cashbook entry)
-    # Credit purchases should NOT appear in cashbook until payment is made
-    # They should only create a liability record and daybook reference
+    # P0-FIX: Create DOUBLE-ENTRY for credit purchases
+    # Credit purchases should create:
+    # 1. Dr Project Expense (outflow) - Expense increases
+    # 2. Cr Vendor Payable (inflow) - Liability increases
     if entry.purchase_type == "credit":
-        # Create daybook-only entry using ATOMIC function
         exec_source_id = f"exec_credit_{entry_id}"
         daybook_txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+        txn_date = entry.execution_date or entry.invoice_date or now.strftime("%Y-%m-%d")
         
-        daybook_entry = {
+        # PRIMARY ENTRY: Dr Project Expense (outflow)
+        primary_entry = {
             "transaction_id": daybook_txn_id,
-            "transaction_date": entry.execution_date or entry.invoice_date or now.strftime("%Y-%m-%d"),
-            "transaction_type": "outflow",
+            "transaction_date": txn_date,
+            "transaction_type": "outflow",  # Expense = Debit = outflow in our system for GL
             "entry_type": "purchase_invoice_credit",
-            "is_cashbook_entry": False,
+            "is_cashbook_entry": False,  # Not a cash transaction
             "is_daybook_entry": True,
             "amount": grand_total,
-            "description": f"Credit Purchase Invoice: {entry.invoice_no or 'N/A'} - {vendor_name or 'Unknown Vendor'}",
-            "account_id": None,
-            "category_id": None,
+            "description": f"Credit Purchase: {entry.invoice_no or 'N/A'} - {vendor_name or 'Unknown Vendor'}",
+            "account_id": "acc_project_expense",
+            "account_name": "Project Expense - Execution",
+            "account_type": "expense",
+            "category_id": "project_expense",
             "project_id": entry.project_id,
             "vendor_id": vendor_id,
             "party_id": vendor_id,
@@ -41778,10 +41919,35 @@ async def create_execution_entry(entry: ExecutionEntryCreate, request: Request):
             "remarks": entry.remarks
         }
         
-        await create_atomic_single_entry(
+        # COUNTER ENTRY: Cr Vendor Payable (inflow)
+        counter_entry = {
+            "transaction_date": txn_date,
+            "transaction_type": "inflow",  # Liability increase = Credit = inflow
+            "entry_type": "purchase_invoice_credit_counter",
+            "is_cashbook_entry": False,
+            "is_daybook_entry": True,
+            "amount": grand_total,
+            "description": f"[DE] Vendor Payable: {entry.invoice_no or 'N/A'} - {vendor_name or 'Unknown Vendor'}",
+            "account_id": "acc_vendor_payable",
+            "account_name": "Accounts Payable",
+            "account_type": "liability",
+            "project_id": entry.project_id,
+            "vendor_id": vendor_id,
+            "party_id": vendor_id,
+            "party_type": "vendor",
+            "party_name": vendor_name,
+            "reference_type": "execution_ledger",
+            "reference_id": entry_id,
+            "liability_id": liability_id,
+            "remarks": f"[DE] Vendor Payable for invoice {entry.invoice_no or entry_id}"
+        }
+        
+        # Use ATOMIC double-entry to ensure both entries are created together
+        await create_atomic_double_entry(
             source_id=exec_source_id,
             source_module="execution_ledger_credit",
-            entry=daybook_entry,
+            primary_entry=primary_entry,
+            counter_entry=counter_entry,
             user_id=user.user_id,
             user_name=user.name,
             skip_if_exists=True
